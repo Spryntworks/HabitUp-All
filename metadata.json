@@ -1,0 +1,6 @@
+{
+  "name": "HabitUp - Daily Habit Tracker",
+  "description": "A minimalist, frictionless daily habit tracker mobile application with streak progression, intuitive schedules, optimistic sync, statistics, and habit lifecycle management.",
+  "requestFramePermissions": ["notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
