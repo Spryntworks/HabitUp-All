@@ -1,65 +1,80 @@
-import React, { useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Image,
+  StyleSheet,
+  Platform,
+} from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useHabit } from '../../context/HabitContext';
 import {
   X,
   User,
-  Upload,
-  Camera,
-  Trash2,
   Check,
   Sparkles,
-  LogOut,
+  Camera,
+  Upload,
+  Trash2,
   Save,
-  Mail,
-} from 'lucide-react';
+  CheckCircle2,
+} from 'lucide-react-native';
 import { TimezoneSelect } from '../common/TimezoneSelect';
 
 const AVATAR_PRESETS = [
   {
     id: 'av-1',
-    label: 'Elena',
-    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    label: 'Cyber Hero',
+    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-2',
-    label: 'Marcus',
-    url: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&auto=format&fit=crop&q=80',
+    label: 'Zen Master',
+    url: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-3',
-    label: 'Sophia',
-    url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&auto=format&fit=crop&q=80',
+    label: 'Scholar',
+    url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-4',
-    label: 'Lucas',
-    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+    label: 'Explorer',
+    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-5',
-    label: 'Amara',
-    url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&auto=format&fit=crop&q=80',
+    label: 'Creative Artist',
+    url: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-6',
-    label: 'David',
-    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop&q=80',
+    label: 'Innovator',
+    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-7',
-    label: 'Chloe',
-    url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
+    label: 'Champion',
+    url: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-8',
-    label: 'Kai',
-    url: 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=200&auto=format&fit=crop&q=80',
+    label: 'Technologist',
+    url: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=300&auto=format&fit=crop&q=80',
   },
   {
     id: 'av-9',
-    label: 'Aria',
-    url: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&auto=format&fit=crop&q=80',
+    label: 'Night Owl',
+    url: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=300&auto=format&fit=crop&q=80',
+  },
+  {
+    id: 'av-10',
+    label: 'Astronaut',
+    url: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=300&auto=format&fit=crop&q=80',
   },
 ];
 
@@ -69,375 +84,487 @@ export const AuthSessionModal: React.FC = () => {
     setIsAuthSessionModalOpen,
     user,
     updateUser,
-    logout,
     showToast,
-    triggerCelebration,
     theme,
   } = useHabit();
 
   const isDark = theme === 'dark';
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [name, setName] = useState(user.name);
-  const [email, setEmail] = useState(user.email);
-  const [timezone, setTimezone] = useState(user.timezone);
-  const [selectedAvatar, setSelectedAvatar] = useState<string | undefined>(user.avatar);
-  const [isSaved, setIsSaved] = useState(false);
+  const [name, setName] = useState(user?.name || '');
+  const [email, setEmail] = useState(user?.email || '');
+  const [selectedAvatar, setSelectedAvatar] = useState<string | undefined>(user?.avatar);
 
   if (!isAuthSessionModalOpen) return null;
 
-  const handleAvatarSelect = (url: string) => {
-    setSelectedAvatar(url);
-    updateUser({ avatar: url });
-    showToast('Profile picture updated!', undefined, 'success');
+  const handlePickFromGallery = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted && Platform.OS !== 'web') {
+        showToast('Gallery access permission required.', undefined, 'warning');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setSelectedAvatar(imageUri);
+        updateUser({ avatar: imageUri });
+        showToast('Profile photo updated! 📸', undefined, 'success');
+      }
+    } catch (err) {
+      console.warn('Image picker error:', err);
+      showToast('Could not open photo library', undefined, 'warning');
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check size (< 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      showToast('Image must be under 5MB', undefined, 'warning');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setSelectedAvatar(dataUrl);
-        updateUser({ avatar: dataUrl });
-        showToast('Custom photo uploaded successfully!', undefined, 'success');
-        triggerCelebration();
+  const handleTakePhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted && Platform.OS !== 'web') {
+        showToast('Camera access permission required.', undefined, 'warning');
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const imageUri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+        setSelectedAvatar(imageUri);
+        updateUser({ avatar: imageUri });
+        showToast('Photo captured and set! 📸', undefined, 'success');
+      }
+    } catch (err) {
+      console.warn('Camera error:', err);
+      showToast('Could not open camera', undefined, 'warning');
+    }
   };
 
   const handleRemoveAvatar = () => {
     setSelectedAvatar(undefined);
     updateUser({ avatar: undefined });
-    showToast('Profile picture removed. Using initials avatar.', undefined, 'info');
+    showToast('Profile picture reset to default.', undefined, 'info');
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAvatarSelect = (url: string) => {
+    setSelectedAvatar(url);
+    updateUser({ avatar: url });
+    showToast('Avatar selected!', undefined, 'success');
+  };
+
+  const handleSaveProfile = () => {
     updateUser({
-      name: name.trim() || user.name,
-      email: email.trim() || user.email,
-      timezone,
+      name: name.trim() || user?.name || 'Google User',
+      email: email.trim() || user?.email || 'user@gmail.com',
       avatar: selectedAvatar,
     });
-    setIsSaved(true);
     showToast('Profile saved successfully!', undefined, 'success');
-    setTimeout(() => setIsSaved(false), 2000);
+    setIsAuthSessionModalOpen(false);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <motion.div
-        initial={{ scale: 0.94, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.94, opacity: 0 }}
-        className={`w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border ${
-          isDark
-            ? 'bg-neutral-900 border-neutral-800 text-neutral-100'
-            : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
-        }`}
-      >
-        {/* Header */}
-        <div
-          className={`p-5 border-b flex items-center justify-between ${
-            isDark ? 'border-neutral-800' : 'border-slate-100'
-          }`}
+    <Modal visible={isAuthSessionModalOpen} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: isDark ? '#080E1A' : '#FFFFFF' },
+          ]}
         >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
-              <User className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                Profile & Display Picture
-              </h2>
-              <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                Choose your avatar or upload your own photo
-              </p>
-            </div>
-          </div>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+            <View style={styles.headerLeft}>
+              <View style={styles.headerIconCircle}>
+                <Camera size={18} color="#C084FC" />
+              </View>
+              <View>
+                <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Edit Profile Picture
+                </Text>
+                <Text style={[styles.headerSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  Upload custom photo or pick an avatar
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsAuthSessionModalOpen(false)}
+              style={[
+                styles.closeBtn,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+              ]}
+              activeOpacity={0.7}
+            >
+              <X size={18} color={isDark ? '#FFFFFF' : '#0F172A'} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
 
-          <button
-            onClick={() => setIsAuthSessionModalOpen(false)}
-            className={`p-1.5 rounded-full ${
-              isDark ? 'text-neutral-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'
-            }`}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.bodyScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1">
-          {/* Main DP Preview & Action Buttons */}
-          <div
-            className={`p-5 rounded-2xl border flex flex-col items-center gap-4 text-center ${
-              isDark ? 'bg-neutral-850 border-neutral-800' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <div className="relative group">
-              <div
-                className={`w-24 h-24 rounded-full overflow-hidden ring-4 shadow-lg p-1 transition-transform group-hover:scale-105 ${
-                  isDark
-                    ? 'ring-[#7C5CFF] bg-neutral-800'
-                    : 'ring-[#7C5CFF] bg-white'
-                }`}
-              >
+            {/* Center Avatar Preview */}
+            <View style={styles.avatarPreviewBox}>
+              <View style={styles.avatarCircleBig}>
                 {selectedAvatar ? (
-                  <img
-                    src={selectedAvatar}
-                    alt={name}
-                    className="w-full h-full object-cover rounded-full"
-                    referrerPolicy="no-referrer"
-                  />
+                  <Image source={{ uri: selectedAvatar }} style={styles.avatarImg} />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-3xl font-black text-white bg-gradient-to-br from-[#7C5CFF] to-pink-500 rounded-full">
-                    {name.charAt(0).toUpperCase()}
-                  </div>
+                  <View style={styles.avatarDefaultGradient}>
+                    <Text style={styles.avatarInitials}>
+                      {(name || user?.name || 'G').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
                 )}
-              </div>
+              </View>
+              <Text style={[styles.profileName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                {name || user?.name || 'Google User'}
+              </Text>
+              <Text style={[styles.profileEmail, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                {email || user?.email || 'user@gmail.com'}
+              </Text>
+            </View>
 
-              {/* Quick camera trigger icon */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute bottom-0 right-0 p-2 rounded-full bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white shadow-md transition-transform hover:scale-110"
-                title="Upload Photo"
+            {/* Custom Upload Actions */}
+            <View style={styles.uploadActionsRow}>
+              <TouchableOpacity
+                style={styles.uploadBtn}
+                onPress={handlePickFromGallery}
               >
-                <Camera className="w-3.5 h-3.5" />
-              </button>
-            </div>
+                <Upload size={16} color="#FFFFFF" />
+                <Text style={styles.uploadBtnText}>Upload Photo</Text>
+              </TouchableOpacity>
 
-            <div>
-              <h3 className={`text-base font-extrabold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                {name || 'Your Name'}
-              </h3>
-              <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                {email || 'user@habitup.app'}
-              </p>
-            </div>
-
-            {/* Hidden File Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-
-            {/* Photo Action Buttons */}
-            <div className="flex items-center gap-2 w-full pt-1">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 py-2 px-3 rounded-xl bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all"
+              <TouchableOpacity
+                style={[
+                  styles.cameraBtn,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#F1F5F9',
+                    borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                  },
+                ]}
+                onPress={handleTakePhoto}
               >
-                <Upload className="w-3.5 h-3.5" />
-                Upload Photo
-              </button>
+                <Camera size={16} color={isDark ? '#C084FC' : '#7C5CFF'} />
+                <Text style={[styles.cameraBtnText, { color: isDark ? '#C084FC' : '#7C5CFF' }]}>
+                  Camera
+                </Text>
+              </TouchableOpacity>
 
               {selectedAvatar && (
-                <button
-                  type="button"
-                  onClick={handleRemoveAvatar}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all active:scale-95 ${
-                    isDark
-                      ? 'bg-neutral-800 hover:bg-neutral-750 text-rose-400 border-neutral-700'
-                      : 'bg-white hover:bg-slate-100 text-rose-600 border-slate-200 shadow-xs'
-                  }`}
-                  title="Remove custom photo"
+                <TouchableOpacity
+                  style={[
+                    styles.removeBtn,
+                    {
+                      backgroundColor: isDark ? '#1F121C' : '#FFF1F2',
+                      borderColor: '#F43F5E',
+                    },
+                  ]}
+                  onPress={handleRemoveAvatar}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Remove
-                </button>
+                  <Trash2 size={16} color="#F43F5E" />
+                </TouchableOpacity>
               )}
-            </div>
-          </div>
+            </View>
 
-          {/* Preset DP Selection Gallery */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between">
-              <span
-                className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                  isDark ? 'text-neutral-400' : 'text-slate-500'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-[#7C5CFF]" />
-                Choose from Preset Avatars
-              </span>
-            </div>
+            {/* Presets Gallery */}
+            <Text style={[styles.sectionTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              OR CHOOSE FROM PRESET AVATARS
+            </Text>
 
-            <div className="grid grid-cols-3 sm:grid-cols-3 gap-3">
+            <View style={styles.presetsGrid}>
               {AVATAR_PRESETS.map((preset) => {
                 const isCurrent = selectedAvatar === preset.url;
                 return (
-                  <button
+                  <TouchableOpacity
                     key={preset.id}
-                    type="button"
-                    onClick={() => handleAvatarSelect(preset.url)}
-                    className={`relative p-2 rounded-2xl border flex flex-col items-center gap-1.5 transition-all text-center group ${
-                      isCurrent
-                        ? isDark
-                          ? 'bg-purple-950/40 border-[#7C5CFF] ring-2 ring-[#7C5CFF]/30 shadow-md'
-                          : 'bg-purple-50 border-[#7C5CFF] ring-2 ring-[#7C5CFF]/30 shadow-md'
-                        : isDark
-                        ? 'bg-neutral-850 border-neutral-800 hover:border-neutral-700 hover:bg-neutral-800/80'
-                        : 'bg-slate-50 border-slate-200 hover:border-slate-300 hover:bg-white shadow-xs'
-                    }`}
+                    style={[
+                      styles.presetItem,
+                      {
+                        borderColor: isCurrent ? '#7C5CFF' : isDark ? '#1E293B' : '#E2E8F0',
+                        borderWidth: isCurrent ? 3 : 1,
+                      },
+                    ]}
+                    onPress={() => handleAvatarSelect(preset.url)}
                   >
-                    <div className="relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-neutral-700 group-hover:scale-105 transition-transform">
-                      <img
-                        src={preset.url}
-                        alt={preset.label}
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                      {isCurrent && (
-                        <div className="absolute inset-0 bg-[#7C5CFF]/40 backdrop-blur-xs flex items-center justify-center">
-                          <Check className="w-5 h-5 text-white stroke-[3]" />
-                        </div>
-                      )}
-                    </div>
-                    <span
-                      className={`text-[11px] font-semibold truncate max-w-full ${
-                        isCurrent
-                          ? 'text-[#7C5CFF] font-bold'
-                          : isDark
-                          ? 'text-neutral-300'
-                          : 'text-slate-700'
-                      }`}
-                    >
-                      {preset.label}
-                    </span>
-                  </button>
+                    <Image source={{ uri: preset.url }} style={styles.presetImg} />
+                    {isCurrent && (
+                      <View style={styles.checkBadge}>
+                        <Check size={11} color="#FFFFFF" strokeWidth={3} />
+                      </View>
+                    )}
+                  </TouchableOpacity>
                 );
               })}
-            </div>
-          </div>
+            </View>
 
-          {/* Edit Profile Details Form */}
-          <form onSubmit={handleSaveProfile} className="space-y-3 pt-2">
-            <span
-              className={`text-xs font-bold uppercase tracking-wider block ${
-                isDark ? 'text-neutral-400' : 'text-slate-500'
-              }`}
-            >
-              Account Details
-            </span>
-
-            <div>
-              <label
-                className={`block text-[11px] font-semibold mb-1 ${
-                  isDark ? 'text-neutral-400' : 'text-slate-600'
-                }`}
-              >
-                Display Name
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
+            {/* Edit Display Name */}
+            <View style={styles.formFields}>
+              <View style={styles.fieldGroup}>
+                <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                  Display Name
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
+                      borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                      color: isDark ? '#FFFFFF' : '#0F172A',
+                    },
+                  ]}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={`w-full pl-3 pr-3 py-2 rounded-xl border text-xs font-medium ${
-                    isDark
-                      ? 'bg-neutral-800 border-neutral-700 text-white focus:border-[#7C5CFF]'
-                      : 'bg-white border-slate-300 text-slate-900 focus:border-[#7C5CFF]'
-                  }`}
+                  onChangeText={setName}
                   placeholder="Your Name"
-                  required
+                  placeholderTextColor="#94A3B8"
                 />
-              </div>
-            </div>
+              </View>
+            </View>
+          </ScrollView>
 
-            <div>
-              <label
-                className={`block text-[11px] font-semibold mb-1 ${
-                  isDark ? 'text-neutral-400' : 'text-slate-600'
-                }`}
-              >
-                Email Address
-              </label>
-              <div className="relative">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className={`w-full pl-3 pr-3 py-2 rounded-xl border text-xs font-medium ${
-                    isDark
-                      ? 'bg-neutral-800 border-neutral-700 text-white focus:border-[#7C5CFF]'
-                      : 'bg-white border-slate-300 text-slate-900 focus:border-[#7C5CFF]'
-                  }`}
-                  placeholder="name@example.com"
-                  required
-                />
-              </div>
-            </div>
-
-            <TimezoneSelect
-              value={timezone}
-              onChange={setTimezone}
-              label="Timezone"
-            />
-
-            <button
-              type="submit"
-              className="w-full py-2.5 bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-500/20 active:scale-98"
+          {/* Footer Save */}
+          <View style={[styles.footer, { borderTopColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+            <TouchableOpacity
+              style={styles.saveBtn}
+              onPress={handleSaveProfile}
             >
-              {isSaved ? (
-                <>
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>Saved!</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Changes</span>
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Footer */}
-        <div
-          className={`p-4 border-t flex items-center justify-between ${
-            isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-slate-50 border-slate-100'
-          }`}
-        >
-          <button
-            onClick={() => {
-              setIsAuthSessionModalOpen(false);
-              logout();
-            }}
-            className="px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-600 text-xs font-bold flex items-center gap-1.5 border border-rose-500/30 transition-colors"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
-          </button>
-
-          <button
-            onClick={() => setIsAuthSessionModalOpen(false)}
-            className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
-              isDark
-                ? 'bg-neutral-800 hover:bg-neutral-750 text-white'
-                : 'bg-slate-900 hover:bg-slate-800 text-white shadow-sm'
-            }`}
-          >
-            Done
-          </button>
-        </div>
-      </motion.div>
-    </div>
+              <CheckCircle2 size={18} color="#FFFFFF" />
+              <Text style={styles.saveBtnText}>Save Profile</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '88%',
+    maxHeight: '92%',
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  headerSub: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bodyScroll: {
+    padding: 20,
+    paddingBottom: 36,
+  },
+  avatarPreviewBox: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarCircleBig: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#7C5CFF',
+    marginBottom: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
+  },
+  avatarDefaultGradient: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#7C5CFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImg: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarInitials: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  profileEmail: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  uploadActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+  },
+  uploadBtn: {
+    flex: 1.5,
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 8,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  uploadBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  cameraBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 6,
+  },
+  cameraBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  removeBtn: {
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  presetsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 20,
+  },
+  presetItem: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  presetImg: {
+    width: '100%',
+    height: '100%',
+  },
+  checkBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#7C5CFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formFields: {
+    gap: 12,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  saveBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 18,
+    gap: 8,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+});

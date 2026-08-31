@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  Switch,
+  StyleSheet,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
+import { IconRenderer } from '../common/IconRenderer';
+import { isHabitScheduledOnDate, formatTo12Hour } from '../../utils/streakCalculator';
+import { notificationService } from '../../services/notificationService';
 import {
   Bell,
-  BellRing,
-  BellOff,
   Clock,
   Sparkles,
-  ShieldCheck,
   CheckCircle2,
-  AlertCircle,
-  Play,
   Volume2,
+  Play,
   X,
-  ChevronRight,
-} from 'lucide-react';
-import { notificationService } from '../../services/notificationService';
-import { IconRenderer } from '../common/IconRenderer';
-import { isHabitScheduledOnDate } from '../../utils/streakCalculator';
+} from 'lucide-react-native';
 
 export const NotificationCenterModal: React.FC = () => {
   const {
@@ -29,361 +32,600 @@ export const NotificationCenterModal: React.FC = () => {
     theme,
     notificationsEnabled,
     setNotificationsEnabled,
-    triggerTestNotification,
-    sendHabitReminder,
     soundEnabled,
     setSoundEnabled,
-    hapticsEnabled,
-    setHapticsEnabled,
+    triggerTestNotification,
     showToast,
   } = useHabit();
 
-  const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
   const isDark = theme === 'dark';
+  const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
 
   useEffect(() => {
-    if (isNotificationModalOpen) {
-      const current = notificationService.getPermissionStatus();
-      setPermissionStatus(current);
-    }
+    notificationService.checkPermission().then((granted) => {
+      setPermissionGranted(granted);
+    });
   }, [isNotificationModalOpen]);
 
   if (!isNotificationModalOpen) return null;
 
-  const handleRequestPermission = async () => {
-    try {
-      const status = await notificationService.requestPermission();
-      // Always grant and enable notifications visually on user interaction
-      setPermissionStatus('granted');
-      setNotificationsEnabled(true);
-      showToast('Notifications allowed & background reminders enabled! 🔔', undefined, 'success');
-      triggerTestNotification();
-    } catch {
-      setPermissionStatus('granted');
-      setNotificationsEnabled(true);
-      showToast('Notifications enabled! 🔔', undefined, 'success');
-    }
-  };
-
-  const isAllowed = permissionStatus === 'granted' || notificationsEnabled;
+  const isAllowed = !!notificationsEnabled;
 
   const selectedDateTime = new Date(selectedDate + 'T12:00:00');
   const activeHabits = habits.filter(
     (h) => !h.archived_at && !h.deleted_at && !h.paused_at
   );
 
-  const habitsWithReminders = activeHabits
-    .filter((h) => isHabitScheduledOnDate(h, selectedDateTime))
-    .sort((a, b) => (a.reminder_time || '23:59').localeCompare(b.reminder_time || '23:59'));
+  const todayHabits = activeHabits.filter((h) =>
+    isHabitScheduledOnDate(h, selectedDateTime)
+  );
+
+  const handleAllowNotifications = async () => {
+    setNotificationsEnabled(true);
+    showToast('Notifications allowed! Background alerts active.', undefined, 'success');
+    try {
+      await notificationService.requestPermission();
+    } catch {}
+  };
+
+  const handleMuteNotifications = () => {
+    setNotificationsEnabled(false);
+    showToast('Notifications muted.', undefined, 'info');
+  };
+
+  const handleTestAlert = (habitName?: string, habitTime?: string) => {
+    if (habitName) {
+      const formattedTime = formatTo12Hour(habitTime);
+      triggerTestNotification(
+        `⏰ Time for ${habitName}!`,
+        `Scheduled for ${formattedTime || 'now'}. Tap to complete your daily streak! 🌟`
+      );
+      showToast(`Test alert sent for ${habitName}`, undefined, 'success');
+    } else {
+      triggerTestNotification(
+        'HabitUp Notifications Active! 🔔',
+        'Your daily habit reminders and sound alerts are ready to go.'
+      );
+      showToast('Test notification sent! 🔔', undefined, 'success');
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm select-none">
-      <motion.div
-        initial={{ y: '100%', opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col border ${
-          isDark
-            ? 'bg-[#111827] border-neutral-800 text-white'
-            : 'bg-white border-neutral-200 text-neutral-900'
-        }`}
-      >
-        {/* Header */}
-        <div
-          className={`px-5 py-4 flex items-center justify-between border-b ${
-            isDark ? 'border-neutral-800' : 'border-neutral-100'
-          }`}
+    <Modal visible={isNotificationModalOpen} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: isDark ? '#080E1A' : '#FFFFFF' },
+          ]}
         >
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#7C5CFF]/20 text-[#7C5CFF] flex items-center justify-center">
-              <Bell className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold tracking-tight">Notification Center</h2>
-              <p className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                Habit reminders & alerts
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsNotificationModalOpen(false)}
-            className={`p-1.5 rounded-full transition-colors ${
-              isDark
-                ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-                : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Scrollable Content */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* Friendly Reminder Status Card */}
-          <div
-            className={`p-4 rounded-2xl border flex flex-col gap-3 ${
-              isDark
-                ? 'bg-[#182235] border-slate-800'
-                : 'bg-slate-50 border-slate-200 shadow-xs'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bell className="w-4 h-4 text-[#7C5CFF]" />
-                <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  Reminder Status
-                </span>
-              </div>
-              <span
-                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                  isAllowed
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                    : isDark
-                    ? 'bg-slate-800 text-slate-400 border-slate-700'
-                    : 'bg-slate-100 text-slate-500 border-slate-200'
-                }`}
-              >
-                {isAllowed
-                  ? 'Background Alerts Active'
-                  : 'Muted'}
-              </span>
-            </div>
-
-            <p
-              className={`text-xs leading-relaxed ${
-                isDark ? 'text-slate-300' : 'text-slate-600'
-              }`}
+          {/* Header matching Image 1 & 2 */}
+          <View style={[styles.header, { borderBottomColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+            <View style={styles.headerLeft}>
+              <View style={styles.headerIconCircle}>
+                <Bell size={18} color="#C084FC" />
+              </View>
+              <View>
+                <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Notification Center
+                </Text>
+                <Text style={[styles.headerSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  Habit reminders & alerts
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              onPress={() => setIsNotificationModalOpen(false)}
+              style={[
+                styles.closeBtn,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+              ]}
+              activeOpacity={0.7}
             >
-              {isAllowed
-                ? 'Background notifications are enabled. You will receive device alerts even when the tab is closed.'
-                : 'Get alerts on your device at your chosen habit times so you never break a streak.'}
-            </p>
+              <X size={18} color={isDark ? '#FFFFFF' : '#0F172A'} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
 
-            <div className="flex items-center gap-2 pt-0.5">
-              {isAllowed ? (
-                <button
-                  onClick={() => {
-                    setNotificationsEnabled(false);
-                    setPermissionStatus('denied');
-                    showToast('Notifications muted', undefined, 'info');
-                  }}
-                  className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/30 active:scale-95 transition-all cursor-pointer border border-emerald-400/40"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                  <span>Notifications Allowed</span>
-                </button>
-              ) : (
-                <button
-                  onClick={handleRequestPermission}
-                  className="flex-1 py-2 px-3 rounded-xl bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition-all cursor-pointer"
-                >
-                  <BellRing className="w-3.5 h-3.5" />
-                  <span>Allow Notifications</span>
-                </button>
-              )}
-
-              <button
-                onClick={() => triggerTestNotification()}
-                className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border active:scale-95 transition-all flex-1 ${
-                  isDark
-                    ? 'bg-slate-850 hover:bg-slate-800 text-emerald-400 border-slate-700'
-                    : 'bg-white hover:bg-slate-100 text-emerald-600 border-slate-200 shadow-xs'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                Send Test Alert
-              </button>
-            </div>
-          </div>
-
-          {/* Master Toggles */}
-          <div
-            className={`p-4 rounded-2xl border space-y-3 ${
-              isDark
-                ? 'bg-[#182235] border-slate-800'
-                : 'bg-slate-50 border-slate-200'
-            }`}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.bodyScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            {/* Master Notifications Toggle */}
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold block">Habit Reminders</span>
-                <span
-                  className={`text-[11px] ${
-                    isDark ? 'text-neutral-400' : 'text-neutral-500'
-                  }`}
-                >
-                  Send alerts at scheduled times
-                </span>
-              </div>
-              <button
-                onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-                className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
-                  notificationsEnabled ? 'bg-[#7C5CFF]' : 'bg-neutral-600'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Sound Chimes Toggle */}
-            <div
-              className={`flex items-center justify-between border-t pt-2.5 ${
-                isDark ? 'border-slate-800' : 'border-slate-200'
-              }`}
+            {/* Card 1: Reminder Status Card */}
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
             >
-              <div className="flex items-center gap-2">
-                <Volume2 className="w-4 h-4 text-emerald-400" />
-                <div>
-                  <span className="text-xs font-bold block">Notification Sound</span>
-                  <span
-                    className={`text-[10px] ${
-                      isDark ? 'text-neutral-400' : 'text-neutral-500'
-                    }`}
+              <View style={styles.statusHeaderRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Bell size={16} color="#818CF8" />
+                  <Text style={[styles.cardTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    Reminder Status
+                  </Text>
+                </View>
+
+                {!isAllowed ? (
+                  <View style={styles.mutedBadge}>
+                    <Text style={styles.mutedBadgeText}>Muted</Text>
+                  </View>
+                ) : (
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>Background Alerts Active</Text>
+                  </View>
+                )}
+              </View>
+
+              <Text style={[styles.cardDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                {!isAllowed
+                  ? 'Get alerts on your device at your chosen habit times so you never break a streak.'
+                  : 'Background notifications are enabled. You will receive device alerts even when the tab is closed.'}
+              </Text>
+
+              <View style={styles.statusButtonsRow}>
+                {!isAllowed ? (
+                  <TouchableOpacity
+                    style={styles.allowBtn}
+                    onPress={handleAllowNotifications}
                   >
-                    Play melodic chime on reminder
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={`w-10 h-5 rounded-full transition-colors relative p-0.5 ${
-                  soundEnabled ? 'bg-emerald-500' : 'bg-neutral-600'
-                }`}
-              >
-                <div
-                  className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                    soundEnabled ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
+                    <Bell size={14} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text style={styles.allowBtnText}>Allow Notifications</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.allowedBtn}
+                    onPress={handleMuteNotifications}
+                  >
+                    <CheckCircle2 size={15} color="#FFFFFF" />
+                    <Text style={styles.allowedBtnText}>Notifications Allowed</Text>
+                  </TouchableOpacity>
+                )}
 
-          {/* Today's Scheduled Reminders List */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span
-                className={`text-xs font-bold uppercase tracking-wider ${
-                  isDark ? 'text-neutral-400' : 'text-neutral-500'
-                }`}
-              >
-                Today's Habit Times ({habitsWithReminders.length})
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {habitsWithReminders.length === 0 ? (
-                <div
-                  className={`p-4 rounded-2xl text-center border ${
-                    isDark
-                      ? 'bg-neutral-900/60 border-neutral-800 text-neutral-400'
-                      : 'bg-neutral-50 border-neutral-200 text-neutral-500'
-                  }`}
+                <TouchableOpacity
+                  style={[
+                    styles.sendTestBtn,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: '#10B981',
+                    },
+                  ]}
+                  onPress={() => handleTestAlert()}
                 >
-                  <BellOff className="w-6 h-6 mx-auto mb-1.5 opacity-50" />
-                  <p className="text-xs font-medium">No habits scheduled for today.</p>
-                </div>
-              ) : (
-                habitsWithReminders.map((h) => {
-                  const isDone = completions.some(
-                    (c) => c.habit_id === h.id && c.completion_date === selectedDate
-                  );
-                  const habitTimeLabel = h.name.toLowerCase().endsWith('time') ? h.name : `${h.name} Time`;
+                  <Sparkles size={14} color="#10B981" />
+                  <Text style={styles.sendTestBtnText}>Send Test Alert</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-                  return (
-                    <div
-                      key={h.id}
-                      className={`p-3 rounded-2xl border flex items-center justify-between transition-all ${
-                        isDark
-                          ? 'bg-[#182032] border-slate-800'
-                          : 'bg-white border-slate-200 shadow-sm'
-                      }`}
+            {/* Card 2: Habit Reminders & Sound Preferences */}
+            <View
+              style={[
+                styles.card,
+                {
+                  backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
+            >
+              {/* Habit Reminders Toggle */}
+              <View style={styles.preferenceRow}>
+                <View>
+                  <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    Habit Reminders
+                  </Text>
+                  <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Send alerts at scheduled times
+                  </Text>
+                </View>
+                <Switch
+                  value={notificationsEnabled}
+                  onValueChange={(val) => {
+                    setNotificationsEnabled(val);
+                    if (val && !permissionGranted) {
+                      handleAllowNotifications();
+                    }
+                  }}
+                  trackColor={{ false: isDark ? '#475569' : '#CBD5E1', true: '#7C5CFF' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]} />
+
+              {/* Notification Sound Toggle matching Image 2 */}
+              <View style={styles.preferenceRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Volume2 size={18} color="#10B981" />
+                  <View>
+                    <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                      Notification Sound
+                    </Text>
+                    <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                      Play melodic chime on reminder
+                    </Text>
+                  </View>
+                </View>
+                <Switch
+                  value={soundEnabled}
+                  onValueChange={setSoundEnabled}
+                  trackColor={{ false: isDark ? '#475569' : '#CBD5E1', true: '#10B981' }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+            </View>
+
+            {/* Section: TODAY'S HABIT TIMES */}
+            <Text style={[styles.sectionHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              TODAY'S HABIT TIMES ({todayHabits.length})
+            </Text>
+
+            <View style={styles.habitsTimesList}>
+              {todayHabits.map((h, idx) => {
+                const isDone = completions.some(
+                  (c) => c.habit_id === h.id && c.completion_date === selectedDate
+                );
+                const habitTime = h.reminder_time || (idx === 0 ? '07:00' : '08:00');
+
+                return (
+                  <View
+                    key={h.id}
+                    style={[
+                      styles.habitTimeCard,
+                      {
+                        backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                        borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    {/* Left Icon */}
+                    <View
+                      style={[
+                        styles.habitTimeIconBox,
+                        { backgroundColor: h.color || '#7C5CFF' },
+                      ]}
                     >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                          style={{ backgroundColor: h.color }}
-                        >
-                          <IconRenderer name={h.icon} className="w-4 h-4" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={`text-xs font-bold truncate ${
-                                isDark ? 'text-white' : 'text-neutral-900'
-                              }`}
-                            >
-                              {h.name}
-                            </span>
-                            {isDone && (
-                              <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-0.5">
-                                <CheckCircle2 className="w-3 h-3" /> Done
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5">
-                            <span
-                              className={`text-[11px] font-semibold flex items-center gap-1 ${
-                                h.reminder_enabled
-                                  ? isDark
-                                    ? 'text-purple-400'
-                                    : 'text-purple-600'
-                                  : isDark
-                                  ? 'text-neutral-500'
-                                  : 'text-neutral-400'
-                              }`}
-                            >
-                              <Clock className="w-3 h-3" />
-                              {h.reminder_enabled
-                                ? `${habitTimeLabel}: ${h.reminder_time || '08:00'}`
-                                : 'No scheduled time'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                      <IconRenderer name={h.icon} size={18} color="#FFFFFF" />
+                    </View>
 
-                      {/* Manual Trigger / Test Reminder Button */}
-                      <button
-                        onClick={() => sendHabitReminder(h)}
-                        className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold flex items-center gap-1 transition-all active:scale-95 ${
-                          isDark
-                            ? 'bg-purple-950/60 text-purple-300 border border-purple-500/30 hover:bg-purple-900/60'
-                            : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
-                        }`}
-                        title="Trigger alert now"
-                      >
-                        <Play className="w-3 h-3 fill-current" />
-                        Test Alert
-                      </button>
-                    </div>
-                  );
-                })
+                    {/* Middle Info */}
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={[styles.habitTimeName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                          {h.name}
+                        </Text>
+                        {isDone && (
+                          <View style={styles.doneBadge}>
+                            <CheckCircle2 size={12} color="#10B981" />
+                            <Text style={styles.doneBadgeText}>Done</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.timeRow}>
+                        <Clock size={12} color="#C084FC" />
+                        <Text style={styles.timeRowText}>
+                          {h.name} Time: {formatTo12Hour(habitTime)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Right Test Alert Button */}
+                    <TouchableOpacity
+                      style={styles.testAlertBtn}
+                      onPress={() => handleTestAlert(h.name, habitTime)}
+                    >
+                      <Play size={12} color="#FFFFFF" fill="#FFFFFF" />
+                      <Text style={styles.testAlertBtnText}>Test Alert</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+
+              {todayHabits.length === 0 && (
+                <View style={styles.emptyCard}>
+                  <Text style={[styles.emptyText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    No habits configured for today yet.
+                  </Text>
+                </View>
               )}
-            </div>
-          </div>
-        </div>
+            </View>
 
-        {/* Footer */}
-        <div
-          className={`p-4 border-t flex items-center justify-end ${
-            isDark ? 'border-neutral-800' : 'border-neutral-100'
-          }`}
-        >
-          <button
-            onClick={() => setIsNotificationModalOpen(false)}
-            className="w-full py-2.5 rounded-xl bg-[#7C5CFF] text-white font-bold text-xs shadow-md shadow-indigo-500/30"
-          >
-            Done
-          </button>
-        </div>
-      </motion.div>
-    </div>
+            {/* Bottom Done Button matching Image 1 & 2 */}
+            <TouchableOpacity
+              style={styles.bottomDoneBtn}
+              onPress={() => setIsNotificationModalOpen(false)}
+            >
+              <Text style={styles.bottomDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '88%',
+    maxHeight: '92%',
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  headerSub: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bodyScroll: {
+    padding: 20,
+    paddingBottom: 36,
+  },
+  card: {
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  statusHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  activeBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  activeBadgeText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  mutedBadge: {
+    backgroundColor: '#1E293B',
+    borderColor: '#334155',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  mutedBadgeText: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  cardDesc: {
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  statusButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  allowedBtn: {
+    flex: 1.1,
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 14,
+    gap: 6,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  allowBtn: {
+    flex: 1.1,
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 14,
+    gap: 6,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  allowedBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  allowBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  sendTestBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  sendTestBtnText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  preferenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  prefName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  prefDesc: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    marginVertical: 10,
+  },
+  sectionHeading: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  habitsTimesList: {
+    gap: 10,
+    marginBottom: 20,
+  },
+  habitTimeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 12,
+  },
+  habitTimeIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  habitTimeName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  doneBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+  },
+  doneBadgeText: {
+    color: '#10B981',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
+  timeRowText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#C084FC',
+  },
+  testAlertBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  testAlertBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  emptyCard: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 12,
+  },
+  bottomDoneBtn: {
+    backgroundColor: '#7C5CFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 18,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  bottomDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+});

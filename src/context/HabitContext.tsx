@@ -6,7 +6,8 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
-import confetti from 'canvas-confetti';
+import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Habit,
   HabitCompletion,
@@ -23,10 +24,9 @@ import { localApi, getUserIdFromEmail, createDefaultUserProfile } from '../servi
 import {
   notificationService,
   InAppNotification,
-  syncRemindersToServiceWorker,
-  subscribeToWebPush,
-  registerServiceWorker,
+  requestNotificationPermission,
 } from '../services/notificationService';
+import { soundService } from '../services/soundService';
 import {
   formatDateKey,
   calculateHabitStats,
@@ -86,7 +86,7 @@ interface HabitContextType {
   setIsNotificationModalOpen: (open: boolean) => void;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => void;
-  triggerTestNotification: () => void;
+  triggerTestNotification: (title?: string, body?: string) => void;
   sendHabitReminder: (habit: Habit) => void;
 
   // Search & Filters
@@ -96,6 +96,7 @@ interface HabitContextType {
   setFilterStatus: (status: 'all' | 'active' | 'paused' | 'archived') => void;
 
   // Auth Actions
+  isAuthLoading: boolean;
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password?: string, timezone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -118,6 +119,8 @@ interface HabitContextType {
   importJsonData: (json: string) => boolean;
   exportJsonData: () => string;
   triggerCelebration: () => void;
+  isSyncing: boolean;
+  syncWithBackend: () => Promise<void>;
   
   // Stats helpers
   getHabitStats: (habitId: string, refDate?: Date) => HabitCalculatedStats;
@@ -126,7 +129,6 @@ interface HabitContextType {
 
 const HabitContext = createContext<HabitContextType | null>(null);
 
-// Deduplication helpers
 function deduplicateHabits(list: Habit[]): Habit[] {
   const seen = new Set<string>();
   const result: Habit[] = [];
@@ -143,11 +145,16 @@ function deduplicateCompletions(list: HabitCompletion[]): HabitCompletion[] {
   const seen = new Set<string>();
   const result: HabitCompletion[] = [];
   for (const c of list) {
-    if (!c) continue;
-    const key = c.id || `${c.habit_id}-${c.completion_date}`;
+    if (!c || !c.habit_id) continue;
+    const dateKey = (c.completion_date || '').split('T')[0];
+    if (!dateKey) continue;
+    const key = `${c.habit_id}_${dateKey}`;
     if (!seen.has(key)) {
       seen.add(key);
-      result.push(c);
+      result.push({
+        ...c,
+        completion_date: dateKey,
+      });
     }
   }
   return result;
@@ -169,15 +176,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isOffline, setIsOffline] = useState<boolean>(false);
   const [toast, setToast] = useState<ToastData | null>(null);
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem('habitup_is_authenticated_v1');
-      return stored !== null ? JSON.parse(stored) : true;
-    } catch {
-      return true;
-    }
-  });
-
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(true);
   const [isBiometricModalOpen, setIsBiometricModalOpen] = useState<boolean>(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [isPlantGardenModalOpen, setIsPlantGardenModalOpen] = useState<boolean>(false);
@@ -185,54 +185,101 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState<boolean>(false);
   const [isAuthSessionModalOpen, setIsAuthSessionModalOpen] = useState<boolean>(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(() => {
-    try {
-      const stored = localStorage.getItem('habitup_notifications_enabled_v1');
-      return stored !== null ? JSON.parse(stored) : true;
-    } catch {
-      return true;
-    }
-  });
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
 
+  // Load initial settings & restore previous data from backend on startup
   useEffect(() => {
-    try {
-      localStorage.setItem('habitup_notifications_enabled_v1', JSON.stringify(notificationsEnabled));
-    } catch {
-      // ignore
-    }
+    const bootstrap = async () => {
+      try {
+        // Request notification permission immediately on startup
+        requestNotificationPermission().catch(() => {});
 
-    if (notificationsEnabled) {
-      registerServiceWorker().then(() => {
-        subscribeToWebPush();
-      });
-    }
-  }, [notificationsEnabled]);
+        // 1. Restore persistent user ID
+        const savedUidRaw = await AsyncStorage.getItem('habitup_current_user_id');
+        let currentUid = 'usr_default';
+        if (savedUidRaw) {
+          try {
+            currentUid = JSON.parse(savedUidRaw);
+          } catch {
+            currentUid = savedUidRaw;
+          }
+        }
+        localApi.setCurrentUserId(currentUid);
 
-  // Sync active reminders with Service Worker & Web Push Server whenever habits change
-  useEffect(() => {
-    if (!notificationsEnabled) return;
-    const activeReminders = habits
-      .filter((h) => !h.archived_at && !h.deleted_at && !h.paused_at && h.reminder_enabled && h.reminder_time)
-      .map((h) => ({
-        habitId: h.id,
-        title: h.name,
-        time: h.reminder_time!,
-      }));
-    syncRemindersToServiceWorker(activeReminders);
-  }, [habits, notificationsEnabled]);
+        // 2. Restore persistent User Profile
+        let activeUser: UserProfile | null = null;
+        const savedUserStr = await AsyncStorage.getItem(`habitup_user_${currentUid}`);
+        if (savedUserStr) {
+          try {
+            activeUser = JSON.parse(savedUserStr);
+          } catch {}
+        }
+        if (!activeUser) {
+          const globalUserStr = await AsyncStorage.getItem('habitup_current_user_v1');
+          if (globalUserStr) {
+            try {
+              activeUser = JSON.parse(globalUserStr);
+            } catch {}
+          }
+        }
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(isAuthenticated));
-    } catch {
-      // ignore
-    }
-  }, [isAuthenticated]);
+        if (activeUser && activeUser.id) {
+          setUser(activeUser);
+        }
+
+        // 3. Restore habits, completions, sessions for this user
+        const savedHabits = deduplicateHabits(localApi.getHabits(currentUid));
+        const savedCompletions = deduplicateCompletions(localApi.getCompletions(currentUid));
+        if (savedHabits.length > 0) setHabits(savedHabits);
+        if (savedCompletions.length > 0) setCompletions(savedCompletions);
+        setSessions(localApi.getSessions(currentUid));
+        setSyncQueue(localApi.getSyncQueue(currentUid));
+
+        // 4. Check Auth state
+        const authVal = await AsyncStorage.getItem('habitup_is_authenticated_v1');
+        const isAuth = authVal ? JSON.parse(authVal) : false;
+        setIsAuthenticated(isAuth);
+
+        if (isAuth) {
+          try {
+            const me = await localApi.fetchMe();
+            if (me) {
+              setUser(me);
+              localApi.saveUser(me, me.id);
+              AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(me)).catch(() => {});
+            }
+            const serverHabits = await localApi.fetchHabitsFromServer();
+            if (serverHabits && serverHabits.length > 0) {
+              setHabits(deduplicateHabits(serverHabits));
+              const serverCompletions = await localApi.fetchCompletionsFromServer(serverHabits);
+              if (serverCompletions && serverCompletions.length > 0) {
+                setCompletions((prev) => deduplicateCompletions([...prev, ...serverCompletions]));
+              }
+            }
+          } catch {
+            // offline fallback already loaded
+          }
+        }
+      } catch (err) {
+        console.warn('Bootstrap error:', err);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    bootstrap();
+
+    AsyncStorage.getItem('habitup_theme_v1').then((val) => {
+      if (val === 'light' || val === 'dark') setTheme(val);
+    });
+    AsyncStorage.getItem('habitup_notifications_enabled_v1').then((val) => {
+      if (val !== null) setNotificationsEnabled(JSON.parse(val));
+    });
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'archived'>('all');
 
-  // Persistence side-effects (user-scoped)
+  // Persistence side-effects
   useEffect(() => {
     if (user?.id) {
       localApi.saveHabits(habits, user.id);
@@ -257,61 +304,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [sessions, user?.id]);
 
-  useEffect(() => {
-    if (user?.id) {
-      localApi.saveSyncQueue(syncQueue, user.id);
-    }
-  }, [syncQueue, user?.id]);
-
-  // Initial load & sync with backend server API
-  useEffect(() => {
-    let isMounted = true;
-    async function syncWithBackend() {
-      if (!user?.id) return;
-      try {
-        const [serverHabits, serverCompletions] = await Promise.all([
-          localApi.fetchHabits(user.id),
-          localApi.fetchCompletions(user.id),
-        ]);
-        if (isMounted) {
-          if (Array.isArray(serverHabits) && serverHabits.length > 0) {
-            setHabits((prev) => deduplicateHabits([...prev, ...serverHabits]));
-          }
-          if (Array.isArray(serverCompletions) && serverCompletions.length > 0) {
-            setCompletions((prev) => deduplicateCompletions([...prev, ...serverCompletions]));
-          }
-        }
-      } catch {
-        // Fallback safely to local state
-      }
-    }
-    syncWithBackend();
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id]);
-
-  // Background sync mutations when online
-  useEffect(() => {
-    if (isOffline || syncQueue.length === 0 || !user?.id) return;
-    const pendingMutations = syncQueue.filter((m) => m.status === 'pending');
-    if (pendingMutations.length === 0) return;
-
-    localApi.syncMutations(pendingMutations, user.id).then((res) => {
-      if (res && res.success) {
-        setSyncQueue((prev) =>
-          prev.map((m) =>
-            pendingMutations.some((p) => p.id === m.id) ? { ...m, status: 'synced' } : m
-          )
-        );
-      }
-    });
-  }, [syncQueue, isOffline, user?.id]);
-
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {
       const id = Date.now().toString();
       setToast({ id, message, undoAction, type });
+      setTimeout(() => {
+        setToast((curr) => (curr?.id === id ? null : curr));
+      }, 4000);
     },
     []
   );
@@ -320,14 +319,56 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToast(null);
   }, []);
 
-  // Helper to switch user account data cleanly without leaking previous account data
-  const switchAccountData = useCallback((targetUser: UserProfile) => {
+  const triggerCelebration = useCallback(() => {
+    if (soundEnabled) {
+      try {
+        soundService.playCompletionChime();
+      } catch {
+        // ignore
+      }
+    }
+    if (hapticsEnabled) {
+      try {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch {
+        // ignore
+      }
+    }
+  }, [soundEnabled, hapticsEnabled]);
+
+  const switchAccountData = useCallback(async (targetUser: UserProfile) => {
     const uid = targetUser.id;
     localApi.setCurrentUserId(uid);
     localApi.saveUser(targetUser, uid);
+    AsyncStorage.setItem('habitup_current_user_id', JSON.stringify(uid)).catch(() => {});
+    AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(targetUser)).catch(() => {});
 
-    const loadedHabits = deduplicateHabits(localApi.getHabits(uid));
-    const loadedCompletions = deduplicateCompletions(localApi.getCompletions(uid));
+    // 1. Check local storage first with fallback to email key
+    let loadedHabits = deduplicateHabits(localApi.getHabits(uid, targetUser.email));
+    let loadedCompletions = deduplicateCompletions(localApi.getCompletions(uid, targetUser.email));
+
+    // 2. Fetch latest habits & completions from backend server
+    try {
+      const serverHabits = await localApi.fetchHabitsFromServer();
+      if (serverHabits && serverHabits.length > 0) {
+        loadedHabits = deduplicateHabits(serverHabits);
+      }
+      const serverCompletions = await localApi.fetchCompletionsFromServer(loadedHabits);
+      if (serverCompletions && serverCompletions.length > 0) {
+        loadedCompletions = deduplicateCompletions([...loadedCompletions, ...serverCompletions]);
+      }
+    } catch {
+      // offline fallback
+    }
+
+    localApi.saveHabits(loadedHabits, uid);
+    localApi.saveCompletions(loadedCompletions, uid);
+    if (targetUser.email) {
+      const emailUid = getUserIdFromEmail(targetUser.email);
+      localApi.saveHabits(loadedHabits, emailUid);
+      localApi.saveCompletions(loadedCompletions, emailUid);
+    }
+
     const loadedSessions = localApi.getSessions(uid);
     const loadedQueue = localApi.getSyncQueue(uid);
 
@@ -337,23 +378,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSessions(loadedSessions);
     setSyncQueue(loadedQueue);
     setIsAuthenticated(true);
+    AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(true)).catch(() => {});
     setActiveTab('home');
-
-    // Fetch fresh habits & completions from server for this user
-    Promise.all([
-      localApi.fetchHabits(uid),
-      localApi.fetchCompletions(uid),
-    ]).then(([serverHabits, serverCompletions]) => {
-      if (Array.isArray(serverHabits) && serverHabits.length > 0) {
-        setHabits((prev) => deduplicateHabits([...prev, ...serverHabits]));
-      }
-      if (Array.isArray(serverCompletions) && serverCompletions.length > 0) {
-        setCompletions((prev) => deduplicateCompletions([...prev, ...serverCompletions]));
-      }
-    }).catch(() => {});
   }, []);
 
-  // Authentication Handlers (PRD Section 8.1)
   const login = useCallback(
     async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
       const cleanEmail = email.trim().toLowerCase();
@@ -370,15 +398,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       const res = await localApi.loginUser(cleanEmail, pass);
       if (!res.success) {
-        showToast(res.error || 'Authentication failed. Please check your password.', undefined, 'warning');
+        showToast(res.error || 'Authentication failed. Please check your credentials.', undefined, 'warning');
         return { success: false, error: res.error };
       }
 
-      const uid = getUserIdFromEmail(cleanEmail);
-      const existingUser = localApi.getUser(uid);
-      const targetUser: UserProfile = res.user || (existingUser && existingUser.email ? existingUser : createDefaultUserProfile(cleanEmail.split('@')[0], cleanEmail));
+      const uid = res.user?.id || getUserIdFromEmail(cleanEmail);
+      const targetUser: UserProfile = res.user || createDefaultUserProfile(cleanEmail.split('@')[0], cleanEmail);
 
-      switchAccountData(targetUser);
+      await switchAccountData(targetUser);
+
       showToast(`Welcome back, ${targetUser.name || cleanEmail}!`, undefined, 'success');
       return { success: true };
     },
@@ -390,7 +418,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim() || cleanEmail.split('@')[0] || 'User';
       const pass = (password || '').trim();
-      const chosenTimezone = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+      const chosenTimezone = timezone || 'Asia/Kolkata';
 
       if (!cleanEmail || !pass) {
         showToast('Please provide both email and password.', undefined, 'warning');
@@ -401,13 +429,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return { success: false, error: 'Password must be at least 6 characters.' };
       }
 
-      const res = await localApi.registerUser(cleanName, cleanEmail, pass);
+      const res = await localApi.registerUser(cleanName, cleanEmail, pass, chosenTimezone);
       if (!res.success) {
         showToast(res.error || 'Registration failed.', undefined, 'warning');
         return { success: false, error: res.error };
       }
 
-      const uid = getUserIdFromEmail(cleanEmail);
+      const uid = res.user?.id || getUserIdFromEmail(cleanEmail);
       const newUser: UserProfile = {
         ...(res.user || {}),
         id: uid,
@@ -418,12 +446,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         created_at: new Date().toISOString(),
       };
 
-      // Clean initial state for new account
       localApi.setCurrentUserId(uid);
       localApi.saveUser(newUser, uid);
       localApi.saveHabits([], uid);
       localApi.saveCompletions([], uid);
       localApi.saveSyncQueue([], uid);
+      AsyncStorage.setItem('habitup_current_user_id', JSON.stringify(uid)).catch(() => {});
+      AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(newUser)).catch(() => {});
 
       setUser(newUser);
       setHabits([]);
@@ -431,9 +460,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setSessions(localApi.getSessions(uid));
       setSyncQueue([]);
       setIsAuthenticated(true);
+      AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(true)).catch(() => {});
       setActiveTab('home');
+      setIsOnboardingModalOpen(true);
 
-      showToast(`Welcome, ${cleanName}! Account created.`, undefined, 'success');
+      showToast(`Welcome, ${cleanName}! Let's set up your habits.`, undefined, 'success');
       return { success: true };
     },
     [showToast]
@@ -443,599 +474,507 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (user?.id) {
       localApi.saveHabits(habits, user.id);
       localApi.saveCompletions(completions, user.id);
+      if (user.email) {
+        const emailUid = getUserIdFromEmail(user.email);
+        localApi.saveHabits(habits, emailUid);
+        localApi.saveCompletions(completions, emailUid);
+      }
       localApi.saveUser(user, user.id);
     }
     setIsAuthenticated(false);
+    AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
+    AsyncStorage.removeItem('habitup_current_user_v1').catch(() => {});
     setHabits([]);
     setCompletions([]);
-    showToast('Signed out successfully', undefined, 'info');
-  }, [habits, completions, user, showToast]);
+    localApi.logoutUser().catch(() => {});
+    showToast('You have been signed out.', undefined, 'info');
+  }, [user, habits, completions, showToast]);
 
   const biometricLogin = useCallback(() => {
-    if (user && user.email) {
-      switchAccountData(user);
-    } else {
-      const currentUid = localApi.getCurrentUserId();
-      const currentUser = localApi.getUser(currentUid);
-      switchAccountData(currentUser);
-    }
-  }, [user, switchAccountData]);
+    setIsBiometricModalOpen(true);
+  }, []);
 
   const socialLogin = useCallback(
     (provider: 'apple' | 'google') => {
-      const isApple = provider === 'apple';
-      const email = isApple ? 'user@privaterelay.appleid.com' : 'user@gmail.com';
-      const name = isApple ? 'Apple User' : 'Google User';
+      const email = provider === 'apple' ? 'demo.apple@habitup.app' : 'demo.google@habitup.app';
+      const name = provider === 'apple' ? 'Apple User' : 'Google User';
       const uid = getUserIdFromEmail(email);
-
-      const existingUser = localApi.getUser(uid);
-      const targetUser: UserProfile = (existingUser && existingUser.email)
-        ? existingUser
-        : {
-            id: uid,
-            name,
-            email,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
-            avatar: '',
-            created_at: new Date().toISOString(),
-          };
-
-      switchAccountData(targetUser);
-      showToast(`Signed in with ${isApple ? 'Apple ID' : 'Google Account'}`, undefined, 'success');
+      const userProfile = createDefaultUserProfile(name, email);
+      userProfile.id = uid;
+      switchAccountData(userProfile);
+      showToast(`Signed in with ${provider === 'apple' ? 'Apple' : 'Google'}`, undefined, 'success');
     },
     [switchAccountData, showToast]
   );
 
-  // Audio / Sound synthesizer for satisfying click & celebration chime
-  const playClickSound = useCallback((isCompleting: boolean) => {
-    if (!soundEnabled) return;
-    try {
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      const now = ctx.currentTime;
-      if (isCompleting) {
-        // Cheerful ascending arpeggio chime
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(523.25, now); // C5
-        osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.08); // G5
-        osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.16); // C6
-        gain.gain.setValueAtTime(0.18, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-        osc.start(now);
-        osc.stop(now + 0.32);
-      } else {
-        // Subtle soft descending click for undo
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(440, now);
-        osc.frequency.exponentialRampToValueAtTime(220, now + 0.08);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-        osc.start(now);
-        osc.stop(now + 0.14);
-      }
-    } catch {
-      // AudioContext unavailable or blocked by browser policy
-    }
-  }, [soundEnabled]);
-
-  const triggerCelebration = useCallback(() => {
-    try {
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.65 },
-        colors: ['#FF4D6D', '#FFB800', '#8B5CF6', '#00C2FF', '#10B981'],
-      });
-    } catch {
-      // Confetti fallback
-    }
-  }, []);
-
-  const sendHabitReminder = useCallback(
-    (habit: Habit) => {
-      const habitTimeTitle = habit.name.toLowerCase().endsWith('time')
-        ? habit.name
-        : `${habit.name} Time`;
-
-      const notif: InAppNotification = {
-        id: `remind-${habit.id}-${Date.now()}`,
-        habitId: habit.id,
-        title: habitTimeTitle,
-        body: habit.description || `It's time for your ${habit.name} habit. Tap to complete today's session!`,
-        icon: habit.icon,
-        color: habit.color,
-        timestamp: new Date().toISOString(),
-        reminderTime: habit.reminder_time || '08:00',
-        type: 'reminder',
-      };
-
-      notificationService.sendNotification(notif, {
-        soundEnabled,
-        hapticsEnabled,
-      });
-    },
-    [soundEnabled, hapticsEnabled]
-  );
-
-  const triggerTestNotification = useCallback(() => {
-    const notif: InAppNotification = {
-      id: `test-${Date.now()}`,
-      title: 'HabitUp Notifications Active! 🔔',
-      body: 'Your daily habit reminders and sound chimes are configured and working perfectly.',
-      icon: 'Sparkles',
-      color: '#7C5CFF',
+  const addMutationToQueue = useCallback((endpoint: string, method: 'POST' | 'PATCH' | 'DELETE', payload: unknown) => {
+    const mut: SyncMutation = {
+      id: `mut-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      endpoint,
+      method,
+      payload,
       timestamp: new Date().toISOString(),
-      reminderTime: new Intl.DateTimeFormat('en-US', {
-        hour: 'numeric',
-        minute: 'numeric',
-      }).format(new Date()),
-      type: 'system',
+      status: 'pending',
     };
-
-    notificationService.sendNotification(notif, {
-      soundEnabled,
-      hapticsEnabled,
-    });
-    showToast('🔔 Test notification sent!', undefined, 'success');
-  }, [soundEnabled, hapticsEnabled, showToast]);
-
-  // Listen to external custom events (e.g. trigger-habit-reminder)
-  useEffect(() => {
-    const handleTriggerReminder = (e: Event) => {
-      const customEvent = e as CustomEvent<{ habitId?: string }>;
-      const habitId = customEvent.detail?.habitId;
-      const targetHabit = habitId ? habits.find((h) => h.id === habitId) : habits[0];
-      if (targetHabit) {
-        sendHabitReminder(targetHabit);
-      } else {
-        triggerTestNotification();
+    setSyncQueue((prev) => {
+      const updated = [...prev, mut];
+      if (user?.id) {
+        localApi.saveSyncQueue(updated, user.id);
       }
-    };
+      return updated;
+    });
+  }, [user?.id]);
 
-    window.addEventListener('trigger-habit-reminder', handleTriggerReminder);
-    return () => {
-      window.removeEventListener('trigger-habit-reminder', handleTriggerReminder);
-    };
-  }, [habits, sendHabitReminder, triggerTestNotification]);
+  const toggleCompletion = useCallback(
+    (habitId: string, dateStr?: string) => {
+      const rawTarget = dateStr || selectedDate || formatDateKey(new Date());
+      const targetDate = rawTarget.split('T')[0];
 
-  // Background Reminder Scheduler - checks every 30 seconds
-  useEffect(() => {
-    if (!notificationsEnabled) return;
+      if (hapticsEnabled) {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        } catch {
+          // ignore
+        }
+      }
 
-    const checkReminders = () => {
-      const now = new Date();
-      const currentHours = String(now.getHours()).padStart(2, '0');
-      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
-      const currentTimeStr = `${currentHours}:${currentMinutes}`;
-      const todayKey = formatDateKey(now);
+      setCompletions((prev) => {
+        const isAlreadyCompleted = prev.some(
+          (c) => c.habit_id === habitId && (c.completion_date || '').split('T')[0] === targetDate
+        );
 
-      const activeHabits = habits.filter(
-        (h) =>
-          !h.archived_at &&
-          !h.deleted_at &&
-          !h.paused_at &&
-          h.reminder_enabled &&
-          h.reminder_time &&
-          isHabitScheduledOnDate(h, now)
-      );
-
-      activeHabits.forEach((h) => {
-        // If habit reminder time matches current minute and hasn't been notified today
-        if (
-          h.reminder_time === currentTimeStr &&
-          !notificationService.hasBeenNotified(h.id, todayKey)
-        ) {
-          const isAlreadyCompleted = completions.some(
-            (c) => c.habit_id === h.id && c.completion_date === todayKey
+        if (isAlreadyCompleted) {
+          // Remove completion locally and from backend
+          const updated = prev.filter(
+            (c) => !(c.habit_id === habitId && (c.completion_date || '').split('T')[0] === targetDate)
           );
-
-          if (!isAlreadyCompleted) {
-            notificationService.markAsNotified(h.id, todayKey);
-            sendHabitReminder(h);
+          if (isOffline) {
+            addMutationToQueue(`/habits/${habitId}/completions/${targetDate}`, 'DELETE', null);
+          } else {
+            localApi.removeCompletion(habitId, targetDate).catch(() => {
+              addMutationToQueue(`/habits/${habitId}/completions/${targetDate}`, 'DELETE', null);
+            });
           }
+          showToast('Marked uncompleted', undefined, 'info');
+          return updated;
+        } else {
+          // Add completion locally and to backend
+          const newCompletion: HabitCompletion = {
+            id: `comp-${habitId}-${targetDate}-${Date.now()}`,
+            habit_id: habitId,
+            user_id: user?.id || 'usr_default',
+            completion_date: targetDate,
+            completed_at: new Date().toISOString(),
+          };
+          triggerCelebration();
+          if (isOffline) {
+            addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
+          } else {
+            localApi.addCompletion(habitId, targetDate).catch(() => {
+              addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
+            });
+          }
+          showToast('Habit completed! 🎉 Keep going!', undefined, 'success');
+          return deduplicateCompletions([...prev, newCompletion]);
         }
       });
-    };
+    },
+    [selectedDate, user?.id, hapticsEnabled, isOffline, triggerCelebration, showToast, addMutationToQueue]
+  );
 
-    checkReminders();
-    const interval = setInterval(checkReminders, 25000);
-    return () => clearInterval(interval);
-  }, [habits, completions, notificationsEnabled, sendHabitReminder]);
+  const createHabit = useCallback(
+    (habitData: Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Habit => {
+      const now = new Date().toISOString();
+      const tempId = `hab-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const resolvedScheduledDays =
+        habitData.frequency_type === 'daily' || !habitData.scheduled_days || habitData.scheduled_days.length === 0
+          ? [0, 1, 2, 3, 4, 5, 6]
+          : habitData.scheduled_days;
 
-  // Auto clear toast after 4.5s
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 4500);
-    return () => clearTimeout(timer);
-  }, [toast]);
+      const newHabit: Habit = {
+        ...habitData,
+        scheduled_days: resolvedScheduledDays,
+        id: tempId,
+        user_id: user?.id || 'usr_default',
+        created_at: now,
+        updated_at: now,
+        paused_at: null,
+        archived_at: null,
+        deleted_at: null,
+      };
 
-  // Streak & stats calculation for a specific habit
-  const getHabitStats = useCallback(
-    (habitId: string, refDate: Date = new Date(selectedDate + 'T12:00:00')): HabitCalculatedStats => {
-      const habit = habits.find((h) => h.id === habitId);
-      if (!habit) {
-        return {
-          habitId,
-          currentStreak: 0,
-          longestStreak: 0,
-          completionRate: 0,
-          totalCompletions: 0,
-          isCompletedToday: false,
-          isScheduledToday: false,
-          historyMap: {},
-        };
+      setHabits((prev) => deduplicateHabits([...prev, newHabit]));
+      showToast(`Habit "${newHabit.name}" created!`, undefined, 'success');
+
+      if (newHabit.reminder_enabled && newHabit.reminder_time) {
+        notificationService.scheduleReminder(newHabit);
       }
-      return calculateHabitStats(habit, completions, refDate);
+
+      // Live Backend Sync or offline queue
+      if (isOffline) {
+        addMutationToQueue('/habits', 'POST', newHabit);
+      } else {
+        localApi.createHabitOnServer(newHabit).then((serverHabit) => {
+          if (serverHabit) {
+            setHabits((prev) =>
+              deduplicateHabits(
+                prev.map((h) =>
+                  h.id === tempId || (h.name && h.name.toLowerCase() === serverHabit.name.toLowerCase())
+                    ? serverHabit
+                    : h
+                )
+              )
+            );
+          }
+        }).catch(() => {
+          addMutationToQueue('/habits', 'POST', newHabit);
+        });
+      }
+
+      return newHabit;
+    },
+    [user?.id, isOffline, showToast, addMutationToQueue]
+  );
+
+  const updateHabit = useCallback(
+    (habitId: string, updates: Partial<Habit>) => {
+      setHabits((prev) =>
+        prev.map((h) => (h.id === habitId ? { ...h, ...updates, updated_at: new Date().toISOString() } : h))
+      );
+      if (isOffline) {
+        addMutationToQueue(`/habits/${habitId}`, 'PATCH', updates);
+      } else {
+        localApi.updateHabitOnServer(habitId, updates).catch(() => {
+          addMutationToQueue(`/habits/${habitId}`, 'PATCH', updates);
+        });
+      }
+      showToast('Habit updated.', undefined, 'info');
+    },
+    [isOffline, showToast, addMutationToQueue]
+  );
+
+  const pauseHabit = useCallback((habitId: string) => {
+    updateHabit(habitId, { paused_at: new Date().toISOString() });
+    if (isOffline) {
+      addMutationToQueue(`/habits/${habitId}/pause`, 'PATCH', null);
+    } else {
+      localApi.pauseHabitOnServer(habitId).catch(() => {
+        addMutationToQueue(`/habits/${habitId}/pause`, 'PATCH', null);
+      });
+    }
+  }, [updateHabit, isOffline, addMutationToQueue]);
+
+  const resumeHabit = useCallback((habitId: string) => {
+    updateHabit(habitId, { paused_at: null });
+    if (isOffline) {
+      addMutationToQueue(`/habits/${habitId}/unpause`, 'PATCH', null);
+    } else {
+      localApi.unpauseHabitOnServer(habitId).catch(() => {
+        addMutationToQueue(`/habits/${habitId}/unpause`, 'PATCH', null);
+      });
+    }
+  }, [updateHabit, isOffline, addMutationToQueue]);
+
+  const archiveHabit = useCallback((habitId: string) => {
+    updateHabit(habitId, { archived_at: new Date().toISOString() });
+    if (isOffline) {
+      addMutationToQueue(`/habits/${habitId}/archive`, 'PATCH', null);
+    } else {
+      localApi.archiveHabitOnServer(habitId).catch(() => {
+        addMutationToQueue(`/habits/${habitId}/archive`, 'PATCH', null);
+      });
+    }
+  }, [updateHabit, isOffline, addMutationToQueue]);
+
+  const unarchiveHabit = useCallback((habitId: string) => {
+    updateHabit(habitId, { archived_at: null });
+    if (isOffline) {
+      addMutationToQueue(`/habits/${habitId}/unarchive`, 'PATCH', null);
+    } else {
+      localApi.unarchiveHabitOnServer(habitId).catch(() => {
+        addMutationToQueue(`/habits/${habitId}/unarchive`, 'PATCH', null);
+      });
+    }
+  }, [updateHabit, isOffline, addMutationToQueue]);
+
+  const deleteHabit = useCallback((habitId: string) => {
+    setHabits((prev) => prev.filter((h) => h.id !== habitId));
+    setCompletions((prev) => prev.filter((c) => c.habit_id !== habitId));
+    if (isOffline) {
+      addMutationToQueue(`/habits/${habitId}`, 'DELETE', null);
+    } else {
+      localApi.deleteHabitOnServer(habitId).catch(() => {
+        addMutationToQueue(`/habits/${habitId}`, 'DELETE', null);
+      });
+    }
+    showToast('Habit deleted.', undefined, 'info');
+  }, [isOffline, showToast, addMutationToQueue]);
+
+  const updateUser = useCallback((updates: Partial<UserProfile>) => {
+    setUser((prev) => ({ ...prev, ...updates }));
+    showToast('Profile updated.', undefined, 'success');
+  }, [showToast]);
+
+  const revokeSession = useCallback((sessionId: string) => {
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    showToast('Session revoked.', undefined, 'info');
+  }, [showToast]);
+
+  const revokeAllOtherSessions = useCallback(() => {
+    setSessions((prev) => prev.filter((s) => s.is_current));
+    showToast('All other sessions revoked.', undefined, 'info');
+  }, [showToast]);
+
+  const resetAllData = useCallback(() => {
+    setHabits([]);
+    setCompletions([]);
+    if (user?.id) {
+      localApi.resetAllData(user.id);
+    }
+    showToast('All data has been reset.', undefined, 'warning');
+  }, [user?.id, showToast]);
+
+  const exportJsonData = useCallback((): string => {
+    const backup = {
+      version: '1.0',
+      user,
+      habits,
+      completions,
+      exportedAt: new Date().toISOString(),
+    };
+    return JSON.stringify(backup, null, 2);
+  }, [user, habits, completions]);
+
+  const importJsonData = useCallback((jsonStr: string): boolean => {
+    try {
+      const data = JSON.parse(jsonStr);
+      if (Array.isArray(data.habits)) {
+        setHabits(deduplicateHabits(data.habits));
+      }
+      if (Array.isArray(data.completions)) {
+        setCompletions(deduplicateCompletions(data.completions));
+      }
+      showToast('Data imported successfully!', undefined, 'success');
+      return true;
+    } catch {
+      showToast('Invalid backup file format.', undefined, 'warning');
+      return false;
+    }
+  }, [showToast]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme((prev) => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      AsyncStorage.setItem('habitup_theme_v1', next).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const triggerTestNotification = useCallback((title?: string, body?: string) => {
+    notificationService.triggerTest(title, body);
+    showToast('Test notification triggered!', undefined, 'info');
+  }, [showToast]);
+
+  const sendHabitReminder = useCallback((habit: Habit) => {
+    notificationService.scheduleReminder(habit);
+    showToast(`Reminder set for ${habit.name}`, undefined, 'info');
+  }, [showToast]);
+
+  const syncWithBackend = useCallback(async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
+    showToast('Syncing with cloud backend...', undefined, 'info');
+
+    try {
+      if (isOffline) {
+        setIsOffline(false);
+      }
+
+      let syncedMutationsCount = 0;
+      let syncedHabitsCount = 0;
+      let syncedCompletionsCount = 0;
+
+      // 1. Process Pending Mutations in syncQueue
+      if (syncQueue.length > 0) {
+        for (const mut of syncQueue) {
+          try {
+            if (mut.method === 'POST' && mut.endpoint === '/habits') {
+              const res = await localApi.createHabitOnServer(mut.payload as any);
+              if (res) syncedMutationsCount++;
+            } else if (mut.method === 'PATCH' && mut.endpoint.includes('/habits/')) {
+              const parts = mut.endpoint.split('/');
+              const habitId = parts[2];
+              if (mut.endpoint.endsWith('/pause')) {
+                await localApi.pauseHabitOnServer(habitId);
+              } else if (mut.endpoint.endsWith('/unpause')) {
+                await localApi.unpauseHabitOnServer(habitId);
+              } else if (mut.endpoint.endsWith('/archive')) {
+                await localApi.archiveHabitOnServer(habitId);
+              } else if (mut.endpoint.endsWith('/unarchive')) {
+                await localApi.unarchiveHabitOnServer(habitId);
+              } else {
+                await localApi.updateHabitOnServer(habitId, mut.payload as any);
+              }
+              syncedMutationsCount++;
+            } else if (mut.method === 'DELETE' && mut.endpoint.includes('/habits/')) {
+              const parts = mut.endpoint.split('/');
+              const habitId = parts[2];
+              if (parts[3] === 'completions' && parts[4]) {
+                await localApi.removeCompletion(habitId, parts[4]);
+              } else {
+                await localApi.deleteHabitOnServer(habitId);
+              }
+              syncedMutationsCount++;
+            } else if (mut.method === 'POST' && mut.endpoint.includes('/completions')) {
+              const parts = mut.endpoint.split('/');
+              const habitId = parts[2];
+              const dStr = (mut.payload as any)?.completion_date;
+              await localApi.addCompletion(habitId, dStr);
+              syncedMutationsCount++;
+            }
+          } catch {
+            // continue processing
+          }
+        }
+      }
+
+      // 2. Push any local offline habits (with temp ID 'hab-') to backend
+      for (const h of habits) {
+        if (h.id.startsWith('hab-')) {
+          try {
+            const serverH = await localApi.createHabitOnServer(h);
+            if (serverH) {
+              syncedHabitsCount++;
+              setHabits((prev) =>
+                deduplicateHabits(prev.map((item) => (item.id === h.id ? serverH : item)))
+              );
+            }
+          } catch {}
+        }
+      }
+
+      // 3. Push local completions to backend
+      for (const c of completions) {
+        if (c.id.startsWith('comp-')) {
+          try {
+            const res = await localApi.addCompletion(c.habit_id, c.completion_date);
+            if (res?.completion) {
+              syncedCompletionsCount++;
+            }
+          } catch {}
+        }
+      }
+
+      // 4. Fetch latest habits from server
+      const serverHabits = await localApi.fetchHabitsFromServer();
+      if (serverHabits && serverHabits.length > 0) {
+        setHabits((prev) => deduplicateHabits([...serverHabits, ...prev]));
+      }
+
+      // 5. Fetch latest user profile
+      const me = await localApi.fetchMe();
+      if (me) {
+        setUser((prev) => ({ ...(prev || {}), ...me }));
+        localApi.saveUser(me, me.id);
+      }
+
+      // 6. Clear sync queue
+      setSyncQueue([]);
+      if (user?.id) {
+        localApi.saveSyncQueue([], user.id);
+      }
+
+      const totalItemsSynced = syncedMutationsCount + syncedHabitsCount + syncedCompletionsCount;
+      if (totalItemsSynced > 0) {
+        showToast(
+          `Synced ${totalItemsSynced} item${totalItemsSynced === 1 ? '' : 's'} with cloud! (${syncedHabitsCount} habits, ${syncedCompletionsCount} check-ins)`,
+          undefined,
+          'success'
+        );
+      } else {
+        showToast(
+          `All synced! ${habits.length} habits & ${completions.length} check-ins up to date.`,
+          undefined,
+          'success'
+        );
+      }
+    } catch {
+      showToast('Sync completed locally. Cloud server currently unavailable.', undefined, 'info');
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isSyncing, isOffline, syncQueue, habits, completions, user, showToast]);
+
+  const getHabitStats = useCallback(
+    (habitId: string, refDate?: Date): HabitCalculatedStats => {
+      const targetHabit = habits.find((h) => h.id === habitId);
+      const reference = refDate || new Date(selectedDate + 'T12:00:00');
+      return calculateHabitStats(targetHabit, completions, reference);
     },
     [habits, completions, selectedDate]
   );
 
-  // Overall statistics aggregated across all active habits
   const overallStats = useMemo<OverallStats>(() => {
     const activeHabits = habits.filter((h) => !h.archived_at && !h.deleted_at && !h.paused_at);
-    const today = new Date(selectedDate + 'T12:00:00');
+    const selectedDateTime = new Date(selectedDate + 'T12:00:00');
     
-    let totalStreaksSum = 0;
-    let currentBest = 0;
-    let bestAllTime = 0;
-    let totalRateSum = 0;
+    let totalScheduled = 0;
+    let totalCompleted = 0;
 
     activeHabits.forEach((h) => {
-      const stats = calculateHabitStats(h, completions, today);
-      totalStreaksSum += stats.currentStreak;
-      if (stats.currentStreak > currentBest) currentBest = stats.currentStreak;
-      if (stats.longestStreak > bestAllTime) bestAllTime = stats.longestStreak;
-      totalRateSum += stats.completionRate;
+      if (isHabitScheduledOnDate(h, selectedDateTime)) {
+        totalScheduled++;
+        const isDone = completions.some(
+          (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === selectedDate
+        );
+        if (isDone) totalCompleted++;
+      }
     });
 
-    const completionRate =
-      activeHabits.length > 0 ? Math.round(totalRateSum / activeHabits.length) : 0;
+    const completionRate = totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0;
+    const plantStreak = calculatePlantStreak(habits, completions, selectedDateTime);
 
-    // Weekly activity for chart
-    const week = getWeekDays(today);
-    const weeklyActivity = week.map((w) => {
-      let completedCount = 0;
-      let totalDue = 0;
-
+    const weekDays = getWeekDays(selectedDateTime);
+    const weeklyActivity = weekDays.map((d) => {
+      const dStr = d.key;
+      let due = 0;
+      let done = 0;
       activeHabits.forEach((h) => {
-        if (isHabitScheduledOnDate(h, w.date)) {
-          totalDue++;
-          const isDone = completions.some(
-            (c) => c.habit_id === h.id && c.completion_date === w.key
-          );
-          if (isDone) completedCount++;
+        if (isHabitScheduledOnDate(h, d.date)) {
+          due++;
+          if (completions.some((c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === dStr)) {
+            done++;
+          }
         }
       });
-
       return {
-        day: w.dayName,
-        date: w.key,
-        completedCount,
-        totalDue,
+        day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][(d.date.getDay() + 6) % 7],
+        date: dStr,
+        completedCount: done,
+        totalDue: due,
       };
     });
 
-    const plantStreak = calculatePlantStreak(habits, completions, today);
+    let currentBestStreak = 0;
+    let bestAllTimeStreak = 0;
+    activeHabits.forEach((h) => {
+      const st = calculateHabitStats(h, completions, selectedDateTime);
+      if (st.currentStreak > currentBestStreak) currentBestStreak = st.currentStreak;
+      if (st.longestStreak > bestAllTimeStreak) bestAllTimeStreak = st.longestStreak;
+    });
 
     return {
       completionRate,
       totalCompletionsCount: completions.length,
       activeHabitsCount: activeHabits.length,
-      currentBestStreak: currentBest,
-      bestAllTimeStreak: bestAllTime,
+      currentBestStreak,
+      bestAllTimeStreak,
       weeklyActivity,
       plantStreak,
     };
   }, [habits, completions, selectedDate]);
-
-  // Single-tap completion and undo with <50ms optimistic latency (PRD Section 8.3 & 11)
-  const toggleCompletion = useCallback(
-    (habitId: string, dateStr?: string) => {
-      const targetDate = dateStr || selectedDate;
-      const existingCompletion = completions.find(
-        (c) => c.habit_id === habitId && c.completion_date === targetDate
-      );
-      const habit = habits.find((h) => h.id === habitId);
-      const habitName = habit?.name || 'Habit';
-
-      if (existingCompletion) {
-        // Toggle OFF (Undo)
-        setCompletions((prev) => prev.filter((c) => c.id !== existingCompletion.id));
-        playClickSound(false);
-
-        // Call backend API
-        if (!isOffline) {
-          localApi.toggleCompletion(habitId, targetDate).catch(() => {});
-        }
-
-        // Queue sync mutation
-        const mutation: SyncMutation = {
-          id: `mut-${Date.now()}`,
-          endpoint: `/habits/${habitId}/completions/${targetDate}`,
-          method: 'DELETE',
-          payload: { habit_id: habitId, date: targetDate },
-          timestamp: new Date().toISOString(),
-          status: isOffline ? 'pending' : 'synced',
-        };
-        setSyncQueue((prev) => [mutation, ...prev.slice(0, 49)]);
-
-        showToast(
-          `Marked "${habitName}" as pending`,
-          () => {
-            // Undo the undo (Re-complete)
-            setCompletions((prev) => [...prev, existingCompletion]);
-            if (!isOffline) {
-              localApi.toggleCompletion(habitId, targetDate).catch(() => {});
-            }
-          },
-          'info'
-        );
-      } else {
-        // Toggle ON (Complete)
-        const newCompletion: HabitCompletion = {
-          id: `c-${habitId}-${targetDate}`,
-          habit_id: habitId,
-          user_id: user.id,
-          completion_date: targetDate,
-          completed_at: new Date().toISOString(),
-        };
-
-        setCompletions((prev) => [...prev, newCompletion]);
-        playClickSound(true);
-
-        // Call backend API
-        if (!isOffline) {
-          localApi.toggleCompletion(habitId, targetDate).catch(() => {});
-        }
-
-        // Check if all active habits scheduled for today are completed for instant celebration
-        const activeScheduled = habits.filter(
-          (h) => !h.archived_at && !h.deleted_at && !h.paused_at && isHabitScheduledOnDate(h, new Date(targetDate + 'T12:00:00'))
-        );
-        const willBeAllDone = activeScheduled.every(
-          (h) => h.id === habitId || completions.some((c) => c.habit_id === h.id && c.completion_date === targetDate)
-        );
-
-        if (willBeAllDone && activeScheduled.length > 0) {
-          triggerCelebration();
-          showToast(`🎉 Incredible! All habits completed for ${targetDate === formatDateKey(new Date()) ? 'today' : targetDate}!`, undefined, 'success');
-        } else {
-          // Calculate new streak
-          const newStats = calculateHabitStats(
-            habit || ({} as Habit),
-            [...completions, newCompletion],
-            new Date(targetDate + 'T12:00:00')
-          );
-          showToast(
-            `Completed "${habitName}"! 🔥 ${newStats.currentStreak} day streak`,
-            () => {
-              // Undo completion
-              setCompletions((prev) => prev.filter((c) => c.id !== newCompletion.id));
-              if (!isOffline) {
-                localApi.toggleCompletion(habitId, targetDate).catch(() => {});
-              }
-            },
-            'success'
-          );
-        }
-
-        // Queue sync mutation
-        const mutation: SyncMutation = {
-          id: `mut-${Date.now()}`,
-          endpoint: `/habits/${habitId}/completions`,
-          method: 'POST',
-          payload: newCompletion,
-          timestamp: new Date().toISOString(),
-          status: isOffline ? 'pending' : 'synced',
-        };
-        setSyncQueue((prev) => [mutation, ...prev.slice(0, 49)]);
-      }
-    },
-    [completions, habits, selectedDate, user.id, isOffline, playClickSound, showToast, triggerCelebration]
-  );
-
-  // Create Habit
-  const createHabit = useCallback(
-    (habitData: Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Habit => {
-      const newHabit: Habit = {
-        ...habitData,
-        id: `h-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        user_id: user.id,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      setHabits((prev) => deduplicateHabits([newHabit, ...prev.filter(h => h.id !== newHabit.id)]));
-
-      const mutation: SyncMutation = {
-        id: `mut-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        endpoint: '/habits',
-        method: 'POST',
-        payload: newHabit,
-        timestamp: new Date().toISOString(),
-        status: isOffline ? 'pending' : 'synced',
-      };
-      setSyncQueue((prev) => [mutation, ...prev.slice(0, 49)]);
-      showToast(`Created habit "${newHabit.name}"`, undefined, 'success');
-
-      return newHabit;
-    },
-    [user.id, isOffline, showToast]
-  );
-
-  // Update Habit
-  const updateHabit = useCallback(
-    (habitId: string, updates: Partial<Habit>) => {
-      setHabits((prev) =>
-        prev.map((h) =>
-          h.id === habitId
-            ? { ...h, ...updates, updated_at: new Date().toISOString() }
-            : h
-        )
-      );
-
-      const mutation: SyncMutation = {
-        id: `mut-${Date.now()}`,
-        endpoint: `/habits/${habitId}`,
-        method: 'PATCH',
-        payload: updates,
-        timestamp: new Date().toISOString(),
-        status: isOffline ? 'pending' : 'synced',
-      };
-      setSyncQueue((prev) => [mutation, ...prev.slice(0, 49)]);
-      showToast('Habit updated successfully', undefined, 'success');
-    },
-    [isOffline, showToast]
-  );
-
-  // Pause Habit (PRD Section 8.5)
-  const pauseHabit = useCallback(
-    (habitId: string) => {
-      updateHabit(habitId, { paused_at: new Date().toISOString() });
-      showToast('Habit paused. Streak preserved.', undefined, 'info');
-    },
-    [updateHabit, showToast]
-  );
-
-  // Resume Habit
-  const resumeHabit = useCallback(
-    (habitId: string) => {
-      updateHabit(habitId, { paused_at: null });
-      showToast('Habit resumed and back on schedule!', undefined, 'success');
-    },
-    [updateHabit, showToast]
-  );
-
-  // Archive Habit
-  const archiveHabit = useCallback(
-    (habitId: string) => {
-      updateHabit(habitId, { archived_at: new Date().toISOString() });
-      showToast('Habit moved to Archive. Historical stats preserved.', undefined, 'info');
-    },
-    [updateHabit, showToast]
-  );
-
-  // Unarchive Habit
-  const unarchiveHabit = useCallback(
-    (habitId: string) => {
-      updateHabit(habitId, { archived_at: null });
-      showToast('Habit restored from archive.', undefined, 'success');
-    },
-    [updateHabit, showToast]
-  );
-
-  // Delete Habit (Soft-delete PRD Section 8.5)
-  const deleteHabit = useCallback(
-    (habitId: string) => {
-      const habitToDelete = habits.find((h) => h.id === habitId);
-      updateHabit(habitId, { deleted_at: new Date().toISOString() });
-      
-      showToast(
-        `Deleted "${habitToDelete?.name || 'Habit'}"`,
-        () => {
-          // Restore
-          updateHabit(habitId, { deleted_at: null });
-        },
-        'warning'
-      );
-    },
-    [habits, updateHabit, showToast]
-  );
-
-  // User profile
-  const updateUser = useCallback(
-    (updates: Partial<UserProfile>) => {
-      setUser((prev) => ({ ...prev, ...updates }));
-      showToast('Profile updated', undefined, 'success');
-    },
-    [showToast]
-  );
-
-  // Sessions management (PRD Section 8.1)
-  const revokeSession = useCallback(
-    (sessionId: string) => {
-      setSessions((prev) =>
-        prev.map((s) =>
-          s.id === sessionId ? { ...s, revoked_at: new Date().toISOString() } : s
-        )
-      );
-      showToast('Session revoked', undefined, 'info');
-    },
-    [showToast]
-  );
-
-  const revokeAllOtherSessions = useCallback(() => {
-    setSessions((prev) =>
-      prev.map((s) =>
-        !s.is_current ? { ...s, revoked_at: new Date().toISOString() } : s
-      )
-    );
-    showToast('Logged out of all other devices', undefined, 'success');
-  }, [showToast]);
-
-  // Reset to default seed data
-  const resetAllData = useCallback(() => {
-    if (user?.id) {
-      localApi.resetAllData(user.id);
-    }
-    setHabits([]);
-    setCompletions([]);
-    setSessions(localApi.getSessions(user?.id));
-    setSyncQueue([]);
-    showToast('App reset to fresh initial data for this account', undefined, 'info');
-  }, [user?.id, showToast]);
-
-  // Export JSON (for easy migration to backend / PostgreSQL database)
-  const exportJsonData = useCallback((): string => {
-    const bundle = {
-      version: '1.0',
-      exported_at: new Date().toISOString(),
-      user,
-      habits: habits.filter((h) => !h.deleted_at),
-      completions,
-      sessions,
-    };
-    return JSON.stringify(bundle, null, 2);
-  }, [user, habits, completions, sessions]);
-
-  // Import JSON
-  const importJsonData = useCallback(
-    (json: string): boolean => {
-      try {
-        const parsed = JSON.parse(json);
-        if (parsed.habits && Array.isArray(parsed.habits)) {
-          setHabits(parsed.habits);
-          if (parsed.completions && Array.isArray(parsed.completions)) {
-            setCompletions(parsed.completions);
-          }
-          if (parsed.user) {
-            setUser(parsed.user);
-          }
-          showToast('Data imported successfully!', undefined, 'success');
-          return true;
-        }
-        showToast('Invalid backup format', undefined, 'warning');
-        return false;
-      } catch (e) {
-        showToast('Failed to parse JSON backup file', undefined, 'warning');
-        return false;
-      }
-    },
-    [showToast]
-  );
-
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  }, []);
 
   return (
     <HabitContext.Provider
@@ -1067,11 +1006,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsAuthenticated,
         isBiometricModalOpen,
         setIsBiometricModalOpen,
-        login,
-        register,
-        logout,
-        biometricLogin,
-        socialLogin,
         isCreateModalOpen,
         setIsCreateModalOpen,
         isPlantGardenModalOpen,
@@ -1092,6 +1026,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSearchQuery,
         filterStatus,
         setFilterStatus,
+        isAuthLoading,
+        login,
+        register,
+        logout,
+        biometricLogin,
+        socialLogin,
         toggleCompletion,
         createHabit,
         updateHabit,
@@ -1107,6 +1047,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         importJsonData,
         exportJsonData,
         triggerCelebration,
+        isSyncing,
+        syncWithBackend,
         getHabitStats,
         overallStats,
       }}

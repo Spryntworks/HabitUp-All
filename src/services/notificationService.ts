@@ -1,8 +1,10 @@
 /**
- * HabitFlow Notification & Web Push Service
- * Provides complete background notifications when the app is minimized or closed
- * using Service Workers and Web Push API with server-side scheduled push dispatch.
+ * HabitUp Notification Service (Expo Notifications & Web Fallback)
+ * Provides native push notifications, local reminder scheduling,
+ * and background alerts that fire across Mobile and Desktop/Web.
  */
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
 export interface InAppNotification {
   id: string;
@@ -16,416 +18,251 @@ export interface InAppNotification {
   type: 'reminder' | 'streak' | 'daily_briefing' | 'system';
 }
 
-let deferredInstallPrompt: any = null;
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
+// 1. Configure foreground presentation on native
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
   });
 }
 
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
+// 2. Configure Android Notification Channel
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('habit-reminders', {
+    name: 'Habit Reminders',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#7C5CFF',
+    sound: 'default',
+    enableVibrate: true,
+    showBadge: true,
+  }).catch((err) => console.warn('Could not set Android notification channel:', err));
 }
 
-export function isNotificationSupported(): boolean {
-  return typeof window !== 'undefined' && 'Notification' in window;
-}
-
-export function isServiceWorkerSupported(): boolean {
-  return typeof window !== 'undefined' && 'serviceWorker' in navigator;
-}
-
-export function isPushSupported(): boolean {
-  return typeof window !== 'undefined' && 'PushManager' in window && isServiceWorkerSupported();
-}
-
-export function isInIframe(): boolean {
-  return typeof window !== 'undefined' && window.self !== window.top;
-}
-
-/**
- * Register Service Worker for background notifications and offline capabilities
- */
-export async function registerServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!isServiceWorkerSupported()) return null;
-
-  try {
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/',
-    });
-    return registration;
-  } catch (err) {
-    console.warn('Service Worker registration:', err);
-    return null;
-  }
-}
-
-/**
- * Request notification permission from browser/OS
- */
-export async function requestNotificationPermission(): Promise<boolean> {
-  if (!isNotificationSupported()) return false;
-
-  try {
-    let permission: NotificationPermission;
-    if (typeof Notification.requestPermission === 'function') {
-      permission = await Notification.requestPermission();
-    } else {
-      permission = await new Promise((resolve) => {
-        (Notification as any).requestPermission(resolve);
-      });
-    }
-
-    if (permission === 'granted') {
-      // Auto-subscribe to Web Push for background delivery when closed
-      await subscribeToWebPush();
-    }
-
-    return permission === 'granted';
-  } catch (err) {
-    console.error('Failed to request notification permission:', err);
-    return false;
-  }
-}
-
-/**
- * Subscribe current browser to Web Push for server-sent background alerts when closed
- */
-export async function subscribeToWebPush(): Promise<PushSubscription | null> {
-  if (!isPushSupported() || Notification.permission !== 'granted') {
-    return null;
-  }
-
-  try {
-    const registration = await registerServiceWorker();
-    if (!registration) return null;
-
-    // Check if server provides VAPID key
-    let vapidPublicKey = '';
+export function playWebAudioChime() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
-      const res = await fetch('/api/push/public-key');
-      if (res.ok) {
-        const data = await res.json();
-        vapidPublicKey = data.publicKey;
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
+
+        gain.gain.setValueAtTime(0.35, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.6);
       }
-    } catch {
-      // server route might not be reached in offline mode
-    }
-
-    if (!vapidPublicKey) {
-      console.warn('No VAPID key available for Web Push');
-      return null;
-    }
-
-    const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
-    let subscription = await registration.pushManager.getSubscription();
-
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: convertedKey,
-      });
-    }
-
-    // Read stored reminders to sync
-    let reminders: Array<{ habitId: string; title: string; time: string }> = [];
-    try {
-      const raw = localStorage.getItem('habitflow_active_reminders');
-      if (raw) reminders = JSON.parse(raw);
-    } catch {
-      // ignore
-    }
-
-    // Register subscription on backend server
-    await fetch('/api/push/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subscription,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        reminders,
-      }),
-    });
-
-    console.log('Successfully subscribed to Web Push for background alerts!');
-    return subscription;
-  } catch (err) {
-    console.warn('Web Push subscription failed:', err);
-    return null;
+    } catch {}
   }
 }
 
-/**
- * Show a notification using Service Worker registration or standard Notification
- */
-export async function showBackgroundNotification(
-  title: string,
-  options: NotificationOptions & { habitId?: string } = {}
-): Promise<void> {
-  if (!isNotificationSupported() || Notification.permission !== 'granted') {
-    return;
-  }
+let inAppListeners: Array<(notif: InAppNotification) => void> = [];
 
-  if (isServiceWorkerSupported()) {
-    await registerServiceWorker();
-  }
-
-  const defaultOptions: any = {
-    icon: '/favicon.ico',
-    badge: '/favicon.ico',
-    vibrate: [200, 100, 200],
-    data: {
-      url: '/',
-      habitId: options.habitId,
-      timestamp: Date.now(),
-    },
-    ...options,
+export function addInAppNotificationListener(
+  listener: (notif: InAppNotification) => void
+): () => void {
+  inAppListeners.push(listener);
+  return () => {
+    inAppListeners = inAppListeners.filter((l) => l !== listener);
   };
-
-  // Try Service Worker postMessage
-  if (isServiceWorkerSupported() && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.controller.postMessage({
-      type: 'TRIGGER_NOTIFICATION',
-      title,
-      options: defaultOptions,
-    });
-  }
-
-  // Try Service Worker showNotification
-  if (isServiceWorkerSupported()) {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      if (reg && reg.showNotification) {
-        await reg.showNotification(title, defaultOptions);
-        return;
-      }
-    } catch (err) {
-      console.warn('Service worker showNotification fallback:', err);
-    }
-  }
-
-  // Standard Notification fallback
-  try {
-    new Notification(title, defaultOptions);
-  } catch (err) {
-    console.error('Standard Notification failed:', err);
-  }
 }
 
-/**
- * Trigger an instant server-side push notification to verify background delivery
- */
-export async function triggerTestPushNotification(): Promise<boolean> {
+export function notifyInAppListeners(notif: InAppNotification) {
+  inAppListeners.forEach((l) => {
+    try {
+      l(notif);
+    } catch (err) {
+      console.warn('Notification listener error:', err);
+    }
+  });
+}
+
+export async function checkNotificationPermission(): Promise<boolean> {
   try {
-    const res = await fetch('/api/push/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    return res.ok;
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission === 'granted';
+    }
+    const { status } = await Notifications.getPermissionsAsync();
+    return status === 'granted';
   } catch {
     return false;
   }
 }
 
-/**
- * Send schedule sync message to Service Worker and Backend server
- */
-export async function syncRemindersToServiceWorker(
-  reminders: Array<{ habitId: string; title: string; time: string }>
-): Promise<void> {
+export async function requestNotificationPermission(): Promise<boolean> {
   try {
-    localStorage.setItem('habitflow_active_reminders', JSON.stringify(reminders));
-  } catch {
-    // ignore
-  }
-
-  // 1. Sync to local Service Worker
-  if (isServiceWorkerSupported()) {
-    try {
-      await registerServiceWorker();
-      const reg = await navigator.serviceWorker.ready;
-      if (reg && reg.active) {
-        reg.active.postMessage({
-          type: 'SYNC_REMINDERS',
-          reminders,
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to sync reminders to service worker:', err);
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+      const perm = await Notification.requestPermission();
+      return perm === 'granted';
     }
-  }
-
-  // 2. Sync to Backend Web Push Server (for closed app alerts)
-  if (isPushSupported() && Notification.permission === 'granted') {
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const subscription = await reg.pushManager.getSubscription();
-      if (subscription) {
-        await fetch('/api/push/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subscription,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            reminders,
-          }),
-        });
-      }
-    } catch (e) {
-      // ignore background sync errors
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync({
+        ios: {
+          allowAlert: true,
+          allowBadge: true,
+          allowSound: true,
+        },
+      });
+      finalStatus = status;
     }
-  }
-}
-
-export function canInstallPwa(): boolean {
-  return Boolean(deferredInstallPrompt);
-}
-
-export async function installPwaApp(): Promise<boolean> {
-  if (!deferredInstallPrompt) return false;
-  try {
-    deferredInstallPrompt.prompt();
-    const choice = await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    return choice.outcome === 'accepted';
+    return finalStatus === 'granted';
   } catch (err) {
-    console.error('Error showing PWA install prompt:', err);
+    console.warn('Failed to request notification permissions:', err);
     return false;
   }
 }
 
-class NotificationService {
-  private permission: NotificationPermission = 'default';
-  private hasNotificationSupport: boolean = false;
-  private notifiedToday: Set<string> = new Set();
-  private audioCtx: AudioContext | null = null;
+export async function scheduleHabitReminder(habit: {
+  id: string;
+  name: string;
+  reminder_time?: string;
+  icon?: string;
+  color?: string;
+}): Promise<string | null> {
+  const time = habit.reminder_time;
+  if (!time) return null;
 
-  constructor() {
-    if (typeof window !== 'undefined') {
-      this.hasNotificationSupport = 'Notification' in window;
-      if (this.hasNotificationSupport) {
-        try {
-          this.permission = Notification.permission;
-        } catch {
-          this.permission = 'default';
+  try {
+    const [hourStr, minStr] = time.split(':');
+    const hour = parseInt(hourStr, 10);
+    const minute = parseInt(minStr, 10);
+
+    if (isNaN(hour) || isNaN(minute)) return null;
+
+    if (Platform.OS !== 'web') {
+      const notifId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `⏰ Time for ${habit.name}!`,
+          body: `Maintain your daily streak. Tap to check off ${habit.name} now!`,
+          data: { habitId: habit.id },
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.HIGH,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour,
+          minute,
+          channelId: 'habit-reminders',
+        },
+      });
+      return notifId;
+    }
+
+    return `web-rem-${habit.id}`;
+  } catch (err) {
+    console.warn('Failed to schedule habit reminder:', err);
+    return null;
+  }
+}
+
+export async function cancelHabitReminder(notificationId: string) {
+  try {
+    if (Platform.OS !== 'web') {
+      await Notifications.cancelScheduledNotificationAsync(notificationId);
+    }
+  } catch (err) {
+    console.warn('Failed to cancel reminder:', err);
+  }
+}
+
+export async function cancelAllReminders() {
+  try {
+    if (Platform.OS !== 'web') {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    }
+  } catch (err) {
+    console.warn('Failed to cancel all reminders:', err);
+  }
+}
+
+export async function triggerTestNotification(
+  title = 'HabitUp Notifications Active! 🔔',
+  body = 'Your daily habit reminders and sound alerts are ready to go.'
+) {
+  const currentTime = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date());
+
+  // 1. Play Audio Chime
+  playWebAudioChime();
+
+  // 2. Web desktop notification fallback
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/3233/3233497.png',
+        });
+      } catch (e) {
+        console.log('Browser notification fallback error:', e);
+      }
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((p) => {
+        if (p === 'granted') {
+          try {
+            new Notification(title, {
+              body,
+              icon: 'https://cdn-icons-png.flaticon.com/512/3233/3233497.png',
+            });
+          } catch {}
         }
-      }
+      });
     }
   }
 
-  public getPermissionStatus(): NotificationPermission {
-    if (typeof window === 'undefined' || !('Notification' in window)) {
-      return 'denied';
-    }
+  // 3. Native Expo OS notification on mobile
+  if (Platform.OS !== 'web') {
     try {
-      return Notification.permission;
-    } catch {
-      return this.permission;
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+        },
+        trigger: null, // deliver immediately
+      });
+    } catch (err) {
+      console.warn('Native notification trigger error:', err);
     }
   }
 
-  public isSupported(): boolean {
-    return isNotificationSupported();
-  }
-
-  public async requestPermission(): Promise<NotificationPermission> {
-    const granted = await requestNotificationPermission();
-    return granted ? 'granted' : 'denied';
-  }
-
-  public playReminderSound(soundEnabled: boolean = true) {
-    if (!soundEnabled || typeof window === 'undefined') return;
-    try {
-      const AudioContextClass =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextClass) return;
-
-      if (!this.audioCtx || this.audioCtx.state === 'suspended') {
-        this.audioCtx = new AudioContextClass();
-      }
-
-      const ctx = this.audioCtx;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
-      }
-
-      const now = ctx.currentTime;
-
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(659.25, now);
-      gain1.gain.setValueAtTime(0.18, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.36);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(880, now + 0.12);
-      gain2.gain.setValueAtTime(0.22, now + 0.12);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.12);
-      osc2.stop(now + 0.56);
-    } catch {
-      // ignore audio error
-    }
-  }
-
-  public triggerVibration(hapticsEnabled: boolean = true) {
-    if (!hapticsEnabled || typeof window === 'undefined' || !('vibrate' in navigator)) return;
-    try {
-      navigator.vibrate([100, 50, 100]);
-    } catch {
-      // ignore
-    }
-  }
-
-  public sendNotification(
-    notif: InAppNotification,
-    options?: { soundEnabled?: boolean; hapticsEnabled?: boolean }
-  ) {
-    this.playReminderSound(options?.soundEnabled ?? true);
-    this.triggerVibration(options?.hapticsEnabled ?? true);
-
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(
-        new CustomEvent('habitup-inapp-notification', {
-          detail: notif,
-        })
-      );
-    }
-
-    showBackgroundNotification(notif.title, {
-      body: notif.body,
-      tag: notif.habitId || notif.id,
-      habitId: notif.habitId,
-    });
-  }
-
-  public markAsNotified(habitId: string, dateKey: string) {
-    this.notifiedToday.add(`${habitId}_${dateKey}`);
-  }
-
-  public hasBeenNotified(habitId: string, dateKey: string): boolean {
-    return this.notifiedToday.has(`${habitId}_${dateKey}`);
-  }
+  // 4. In-App Animated Floating Banner Card (Visible on ALL devices)
+  notifyInAppListeners({
+    id: Date.now().toString(),
+    title,
+    body,
+    icon: 'Sparkles',
+    color: '#7C5CFF',
+    reminderTime: currentTime,
+    timestamp: new Date().toISOString(),
+    type: 'system',
+  });
 }
 
-export const notificationService = new NotificationService();
+export const notificationService = {
+  checkPermission: checkNotificationPermission,
+  requestPermission: requestNotificationPermission,
+  scheduleReminder: scheduleHabitReminder,
+  cancelReminder: cancelHabitReminder,
+  cancelAll: cancelAllReminders,
+  triggerTest: triggerTestNotification,
+  playChime: playWebAudioChime,
+  addListener: addInAppNotificationListener,
+};

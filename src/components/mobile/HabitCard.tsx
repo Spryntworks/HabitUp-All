@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { motion } from 'motion/react';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
 import { Habit } from '../../types';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
-import { Check, Flame, MoreVertical, Calendar, Pause, Archive, Trash2 } from 'lucide-react';
+import { formatTo12Hour } from '../../utils/streakCalculator';
+import { Check, Flame, MoreVertical, Calendar, Pause, Play, Archive, Trash2, X } from 'lucide-react-native';
 
 interface HabitCardProps {
   habit: Habit;
@@ -24,31 +25,17 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
   } = useHabit();
 
   const [showMenu, setShowMenu] = useState(false);
-  const [openUpwards, setOpenUpwards] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
   const isDark = theme === 'dark';
 
   const stats = getHabitStats(habit.id);
   const isCompleted = completions.some(
-    (c) => c.habit_id === habit.id && c.completion_date === selectedDate
+    (c) => c.habit_id === habit.id && (c.completion_date || '').split('T')[0] === selectedDate
   );
 
   const isPaused = Boolean(habit.paused_at);
   const isArchived = Boolean(habit.archived_at);
 
-  const handleToggleMenu = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!showMenu && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - rect.bottom;
-      // If there's less than 190px below the button, flip upwards
-      setOpenUpwards(spaceBelow < 190);
-    }
-    setShowMenu(!showMenu);
-  };
-
-  const handleCheckClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleCheckClick = () => {
     toggleCompletion(habit.id, selectedDate);
   };
 
@@ -65,183 +52,311 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
       }
     }
     if (habit.reminder_enabled && habit.reminder_time) {
-      parts.push(habit.reminder_time);
+      parts.push(formatTo12Hour(habit.reminder_time));
     }
     return parts.join(' • ');
   };
 
   return (
-    <div
-      onClick={() => setSelectedHabitForDetail(habit)}
-      className={`group relative mx-5 landscape:mx-2 my-2 landscape:my-1 p-3 landscape:p-2 sm:p-3.5 rounded-2xl landscape:rounded-xl transition-all duration-200 cursor-pointer border ${
-        showMenu ? 'z-40' : 'z-10'
-      } ${
-        isDark
-          ? 'bg-[#162032] border-slate-800/80 hover:border-slate-700/80 shadow-sm'
-          : 'bg-white border-slate-200/90 hover:border-slate-300 shadow-sm'
-      }`}
+    <TouchableOpacity
+      style={[
+        styles.card,
+        {
+          backgroundColor: isDark ? '#162032' : '#FFFFFF',
+          borderColor: isDark ? '#1E293B' : '#E2E8F0',
+        },
+      ]}
+      onPress={() => setSelectedHabitForDetail(habit)}
+      activeOpacity={0.8}
     >
-      <div className="flex items-center justify-between gap-2.5">
-        {/* Left: Habit Icon & Details */}
-        <div className="flex items-center gap-3 landscape:gap-2.5 min-w-0 flex-1">
-          {/* Circular Glowing Icon matching Image */}
-          <div
-            className="w-11 h-11 landscape:w-8 landscape:h-8 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-transform group-hover:scale-105 relative"
-            style={{
+      <View style={styles.contentRow}>
+        {/* Habit Icon */}
+        <View
+          style={[
+            styles.iconCircle,
+            {
               backgroundColor: habit.color || '#FF5A79',
-              boxShadow: isDark
-                ? `0 0 16px ${habit.color}40, 0 2px 6px rgba(0,0,0,0.3)`
-                : `0 4px 10px ${habit.color}35`,
-            }}
-          >
-            <IconRenderer name={habit.icon} className="w-5 h-5 landscape:w-4 landscape:h-4 text-white" />
-          </div>
+            },
+          ]}
+        >
+          <IconRenderer name={habit.icon} size={20} color="#FFFFFF" />
+        </View>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <h3
-                className={`text-[15px] landscape:text-xs font-bold tracking-tight truncate ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}
-              >
-                {habit.name}
-              </h3>
-
-              {isPaused && (
-                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-500 border border-amber-500/30">
-                  Paused
-                </span>
-              )}
-
-              {isArchived && (
-                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-300">
-                  Archived
-                </span>
-              )}
-            </div>
-
-            {/* Subtitle / Schedule details with Flame Streak */}
-            <div className={`flex items-center flex-wrap gap-x-1 mt-0.5 text-xs landscape:text-[10px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              <span className="truncate max-w-[140px] landscape:max-w-[120px]">{getSubtitle()}</span>
-              
-              {/* Streak badge */}
-              <span className="inline-flex items-center gap-0.5 font-bold text-amber-600 dark:text-amber-500 ml-1">
-                <Flame className="w-3.5 h-3.5 landscape:w-3 landscape:h-3 fill-current text-amber-500" />
-                <span>{stats.currentStreak}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Actions & Circular Checkbox */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {/* Quick options menu trigger */}
-          <div className="relative">
-            <button
-              ref={buttonRef}
-              onClick={handleToggleMenu}
-              className={`p-1.5 rounded-lg transition-colors opacity-60 group-hover:opacity-100 ${
-                isDark ? 'text-slate-400 hover:text-white hover:bg-slate-800' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-              }`}
-              title="Options"
+        {/* Title & Stats */}
+        <View style={styles.textContainer}>
+          <View style={styles.titleRow}>
+            <Text
+              style={[
+                styles.title,
+                { color: isDark ? '#FFFFFF' : '#0F172A' },
+              ]}
+              numberOfLines={1}
             >
-              <MoreVertical className="w-4 h-4" />
-            </button>
-
-            {showMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-30"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowMenu(false);
-                  }}
-                />
-                <div
-                  onClick={(e) => e.stopPropagation()}
-                  className={`absolute right-0 ${
-                    openUpwards ? 'bottom-9 mb-0.5' : 'top-8'
-                  } z-50 w-44 rounded-xl border p-1.5 shadow-2xl space-y-0.5 text-xs animate-scale-in origin-top-right ${
-                    isDark ? 'bg-neutral-900 border-neutral-700 text-neutral-200' : 'bg-white border-neutral-200 text-neutral-800 shadow-2xl'
-                  }`}
-                >
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      setSelectedHabitForDetail(habit);
-                    }}
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium ${
-                      isDark ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'
-                    }`}
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-sky-400" />
-                    View Details & Calendar
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      if (isPaused) resumeHabit(habit.id);
-                      else pauseHabit(habit.id);
-                    }}
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium ${
-                      isDark ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'
-                    }`}
-                  >
-                    <Pause className="w-3.5 h-3.5 text-amber-400" />
-                    {isPaused ? 'Resume Habit' : 'Pause Habit'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      archiveHabit(habit.id);
-                    }}
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-left font-medium ${
-                      isDark ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'
-                    }`}
-                  >
-                    <Archive className="w-3.5 h-3.5 text-purple-400" />
-                    Archive Habit
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowMenu(false);
-                      deleteHabit(habit.id);
-                    }}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-500 text-left font-medium"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
-                </div>
-              </>
+              {habit.name}
+            </Text>
+            {stats.currentStreak > 0 && (
+              <View style={styles.streakBadge}>
+                <Flame size={13} color="#F59E0B" fill="#F59E0B" />
+                <Text style={styles.streakCount}>{stats.currentStreak}</Text>
+              </View>
             )}
-          </div>
+            {isPaused && (
+              <View style={styles.badgePaused}>
+                <Text style={styles.badgePausedText}>PAUSED</Text>
+              </View>
+            )}
+            {isArchived && (
+              <View style={styles.badgeArchived}>
+                <Text style={styles.badgeArchivedText}>ARCHIVED</Text>
+              </View>
+            )}
+          </View>
 
-          {/* Single-Tap Circular Checkbox matching image */}
-          <button
-            onClick={handleCheckClick}
-            aria-label={`Toggle completion for ${habit.name}`}
-            className={`w-7 h-7 landscape:w-6 landscape:h-6 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 ${
-              isCompleted
-                ? 'bg-[#22D3A8] text-white shadow-sm'
-                : isDark
-                ? 'bg-transparent border-2 border-neutral-500 hover:border-neutral-300'
-                : 'bg-transparent border-2 border-neutral-300 hover:border-neutral-400'
-            }`}
+          <View style={styles.subRow}>
+            <Text
+              style={[
+                styles.subtitle,
+                { color: isDark ? '#94A3B8' : '#64748B' },
+              ]}
+              numberOfLines={1}
+            >
+              {getSubtitle()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Options Button & Checkbox */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={styles.moreBtn}
+            onPress={() => setShowMenu(true)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            {isCompleted && (
-              <motion.div
-                initial={{ scale: 0.5, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 25 }}
-              >
-                <Check className="w-4 h-4 landscape:w-3.5 landscape:h-3.5 stroke-[3]" />
-              </motion.div>
-            )}
-          </button>
-        </div>
-      </div>
-    </div>
+            <MoreVertical size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.checkbox,
+              isCompleted
+                ? styles.checkboxChecked
+                : isDark
+                ? styles.checkboxUncheckedDark
+                : styles.checkboxUncheckedLight,
+            ]}
+            onPress={handleCheckClick}
+            activeOpacity={0.7}
+          >
+            {isCompleted && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Action Menu Modal */}
+      <Modal visible={showMenu} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMenu(false)}
+        >
+          <View
+            style={[
+              styles.menuBox,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                setSelectedHabitForDetail(habit);
+              }}
+            >
+              <Calendar size={16} color="#38BDF8" />
+              <Text style={[styles.menuText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                View Details & Stats
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                if (isPaused) resumeHabit(habit.id);
+                else pauseHabit(habit.id);
+              }}
+            >
+              {isPaused ? <Play size={16} color="#34D399" /> : <Pause size={16} color="#FBBF24" />}
+              <Text style={[styles.menuText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                {isPaused ? 'Resume Habit' : 'Pause Habit'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                archiveHabit(habit.id);
+              }}
+            >
+              <Archive size={16} color="#C084FC" />
+              <Text style={[styles.menuText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                Archive Habit
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => {
+                setShowMenu(false);
+                deleteHabit(habit.id);
+              }}
+            >
+              <Trash2 size={16} color="#F43F5E" />
+              <Text style={[styles.menuText, { color: '#F43F5E' }]}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </TouchableOpacity>
   );
 };
 
+const styles = StyleSheet.create({
+  card: {
+    marginHorizontal: 20,
+    marginVertical: 5,
+    padding: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  contentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  textContainer: {
+    flex: 1,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  badgePaused: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgePausedText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#F59E0B',
+  },
+  badgeArchived: {
+    backgroundColor: 'rgba(100, 116, 139, 0.2)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeArchivedText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#94A3B8',
+  },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+    gap: 8,
+  },
+  subtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  streakCount: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#F59E0B',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  moreBtn: {
+    padding: 6,
+  },
+  checkbox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#22D3A8',
+  },
+  checkboxUncheckedDark: {
+    borderWidth: 2,
+    borderColor: '#475569',
+  },
+  checkboxUncheckedLight: {
+    borderWidth: 2,
+    borderColor: '#CBD5E1',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  menuBox: {
+    width: '100%',
+    maxWidth: 280,
+    borderRadius: 20,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 12,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  menuText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});

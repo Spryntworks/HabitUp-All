@@ -1,14 +1,12 @@
 import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { HomeHero } from '../mobile/HomeHero';
+import { DateStrip } from '../mobile/DateStrip';
 import { TodayProgressCard } from '../mobile/TodayProgressCard';
 import { HabitCard } from '../mobile/HabitCard';
 import { isHabitScheduledOnDate } from '../../utils/streakCalculator';
-import {
-  Plus,
-  Sparkles,
-  CheckCircle2,
-} from 'lucide-react';
+import { Plus, Sparkles, CheckCircle2 } from 'lucide-react-native';
 
 export const HomeView: React.FC = () => {
   const {
@@ -29,15 +27,13 @@ export const HomeView: React.FC = () => {
     (h) => !h.archived_at && !h.deleted_at && !h.paused_at
   );
 
-  // Habits scheduled on selected date
   const scheduledHabits = activeHabits.filter((h) =>
     isHabitScheduledOnDate(h, selectedDateTime)
   );
 
-  // Filter based on completion status
   const filteredHabits = scheduledHabits.filter((h) => {
     const isDone = completions.some(
-      (c) => c.habit_id === h.id && c.completion_date === selectedDate
+      (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === selectedDate
     );
     if (filterMode === 'pending') return !isDone;
     if (filterMode === 'completed') return isDone;
@@ -45,81 +41,234 @@ export const HomeView: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col flex-1 pb-4 min-h-0">
-      <div className="landscape:grid landscape:grid-cols-12 landscape:gap-2 md:grid md:grid-cols-12 md:gap-4 flex-1 min-h-0">
-        {/* Left Column in Landscape: Hero + Today's Progress Card */}
-        <div className="landscape:col-span-5 md:col-span-5 flex flex-col justify-start shrink-0">
-          {/* Unified Hero Header & 3D Mountain / Sun Mascot (matching Image 2) */}
-          <HomeHero onMascotClick={() => setIsPlantGardenModalOpen(true)} />
+    <ScrollView
+      style={[styles.container, { backgroundColor: isDark ? '#0B1120' : '#F8FAFC' }]}
+      contentContainerStyle={styles.contentContainer}
+    >
+      <HomeHero onMascotClick={() => setIsPlantGardenModalOpen(true)} />
+      <DateStrip />
+      <TodayProgressCard />
 
-          {/* Today Progress Card with Radial Circle Progress Ring */}
-          <TodayProgressCard />
-        </div>
+      {/* Habits Section Header */}
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+          {selectedDate === new Date().toISOString().split('T')[0]
+            ? "Today's Habits"
+            : `Habits for ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', weekday: 'short' }).format(selectedDateTime)}`}
+        </Text>
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' },
+          ]}
+        >
+          <Text style={[styles.badgeText, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+            {filteredHabits.length} habits
+          </Text>
+        </View>
+      </View>
 
-        {/* Right Column in Landscape: Today's Habits List */}
-        <div className="landscape:col-span-7 md:col-span-7 flex flex-col pt-1 landscape:pt-0 min-h-0">
-          {/* Section Header: Today's Habits */}
-          <div className="px-5 landscape:px-2 pt-2 landscape:pt-1 pb-1 flex items-center justify-between shrink-0">
-            <h2 className={`text-base landscape:text-sm font-bold tracking-tight font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-              Today's Habits
-            </h2>
+      {/* Habit List */}
+      <View style={styles.listContainer}>
+        {filteredHabits.length > 0 ? (
+          filteredHabits.map((habit) => (
+            <HabitCard key={habit.id} habit={habit} />
+          ))
+        ) : activeHabits.length === 0 ? (
+          <View
+            style={[
+              styles.emptyBox,
+              {
+                backgroundColor: isDark ? '#162032' : '#FFFFFF',
+                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              },
+            ]}
+          >
+            <View style={[styles.emptyIconCircle, { backgroundColor: 'rgba(124, 92, 255, 0.15)' }]}>
+              <Sparkles size={24} color="#7C5CFF" />
+            </View>
+            <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              No habits yet!
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Choose from popular templates or create a custom habit to start building your streak.
+            </Text>
 
-            {/* Filter / Counter Badge */}
-            <div className="flex items-center gap-1.5">
-              <span className={`text-xs landscape:text-[11px] font-bold px-2 py-0.5 rounded-full ${isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-200 text-slate-800'}`}>
-                {filteredHabits.length} habits
-              </span>
-            </div>
-          </div>
+            <View style={styles.emptyActions}>
+              <TouchableOpacity
+                style={[styles.templateBtn, { backgroundColor: '#7C5CFF', borderColor: '#7C5CFF' }]}
+                onPress={() => setIsOnboardingModalOpen(true)}
+              >
+                <Sparkles size={16} color="#FFFFFF" />
+                <Text style={[styles.templateBtnText, { color: '#FFFFFF' }]}>
+                  Browse Templates
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.addBtn,
+                  {
+                    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                    borderWidth: 1,
+                  },
+                ]}
+                onPress={() => setIsCreateModalOpen(true)}
+              >
+                <Plus size={16} color={isDark ? '#F8FAFC' : '#0F172A'} />
+                <Text style={[styles.addBtnText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                  Custom Habit
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.emptyBox,
+              {
+                backgroundColor: isDark ? '#162032' : '#FFFFFF',
+                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              },
+            ]}
+          >
+            <View style={styles.emptyIconCircle}>
+              <CheckCircle2 size={24} color="#10B981" />
+            </View>
+            <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              {filterMode === 'completed'
+                ? 'No habits completed yet'
+                : scheduledHabits.length === 0
+                ? 'No habits scheduled for today'
+                : 'All scheduled habits completed!'}
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              {scheduledHabits.length === 0
+                ? 'Enjoy your rest day or add a habit.'
+                : 'Great job maintaining consistency today!'}
+            </Text>
 
-          {/* Habit Cards List */}
-          <div className="flex-1 space-y-0.5 overflow-y-auto min-h-0 landscape:max-h-[calc(100vh-125px)] pr-0.5 pb-16 landscape:pb-4">
-            {filteredHabits.length > 0 ? (
-              filteredHabits.map((habit) => (
-                <HabitCard key={habit.id} habit={habit} />
-              ))
-            ) : (
-              <div className={`mx-5 landscape:mx-2 my-3 landscape:my-1 p-5 landscape:p-3 rounded-3xl landscape:rounded-xl text-center flex flex-col items-center justify-center border ${
-                isDark ? 'bg-[#1F2937]/70 border-neutral-750 text-white' : 'bg-white border-neutral-200 text-neutral-900 shadow-sm'
-              }`}>
-                <div className="w-10 h-10 landscape:w-8 landscape:h-8 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-2">
-                  <CheckCircle2 className="w-5 h-5 landscape:w-4 landscape:h-4" />
-                </div>
-                <h3 className="text-sm landscape:text-xs font-bold font-display">
-                  {filterMode === 'completed'
-                    ? 'No habits completed yet'
-                    : 'All scheduled habits completed!'}
-                </h3>
-                <p className={`text-xs landscape:text-[11px] mt-0.5 max-w-xs ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                  Great job maintaining consistency today!
-                </p>
-
-                <div className="flex items-center gap-2 mt-3 landscape:mt-2">
-                  <button
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="px-3.5 py-1.5 landscape:px-2.5 landscape:py-1 rounded-xl bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-500/20"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Habit
-                  </button>
-                  <button
-                    onClick={() => setIsOnboardingModalOpen(true)}
-                    className={`px-3.5 py-1.5 landscape:px-2.5 landscape:py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-colors ${
-                      isDark
-                        ? 'bg-neutral-800 hover:bg-neutral-750 text-neutral-300 border-neutral-700'
-                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border-neutral-300'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-[#7C5CFF]" />
-                    Templates
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+            <View style={styles.emptyActions}>
+              <TouchableOpacity
+                style={styles.addBtn}
+                onPress={() => setIsCreateModalOpen(true)}
+              >
+                <Plus size={16} color="#FFFFFF" />
+                <Text style={styles.addBtnText}>Add Habit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.templateBtn,
+                  {
+                    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                  },
+                ]}
+                onPress={() => setIsOnboardingModalOpen(true)}
+              >
+                <Sparkles size={16} color="#7C5CFF" />
+                <Text style={[styles.templateBtnText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                  Templates
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+    </ScrollView>
   );
 };
 
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 30,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  listContainer: {
+    paddingBottom: 16,
+  },
+  emptyBox: {
+    marginHorizontal: 20,
+    marginVertical: 12,
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+  },
+  addBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  addBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  templateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  templateBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});

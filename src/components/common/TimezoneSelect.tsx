@@ -1,5 +1,6 @@
-import React from 'react';
-import { Globe, Crosshair } from 'lucide-react';
+﻿import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, Modal, FlatList, StyleSheet } from 'react-native';
+import { Globe, Crosshair, ChevronDown, Check, X } from 'lucide-react-native';
 import { POPULAR_TIMEZONES, getDetectedTimezone } from '../../constants/timezones';
 import { useHabit } from '../../context/HabitContext';
 
@@ -8,7 +9,6 @@ interface TimezoneSelectProps {
   onChange: (timezone: string) => void;
   label?: string;
   showAutoDetect?: boolean;
-  className?: string;
 }
 
 export const TimezoneSelect: React.FC<TimezoneSelectProps> = ({
@@ -16,100 +16,198 @@ export const TimezoneSelect: React.FC<TimezoneSelectProps> = ({
   onChange,
   label = 'Select Timezone',
   showAutoDetect = true,
-  className = '',
 }) => {
   const { theme, showToast } = useHabit();
+  const [modalVisible, setModalVisible] = useState(false);
   const isDark = theme === 'dark';
 
-  const handleAutoDetect = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleAutoDetect = () => {
     const detected = getDetectedTimezone();
     onChange(detected);
     showToast(`Timezone set to ${detected}`, undefined, 'info');
   };
 
-  // Group timezones
-  const groupedTimezones: { [group: string]: typeof POPULAR_TIMEZONES } = {};
-  POPULAR_TIMEZONES.forEach((item) => {
-    if (!groupedTimezones[item.group]) {
-      groupedTimezones[item.group] = [];
-    }
-    groupedTimezones[item.group].push(item);
-  });
-
-  // Ensure current value is in the list or represented
-  const isCustom = !POPULAR_TIMEZONES.some(
-    (t) => t.value === value || (value === 'Asia/Calcutta' && t.value === 'Asia/Kolkata')
-  );
+  const selectedOption = POPULAR_TIMEZONES.find((t) => t.value === value);
 
   return (
-    <div className={`space-y-1.5 ${className}`}>
+    <View style={styles.container}>
       {label && (
-        <div className="flex items-center justify-between">
-          <label
-            className={`text-xs font-semibold flex items-center gap-1.5 ${
-              isDark ? 'text-slate-300' : 'text-slate-700'
-            }`}
-          >
-            <Globe className="w-3.5 h-3.5 text-rose-500" />
-            <span>{label}</span>
-          </label>
+        <View style={styles.labelRow}>
+          <View style={styles.labelGroup}>
+            <Globe size={14} color="#F43F5E" />
+            <Text style={[styles.labelText, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+              {label}
+            </Text>
+          </View>
           {showAutoDetect && (
-            <button
-              type="button"
-              onClick={handleAutoDetect}
-              className="text-[10px] font-bold text-rose-500 hover:text-rose-400 flex items-center gap-1 cursor-pointer transition-colors"
-              title="Detect device timezone automatically"
-            >
-              <Crosshair className="w-3 h-3" />
-              <span>Auto-detect</span>
-            </button>
+            <TouchableOpacity style={styles.autoBtn} onPress={handleAutoDetect}>
+              <Crosshair size={12} color="#F43F5E" />
+              <Text style={styles.autoBtnText}>Auto-detect</Text>
+            </TouchableOpacity>
           )}
-        </div>
+        </View>
       )}
 
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`w-full text-xs font-medium rounded-xl px-3 py-2.5 pr-8 border transition-all appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-rose-500/50 ${
-            isDark
-              ? 'bg-slate-900/90 border-slate-800 text-slate-200 focus:border-rose-500/50'
-              : 'bg-white border-slate-200 text-slate-800 focus:border-rose-500/50 shadow-xs'
-          }`}
+      <TouchableOpacity
+        style={[
+          styles.selector,
+          {
+            backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
+            borderColor: isDark ? '#334155' : '#CBD5E1',
+          },
+        ]}
+        onPress={() => setModalVisible(true)}
+      >
+        <Text
+          style={[
+            styles.selectorText,
+            { color: isDark ? '#F8FAFC' : '#0F172A' },
+          ]}
+          numberOfLines={1}
         >
-          {isCustom && value && (
-            <option value={value} className={isDark ? 'bg-slate-900 text-white' : 'bg-white text-slate-900'}>
-              Current: {value}
-            </option>
-          )}
+          {selectedOption ? `[${selectedOption.offset}] ${selectedOption.label}` : value || 'Select Timezone'}
+        </Text>
+        <ChevronDown size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+      </TouchableOpacity>
 
-          {Object.entries(groupedTimezones).map(([groupName, tzList]) => (
-            <optgroup
-              key={groupName}
-              label={groupName}
-              className={isDark ? 'bg-slate-900 font-bold text-slate-400' : 'bg-slate-50 font-bold text-slate-500'}
-            >
-              {tzList.map((tz) => (
-                <option
-                  key={tz.value}
-                  value={tz.value}
-                  className={isDark ? 'bg-slate-800 text-slate-100 font-normal py-1' : 'bg-white text-slate-800 font-normal py-1'}
-                >
-                  [{tz.offset}] {tz.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+      <Modal visible={modalVisible} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                Select Timezone
+              </Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
+                <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+              </TouchableOpacity>
+            </View>
 
-        {/* Custom Chevron Indicator */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
-          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20">
-            <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-          </svg>
-        </div>
-      </div>
-    </div>
+            <FlatList
+              data={POPULAR_TIMEZONES}
+              keyExtractor={(item) => item.value}
+              renderItem={({ item }) => {
+                const isSelected = item.value === value;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.tzItem,
+                      isSelected && { backgroundColor: isDark ? 'rgba(244, 63, 94, 0.15)' : 'rgba(244, 63, 94, 0.08)' },
+                    ]}
+                    onPress={() => {
+                      onChange(item.value);
+                      setModalVisible(false);
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[
+                          styles.tzLabel,
+                          { color: isDark ? '#F8FAFC' : '#0F172A', fontWeight: isSelected ? '700' : '500' },
+                        ]}
+                      >
+                        {item.label}
+                      </Text>
+                      <Text style={[styles.tzOffset, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                        {item.group} • {item.offset}
+                      </Text>
+                    </View>
+                    {isSelected && <Check size={18} color="#F43F5E" />}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginVertical: 6,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  labelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  labelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  autoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  autoBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F43F5E',
+  },
+  selector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  selectorText: {
+    fontSize: 13,
+    flex: 1,
+    marginRight: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    maxHeight: '75%',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  tzItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4,
+  },
+  tzLabel: {
+    fontSize: 13,
+  },
+  tzOffset: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+});

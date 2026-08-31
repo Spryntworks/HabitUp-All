@@ -1,552 +1,771 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  ActivityIndicator,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
+import { apiService } from '../../services/apiService';
 import {
   Lock,
   Mail,
   User,
   Eye,
   EyeOff,
-  CheckCircle2,
   ArrowRight,
-  Apple,
-  RefreshCw,
-} from 'lucide-react';
+  ArrowLeft,
+  KeyRound,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react-native';
 import { HabitUpLogo } from '../common/HabitUpLogo';
 import { TimezoneSelect } from '../common/TimezoneSelect';
 import { getDetectedTimezone } from '../../constants/timezones';
+import { PasswordStrengthIndicator, getPasswordStrength } from '../common/PasswordStrengthIndicator';
 
 export const AuthView: React.FC = () => {
-  const {
-    login,
-    register,
-    socialLogin,
-    showToast,
-    theme,
-  } = useHabit();
-
+  const { login, register, socialLogin, showToast, theme } = useHabit();
   const isDark = theme === 'dark';
+
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // Form State - initialized empty for real, clean input
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [name, setName] = useState<string>('');
-  const [rememberMe, setRememberMe] = useState<boolean>(true);
-  const [selectedTimezone, setSelectedTimezone] = useState<string>(getDetectedTimezone());
-  const [forgotEmail, setForgotEmail] = useState<string>('');
-  const [forgotSent, setForgotSent] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [selectedTimezone, setSelectedTimezone] = useState(getDetectedTimezone());
 
-  // Password strength checker
-  const calculatePasswordStrength = (pass: string) => {
-    let score = 0;
-    if (pass.length >= 8) score += 1;
-    if (/[A-Z]/.test(pass)) score += 1;
-    if (/[0-9]/.test(pass)) score += 1;
-    if (/[^A-Za-z0-9]/.test(pass)) score += 1;
-    return score; // 0 to 4
-  };
+  // Forgot password states
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotStep, setForgotStep] = useState<'request' | 'confirm'>('request');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const passScore = calculatePasswordStrength(password);
-
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async () => {
+    setAuthError(null);
     if (!email.trim() || !password.trim()) {
-      showToast('Please enter your email and password.', undefined, 'warning');
+      const err = 'Please enter both your email and password.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
       return;
     }
-
     setIsLoading(true);
     try {
       const res = await login(email.trim(), password);
-      setIsLoading(false);
-      if (!res.success) {
-        // toast is already shown by context or show it here
+      if (!res.success && res.error) {
+        setAuthError(res.error);
       }
-    } catch {
+    } catch (e: any) {
+      setAuthError(e?.message || 'Authentication error.');
+    } finally {
       setIsLoading(false);
-      showToast('An unexpected error occurred during sign in.', undefined, 'warning');
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignUp = async () => {
+    setAuthError(null);
     if (!name.trim() || !email.trim() || !password.trim()) {
-      showToast('Please fill out all fields.', undefined, 'warning');
+      const err = 'Please fill out your name, email, and password.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
       return;
     }
-
     if (password.length < 6) {
-      showToast('Password must be at least 6 characters.', undefined, 'warning');
+      const err = 'Password must be at least 6 characters.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
       return;
     }
-
     setIsLoading(true);
     try {
       const res = await register(name.trim(), email.trim(), password, selectedTimezone);
-      setIsLoading(false);
-      if (!res.success) {
-        // Error toast already displayed by register
+      if (!res.success && res.error) {
+        setAuthError(res.error);
       }
-    } catch {
+    } catch (e: any) {
+      setAuthError(e?.message || 'Registration error.');
+    } finally {
       setIsLoading(false);
-      showToast('An unexpected error occurred during registration.', undefined, 'warning');
     }
   };
 
-  const handleForgotSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRequestPasswordReset = async () => {
     if (!forgotEmail.trim()) {
-      showToast('Please enter your registered email.', undefined, 'warning');
+      showToast('Please enter your email address.', undefined, 'warning');
       return;
     }
-
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await apiService.requestPasswordReset(forgotEmail.trim());
+      if (res.success) {
+        setForgotStep('confirm');
+        showToast(res.message || 'Password reset code sent to your email!', undefined, 'success');
+      } else {
+        showToast(res.error || 'Failed to request reset.', undefined, 'warning');
+      }
+    } catch {
+      showToast('Could not reach backend server.', undefined, 'warning');
+    } finally {
       setIsLoading(false);
-      setForgotSent(true);
-      showToast(`Password reset link sent to ${forgotEmail}`, undefined, 'info');
-    }, 600);
+    }
+  };
+
+  const handleConfirmPasswordReset = async () => {
+    if (!resetToken.trim() || !newPassword.trim()) {
+      showToast('Please provide both the reset token and new password.', undefined, 'warning');
+      return;
+    }
+    if (newPassword.length < 6) {
+      showToast('New password must be at least 6 characters.', undefined, 'warning');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await apiService.resetPassword(resetToken.trim(), newPassword.trim(), forgotEmail.trim());
+      if (res.success) {
+        showToast(res.message || 'Password reset successfully! Please sign in.', undefined, 'success');
+        setAuthMode('signin');
+        setForgotStep('request');
+        setPassword('');
+      } else {
+        showToast(res.error || 'Invalid or expired token.', undefined, 'warning');
+      }
+    } catch {
+      showToast('Could not reach backend server.', undefined, 'warning');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className={`flex flex-col flex-1 px-5 pt-3 pb-6 min-h-full justify-between ${isDark ? 'text-white' : 'text-slate-900'}`}>
-      {/* Top Brand & Form Section */}
-      <div className="space-y-4 pt-1">
-        {/* Logo Badge & Brand Name */}
-        <div className="flex items-center">
-          <HabitUpLogo size="md" showSubtitle={true} />
-        </div>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { backgroundColor: isDark ? '#080E1A' : '#F8FAFC' },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Header Branding */}
+        <View style={styles.header}>
+          <HabitUpLogo size="md" />
+          <Text style={[styles.tagline, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+            Build atomic habits. Master consistency.
+          </Text>
+        </View>
 
-        {/* Motivational Greeting & Heading */}
-        <div className="pt-1">
-          <h2 className={`text-2xl font-black tracking-tight font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-            {authMode === 'signin'
-              ? 'Welcome back.'
-              : authMode === 'signup'
-              ? 'Build atomic habits.'
-              : 'Reset password.'}
-          </h2>
-          <p className={`text-xs mt-1 font-medium leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            {authMode === 'signin'
-              ? 'Sign in to track your streaks and sync across devices.'
-              : authMode === 'signup'
-              ? 'Join over 120,000 disciplined achievers today.'
-              : 'Enter your email to receive recovery instructions.'}
-          </p>
-        </div>
-
-        {/* Segmented Auth Mode Switcher */}
+        {/* Tab Switcher (Sign In vs Create Account) */}
         {authMode !== 'forgot' && (
-          <div className={`flex p-1 rounded-2xl border ${isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-100 border-slate-200/80'}`}>
-            <button
-              type="button"
-              onClick={() => setAuthMode('signin')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                authMode === 'signin'
-                  ? isDark
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'bg-white text-slate-900 shadow-sm border border-slate-200/60'
-                  : isDark
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
+          <View style={[styles.tabBar, { backgroundColor: isDark ? '#131C2E' : '#E2E8F0' }]}>
+            <TouchableOpacity
+              style={[
+                styles.tabBtn,
+                authMode === 'signin' && [
+                  styles.tabBtnActive,
+                  { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+                ],
+              ]}
+              onPress={() => {
+                setAuthMode('signin');
+                setAuthError(null);
+              }}
             >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => setAuthMode('signup')}
-              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                authMode === 'signup'
-                  ? isDark
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'bg-white text-slate-900 shadow-sm border border-slate-200/60'
-                  : isDark
-                  ? 'text-slate-400 hover:text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: authMode === 'signin' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                ]}
+              >
+                Sign In
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabBtn,
+                authMode === 'signup' && [
+                  styles.tabBtnActive,
+                  { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+                ],
+              ]}
+              onPress={() => {
+                setAuthMode('signup');
+                setAuthError(null);
+              }}
             >
-              Create Account
-            </button>
-          </div>
+              <Text
+                style={[
+                  styles.tabText,
+                  { color: authMode === 'signup' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                ]}
+              >
+                Create Account
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* SIGN IN FORM */}
+        {/* Error Alert Banner */}
+        {authError && (
+          <View
+            style={[
+              styles.errorBanner,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2',
+                borderColor: isDark ? 'rgba(239, 68, 68, 0.4)' : '#FCA5A5',
+              },
+            ]}
+          >
+            <AlertCircle size={18} color="#EF4444" />
+            <Text style={[styles.errorBannerText, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
+              {authError}
+            </Text>
+          </View>
+        )}
+
+        {/* 1. SIGN IN FORM */}
         {authMode === 'signin' && (
-          <form onSubmit={handleSignIn} className="space-y-3.5 pt-1">
-            {/* Email Field */}
-            <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
                 Email Address
-              </label>
-              <div className="relative">
-                <Mail className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                <input
-                  type="email"
-                  required
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                  },
+                ]}
+              >
+                <Mail size={18} color="#94A3B8" />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  placeholder="user@example.com"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className={`w-full pl-10 pr-3.5 py-3 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                    isDark
-                      ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                      : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 shadow-xs'
-                  }`}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
                 />
-              </div>
-            </div>
+              </View>
+            </View>
 
-            {/* Password Field */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className={`block text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            <View style={styles.inputGroup}>
+              <View style={styles.passwordHeaderRow}>
+                <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
                   Password
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('forgot')}
-                  className="text-[11px] font-bold text-rose-500 hover:text-rose-600 transition-colors"
-                >
-                  Forgot?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                </Text>
+                <TouchableOpacity onPress={() => setAuthMode('forgot')}>
+                  <Text style={styles.forgotLink}>Forgot Password?</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                  },
+                ]}
+              >
+                <Lock size={18} color="#94A3B8" />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
                   placeholder="••••••••"
-                  className={`w-full pl-10 pr-10 py-3 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                    isDark
-                      ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                      : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 shadow-xs'
-                  }`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-700'}`}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Remember Me */}
-            <div className="flex items-center justify-between text-xs pt-0.5">
-              <label className={`flex items-center gap-2 cursor-pointer select-none ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded-md border-slate-300 text-rose-500 focus:ring-rose-500 accent-rose-500"
-                />
-                <span className="text-[11px] font-medium">Remember me</span>
-              </label>
-            </div>
-
-            {/* Primary Submit Button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3.5 rounded-2xl font-bold text-xs text-white bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 shadow-lg shadow-rose-500/25 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
-            >
-              {isLoading ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
-              ) : (
-                <>
-                  <span>Sign In to HabitUp</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
-          </form>
-        )}
-
-        {/* SIGN UP FORM */}
-        {authMode === 'signup' && (
-          <form onSubmit={handleSignUp} className="space-y-3 pt-1">
-            {/* Full Name */}
-            <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                Your Full Name
-              </label>
-              <div className="relative">
-                <User className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Alex Chen"
-                  className={`w-full pl-10 pr-3.5 py-2.5 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                    isDark
-                      ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                      : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 shadow-xs'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className={`w-full pl-10 pr-3.5 py-2.5 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                    isDark
-                      ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                      : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 shadow-xs'
-                  }`}
-                />
-              </div>
-            </div>
-
-            {/* Password with Strength Indicator */}
-            <div>
-              <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                Create Secure Password
-              </label>
-              <div className="relative">
-                <Lock className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  secureTextEntry={!showPassword}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
-                  className={`w-full pl-10 pr-10 py-2.5 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                    isDark
-                      ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-                      : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 shadow-xs'
-                  }`}
+                  onChangeText={setPassword}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className={`absolute right-3 top-1/2 -translate-y-1/2 p-1 ${isDark ? 'text-slate-500 hover:text-slate-300' : 'text-slate-400 hover:text-slate-700'}`}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff size={18} color="#94A3B8" /> : <Eye size={18} color="#94A3B8" />}
+                </TouchableOpacity>
+              </View>
+            </View>
 
-              {/* Password strength bar */}
-              {password.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  <div className={`flex gap-1 h-1.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}>
-                    <div
-                      className={`h-full transition-all ${
-                        passScore >= 1 ? 'bg-rose-500 w-1/4' : 'w-0'
-                      }`}
-                    />
-                    <div
-                      className={`h-full transition-all ${
-                        passScore >= 2 ? 'bg-amber-500 w-1/4' : 'w-0'
-                      }`}
-                    />
-                    <div
-                      className={`h-full transition-all ${
-                        passScore >= 3 ? 'bg-sky-500 w-1/4' : 'w-0'
-                      }`}
-                    />
-                    <div
-                      className={`h-full transition-all ${
-                        passScore >= 4 ? 'bg-emerald-500 w-1/4' : 'w-0'
-                      }`}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Password Strength</span>
-                    <span
-                      className={`font-bold ${
-                        passScore >= 4
-                          ? 'text-emerald-500'
-                          : passScore >= 2
-                          ? 'text-amber-500'
-                          : 'text-rose-500'
-                      }`}
-                    >
-                      {passScore >= 4 ? 'Strong' : passScore >= 2 ? 'Medium' : 'Weak'}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Timezone Selector */}
-            <TimezoneSelect
-              value={selectedTimezone}
-              onChange={setSelectedTimezone}
-              label="Select Timezone"
-            />
-
-            <button
-              type="submit"
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={handleSignIn}
               disabled={isLoading}
-              className="w-full py-3 rounded-2xl font-bold text-xs bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white shadow-lg shadow-rose-500/25 transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
             >
               {isLoading ? (
-                <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <span>Create Account</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <Text style={styles.primaryBtnText}>Sign In</Text>
+                  <ArrowRight size={18} color="#FFFFFF" />
                 </>
               )}
-            </button>
-          </form>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.guestBtn,
+                {
+                  borderColor: isDark ? '#334155' : '#E2E8F0',
+                  backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
+                },
+              ]}
+              onPress={() => socialLogin('google')}
+            >
+              <Text style={[styles.guestBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Continue as Guest / Offline
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* FORGOT PASSWORD FORM */}
+        {/* 2. SIGN UP FORM */}
+        {authMode === 'signup' && (
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                Full Name
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                  },
+                ]}
+              >
+                <User size={18} color="#94A3B8" />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  placeholder="Alex Rivera"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  value={name}
+                  onChangeText={setName}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                Email Address
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                  },
+                ]}
+              >
+                <Mail size={18} color="#94A3B8" />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  placeholder="alex@example.com"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155', letterSpacing: 0.5, fontWeight: '700' }]}>
+                CREATE SECURE PASSWORD
+              </Text>
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: password
+                      ? getPasswordStrength(password).color
+                      : isDark
+                      ? '#1E293B'
+                      : '#CBD5E1',
+                  },
+                ]}
+              >
+                <Lock size={18} color="#94A3B8" />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  placeholder="••••••••"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                  {showPassword ? <EyeOff size={18} color="#94A3B8" /> : <Eye size={18} color="#94A3B8" />}
+                </TouchableOpacity>
+              </View>
+              <PasswordStrengthIndicator password={password} isDark={isDark} />
+            </View>
+
+            <TimezoneSelect value={selectedTimezone} onChange={setSelectedTimezone} />
+
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={handleSignUp}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.primaryBtnText}>Create Account</Text>
+                  <ArrowRight size={18} color="#FFFFFF" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.guestBtn,
+                {
+                  borderColor: isDark ? '#334155' : '#E2E8F0',
+                  backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
+                },
+              ]}
+              onPress={() => socialLogin('google')}
+            >
+              <Text style={[styles.guestBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Continue as Guest / Offline
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* 3. FORGOT PASSWORD FLOW */}
         {authMode === 'forgot' && (
-          <div className="space-y-4 pt-1">
-            {forgotSent ? (
-              <div className={`p-5 rounded-2xl border text-center space-y-2.5 ${isDark ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-emerald-50 border-emerald-200'}`}>
-                <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                <h3 className={`text-sm font-extrabold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  Reset Link Dispatched
-                </h3>
-                <p className={`text-xs ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
-                  Instructions have been sent to <strong>{forgotEmail}</strong>.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForgotSent(false);
-                    setAuthMode('signin');
-                  }}
-                  className={`mt-2 px-4 py-2 rounded-xl text-xs font-bold transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-white' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}
-                >
-                  Back to Sign In
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleForgotSubmit} className="space-y-3.5">
-                <div>
-                  <label className={`block text-[11px] font-bold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                    Your Registered Email
-                  </label>
-                  <div className="relative">
-                    <Mail className={`w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
-                    <input
-                      type="email"
-                      required
+          <View style={styles.formContainer}>
+            <TouchableOpacity
+              style={styles.backToSignBtn}
+              onPress={() => {
+                setAuthMode('signin');
+                setForgotStep('request');
+              }}
+            >
+              <ArrowLeft size={16} color="#818CF8" />
+              <Text style={styles.backToSignText}>Back to Sign In</Text>
+            </TouchableOpacity>
+
+            <View style={styles.forgotHeader}>
+              <Text style={[styles.forgotTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                {forgotStep === 'request' ? 'Reset Password' : 'Set New Password'}
+              </Text>
+              <Text style={[styles.forgotSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                {forgotStep === 'request'
+                  ? 'Enter the email associated with your account and we will send a password reset code.'
+                  : 'Enter the reset token sent to your email address and your new password.'}
+              </Text>
+            </View>
+
+            {forgotStep === 'request' ? (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Email Address
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                        borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                      },
+                    ]}
+                  >
+                    <Mail size={18} color="#94A3B8" />
+                    <TextInput
+                      style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                      placeholder="user@example.com"
+                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                       value={forgotEmail}
-                      onChange={(e) => setForgotEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      className={`w-full pl-10 pr-3.5 py-3 rounded-2xl text-xs font-medium focus:outline-none transition-all ${
-                        isDark
-                          ? 'bg-slate-900/90 border border-slate-800 text-white placeholder:text-slate-500 focus:border-rose-500'
-                          : 'bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-rose-500 shadow-xs'
-                      }`}
+                      onChangeText={setForgotEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
                     />
-                  </div>
-                </div>
+                  </View>
+                </View>
 
-                <div className="flex gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode('signin')}
-                    className={`flex-1 py-3 rounded-2xl border font-bold text-xs transition-colors ${
-                      isDark
-                        ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
-                        : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200'
-                    }`}
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={handleRequestPasswordReset}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.primaryBtnText}>Send Reset Code</Text>
+                      <ArrowRight size={18} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.haveTokenBtn}
+                  onPress={() => setForgotStep('confirm')}
+                >
+                  <Text style={styles.haveTokenText}>Already have a reset token? Enter it here</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Reset Token / Code
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                        borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                      },
+                    ]}
                   >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="flex-1 py-3 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white font-bold text-xs shadow-lg shadow-rose-500/25 flex items-center justify-center gap-1.5 cursor-pointer"
+                    <KeyRound size={18} color="#94A3B8" />
+                    <TextInput
+                      style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                      placeholder="e.g. a3f9..."
+                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      value={resetToken}
+                      onChangeText={setResetToken}
+                      autoCapitalize="none"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155', letterSpacing: 0.5, fontWeight: '700' }]}>
+                    CREATE SECURE PASSWORD
+                  </Text>
+                  <View
+                    style={[
+                      styles.inputWrapper,
+                      {
+                        backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                        borderColor: newPassword
+                          ? getPasswordStrength(newPassword).color
+                          : isDark
+                          ? '#1E293B'
+                          : '#CBD5E1',
+                      },
+                    ]}
                   >
-                    {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Send Reset Link'}
-                  </button>
-                </div>
-              </form>
+                    <Lock size={18} color="#94A3B8" />
+                    <TextInput
+                      style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                      placeholder="••••••••"
+                      placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                      secureTextEntry={!showPassword}
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                    />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <EyeOff size={18} color="#94A3B8" /> : <Eye size={18} color="#94A3B8" />}
+                    </TouchableOpacity>
+                  </View>
+                  <PasswordStrengthIndicator password={newPassword} isDark={isDark} />
+                </View>
+
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={handleConfirmPasswordReset}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} color="#FFFFFF" />
+                      <Text style={styles.primaryBtnText}>Confirm Password Reset</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
             )}
-          </div>
+          </View>
         )}
-
-        {/* Social SSO Buttons */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center gap-3">
-            <div className={`h-px flex-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-            <span className={`text-[10px] uppercase font-bold tracking-wider ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Or continue with
-            </span>
-            <div className={`h-px flex-1 ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2.5">
-            {/* Apple Sign In Button */}
-            <button
-              type="button"
-              onClick={() => socialLogin('apple')}
-              className={`py-2.5 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-transform active:scale-[0.98] ${
-                isDark
-                  ? 'bg-white hover:bg-slate-100 text-black shadow-sm'
-                  : 'bg-slate-900 hover:bg-slate-800 text-white shadow-sm'
-              }`}
-            >
-              <Apple className={`w-4 h-4 ${isDark ? 'fill-black' : 'fill-white'}`} />
-              <span>Apple</span>
-            </button>
-
-            {/* Google Sign In Button */}
-            <button
-              type="button"
-              onClick={() => socialLogin('google')}
-              className={`py-2.5 px-3 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 border transition-all active:scale-[0.98] ${
-                isDark
-                  ? 'bg-slate-900 hover:bg-slate-850 border-slate-800 text-white'
-                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800 shadow-xs'
-              }`}
-            >
-              <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.15z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.35 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.17 0 9.96 0 12s.45 3.83 1.25 5.42l4.03-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                />
-              </svg>
-              <span>Google</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Terms & Privacy Footer Note */}
-      <div className={`pt-4 border-t text-center mt-4 ${isDark ? 'border-slate-800/80' : 'border-slate-200/80'}`}>
-        <p className={`text-[10px] leading-relaxed ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-          By continuing, you agree to HabitUp's Terms of Service &amp; Privacy Policy.
-        </p>
-      </div>
-    </div>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 };
 
+const styles = StyleSheet.create({
+  scrollContainer: {
+    padding: 24,
+    paddingTop: 40,
+    minHeight: '100%',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  tagline: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 20,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderRadius: 12,
+  },
+  tabBtnActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  formContainer: {
+    gap: 16,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  passwordHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  forgotLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#818CF8',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    height: 50,
+    gap: 10,
+  },
+  input: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    ...(Platform.OS === 'web'
+      ? {
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+          outlineStyle: 'none',
+        }
+      : {}),
+  } as any,
+  primaryBtn: {
+    backgroundColor: '#7C5CFF',
+    height: 52,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  primaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  backToSignBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  backToSignText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#818CF8',
+  },
+  forgotHeader: {
+    marginBottom: 8,
+  },
+  forgotTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+  forgotSub: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  haveTokenBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  haveTokenText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#818CF8',
+  },
+  guestBtn: {
+    paddingVertical: 13,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 6,
+  },
+  guestBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+});

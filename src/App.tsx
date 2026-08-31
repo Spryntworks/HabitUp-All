@@ -1,10 +1,9 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React from 'react';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { HabitProvider, useHabit } from './context/HabitContext';
+import { requestNotificationPermission } from './services/notificationService';
+import { HabitUpLogo } from './components/common/HabitUpLogo';
 import { MobileShell } from './components/mobile/MobileShell';
 import { AuthView } from './components/views/AuthView';
 import { HomeView } from './components/views/HomeView';
@@ -23,25 +22,38 @@ import { NotificationCenterModal } from './components/modals/NotificationCenterM
 import { NotificationBanner } from './components/common/NotificationBanner';
 
 const AppContent: React.FC = () => {
-  const { activeTab, isAuthenticated } = useHabit();
+  const { activeTab, isAuthenticated, isAuthLoading } = useHabit();
+
+  useEffect(() => {
+    // Request system notification permission immediately upon app startup
+    requestNotificationPermission().catch(() => {});
+  }, []);
+
+  // Prevent flicker / visual glitch while restoring stored session
+  if (isAuthLoading) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0B1120', alignItems: 'center', justifyContent: 'center' }}>
+        <HabitUpLogo size="md" themeMode="dark" />
+        <ActivityIndicator color="#7C5CFF" style={{ marginTop: 24 }} size="small" />
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthView />;
+  }
 
   return (
     <MobileShell>
       {/* Real-time In-App Floating Notification Banner */}
       <NotificationBanner />
 
-      {!isAuthenticated ? (
-        <AuthView />
-      ) : (
-        <>
-          {activeTab === 'home' && <HomeView />}
-          {activeTab === 'habits' && <HabitsView />}
-          {activeTab === 'calendar' && <CalendarView />}
-          {activeTab === 'stats' && <StatsView />}
-          {activeTab === 'streaks' && <StreaksView />}
-          {activeTab === 'settings' && <SettingsView />}
-        </>
-      )}
+      {activeTab === 'home' && <HomeView />}
+      {activeTab === 'habits' && <HabitsView />}
+      {activeTab === 'calendar' && <CalendarView />}
+      {activeTab === 'stats' && <StatsView />}
+      {activeTab === 'streaks' && <StreaksView />}
+      {activeTab === 'settings' && <SettingsView />}
 
       {/* Global Modals & Biometrics */}
       <BiometricScanModal />
@@ -57,9 +69,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <HabitProvider>
-      <AppContent />
-    </HabitProvider>
+    <SafeAreaProvider>
+      <HabitProvider>
+        <AppContent />
+      </HabitProvider>
+    </SafeAreaProvider>
   );
 }
-

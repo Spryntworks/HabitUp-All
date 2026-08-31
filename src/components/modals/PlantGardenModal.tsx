@@ -1,374 +1,822 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { PLANT_STAGES } from '../../utils/streakCalculator';
-import { PlantVisualizer } from '../mobile/PlantVisualizer';
+import {
+  STREAK_REALMS,
+  getActiveRealmProgress,
+  StreakRealmId,
+} from '../../utils/realmStreakData';
+import { StreakRealmIllustration } from '../mobile/StreakRealmIllustration';
 import {
   X,
-  Sprout,
-  Droplets,
-  Sparkles,
-  Trophy,
-  Flame,
-  CheckCircle2,
+  Check,
   Lock,
-  ArrowRight,
   Info,
-  Calendar,
-} from 'lucide-react';
+  ArrowRight,
+} from 'lucide-react-native';
 
 export const PlantGardenModal: React.FC = () => {
   const {
     isPlantGardenModalOpen,
     setIsPlantGardenModalOpen,
     overallStats,
-    habits,
-    completions,
-    selectedDate,
-    showToast,
     theme,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const plant = overallStats.plantStreak;
-  const [selectedStagePreview, setSelectedStagePreview] = useState<number | null>(null);
 
-  if (!isPlantGardenModalOpen || !plant) return null;
+  const currentStreak = plant?.currentStreak || 0;
+  const bestStreak = plant?.bestStreak || overallStats.bestAllTimeStreak || currentStreak || 0;
+  const isWateredToday = plant?.isWateredToday || false;
 
-  const {
-    currentStreak,
-    bestStreak,
-    isWateredToday,
-    waterDropsToday,
-    totalWaterDropsNeeded,
-    hydrationPercent,
-    stage,
-    nextStage,
-    daysToNextStage,
-  } = plant;
+  // Calculate user's naturally active realm
+  const naturalProgress = getActiveRealmProgress(currentStreak);
 
-  const activePreviewStage =
-    selectedStagePreview !== null
-      ? PLANT_STAGES.find((s) => s.level === selectedStagePreview) || stage
-      : stage;
+  // Selected Realm state for previewing all 6 worlds
+  const [selectedRealmId, setSelectedRealmId] = useState<StreakRealmId>(
+    naturalProgress.activeRealm.id
+  );
+  // Selected Stage level for previewing
+  const [selectedStageLevel, setSelectedStageLevel] = useState<number | null>(null);
+
+  if (!isPlantGardenModalOpen) return null;
+
+  const activeRealm =
+    STREAK_REALMS.find((r) => r.id === selectedRealmId) ||
+    naturalProgress.activeRealm;
+
+  const activeStage =
+    selectedStageLevel !== null
+      ? activeRealm.stages.find((s) => s.level === selectedStageLevel) || activeRealm.stages[0]
+      : selectedRealmId === naturalProgress.activeRealm.id
+      ? naturalProgress.stage
+      : activeRealm.stages[0];
+
+  const isCurrentActiveRealm = activeRealm.id === naturalProgress.activeRealm.id;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-md animate-fade-in">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 15 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        transition={{ duration: 0.25 }}
-        className={`w-full max-w-lg max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border transition-colors ${
-          isDark
-            ? 'bg-neutral-900 border-neutral-800 text-neutral-100'
-            : 'bg-white border-slate-200 text-slate-900'
-        }`}
-      >
-        {/* Header */}
-        <div
-          className={`p-4 sm:p-5 border-b flex items-center justify-between sticky top-0 z-20 backdrop-blur-sm transition-colors ${
-            isDark
-              ? 'border-neutral-800 bg-neutral-900/95 text-white'
-              : 'border-slate-100 bg-white/95 text-slate-900 shadow-xs'
-          }`}
+    <Modal visible={isPlantGardenModalOpen} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: isDark ? '#0D1117' : '#FFFFFF' },
+          ]}
         >
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
-                isDark
-                  ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-600'
-              }`}
-            >
-              <Sprout className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className={`text-base font-extrabold tracking-tight font-display ${isDark ? 'text-white' : 'text-slate-950'}`}>
-                Living Habit Garden
-              </h2>
-              <p className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                Your discipline waters and grows your plant
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsPlantGardenModalOpen(false)}
-            className={`p-2 rounded-xl transition-colors ${
-              isDark
-                ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Modal Scrollable Content */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
-          {/* Main Plant Stage Spotlight */}
-          <div
-            className={`p-6 rounded-3xl border relative overflow-hidden text-center flex flex-col items-center justify-center transition-colors ${
-              isDark ? 'border-neutral-800' : 'border-emerald-100 shadow-inner'
-            }`}
-            style={{
-              background: isDark
-                ? `radial-gradient(circle at 50% 30%, ${activePreviewStage.accentColor}25, #171717 75%)`
-                : `radial-gradient(circle at 50% 30%, #ECFDF5 0%, #FFFFFF 85%)`,
-            }}
-          >
-            {/* Stage Badge */}
-            <div
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold mb-3 shadow-xs border ${
-                isDark
-                  ? 'bg-neutral-950/80 border-neutral-700/60 text-neutral-200'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-              }`}
-            >
-              <span>{activePreviewStage.badge}</span>
-              {currentStreak >= activePreviewStage.minStreak ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              ) : (
-                <Lock className={`w-3 h-3 ${isDark ? 'text-neutral-400' : 'text-slate-500'}`} />
-              )}
-            </div>
-
-            {/* Visualizer Large */}
-            <PlantVisualizer
-              stage={activePreviewStage}
-              streak={currentStreak}
-              hydrationPercent={hydrationPercent}
-              isWateredToday={isWateredToday}
-              size="lg"
-            />
-
-            {/* Plant Stage Title & Description */}
-            <h3 className={`text-xl font-black mt-3 font-display ${isDark ? 'text-white' : 'text-slate-950'}`}>
-              {activePreviewStage.name}
-            </h3>
-            <p className={`text-xs max-w-sm mt-1 leading-relaxed ${isDark ? 'text-neutral-300' : 'text-slate-600 font-medium'}`}>
-              {activePreviewStage.description}
-            </p>
-
-            {/* Current Streak Stat Pills */}
-            <div className="grid grid-cols-2 gap-2.5 w-full mt-4 max-w-xs">
-              <div
-                className={`rounded-2xl p-2.5 flex flex-col items-center border ${
-                  isDark ? 'bg-neutral-950/70 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'
-                }`}
+          {/* 1. Modal Header */}
+          <View style={[styles.header, { borderBottomColor: isDark ? '#1C2128' : '#F1F5F9' }]}>
+            <View style={styles.headerLeft}>
+              <View
+                style={[
+                  styles.sproutBadgeCircle,
+                  {
+                    backgroundColor: `${activeRealm.primaryColor}18`,
+                    borderColor: `${activeRealm.primaryColor}40`,
+                  },
+                ]}
               >
-                <span className={`text-[10px] uppercase font-bold ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                  Current Streak
-                </span>
-                <span className={`text-lg font-extrabold mt-0.5 flex items-center gap-1 font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
-                  {currentStreak} {currentStreak === 1 ? 'day' : 'days'}
-                </span>
-              </div>
-              <div
-                className={`rounded-2xl p-2.5 flex flex-col items-center border ${
-                  isDark ? 'bg-neutral-950/70 border-neutral-800' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
-                <span className={`text-[10px] uppercase font-bold ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                  Best Streak
-                </span>
-                <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1 font-display">
-                  <Trophy className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  {bestStreak} {bestStreak === 1 ? 'day' : 'days'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Today's Hydration Status Card */}
-          <div
-            className={`p-4 rounded-2xl border space-y-3 ${
-              isDark ? 'bg-neutral-850 border-neutral-800' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`p-1.5 rounded-lg ${
-                    isDark ? 'bg-sky-500/20 text-sky-400' : 'bg-sky-100 text-sky-600'
-                  }`}
+                <Text style={{ fontSize: 18 }}>{activeRealm.emoji}</Text>
+              </View>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text
+                  style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  numberOfLines={1}
                 >
-                  <Droplets className="w-4 h-4 fill-current" />
-                </div>
-                <div>
-                  <h4 className={`text-xs font-extrabold uppercase tracking-wide ${isDark ? 'text-neutral-200' : 'text-slate-900'}`}>
-                    Today's Hydration (Water Drops)
-                  </h4>
-                  <p className={`text-[11px] font-semibold ${isDark ? 'text-neutral-400' : 'text-slate-600'}`}>
-                    {waterDropsToday} of {totalWaterDropsNeeded} habits finished today
-                  </p>
-                </div>
-              </div>
+                  {activeRealm.name}
+                </Text>
+                <Text
+                  style={[styles.headerSub, { color: isDark ? '#8B949E' : '#64748B' }]}
+                  numberOfLines={1}
+                >
+                  {activeRealm.tagline}
+                </Text>
+              </View>
+            </View>
 
-              <span
-                className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
-                  isWateredToday
-                    ? isDark
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                      : 'bg-emerald-100 text-emerald-800 border-emerald-200'
-                    : isDark
-                    ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
-                    : 'bg-sky-100 text-sky-800 border-sky-200'
-                }`}
-              >
-                {hydrationPercent}% Hydrated
-              </span>
-            </div>
-
-            {/* Hydration Bar */}
-            <div
-              className={`h-3 w-full rounded-full overflow-hidden p-0.5 border ${
-                isDark ? 'bg-neutral-900 border-neutral-750' : 'bg-slate-200 border-slate-300'
-              }`}
+            <TouchableOpacity
+              onPress={() => setIsPlantGardenModalOpen(false)}
+              style={[
+                styles.closeBtn,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+              ]}
+              activeOpacity={0.7}
             >
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${hydrationPercent}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-                className={`h-full rounded-full ${
-                  isWateredToday
-                    ? 'bg-gradient-to-r from-sky-400 via-teal-400 to-emerald-500 shadow-[0_0_12px_rgba(52,211,153,0.5)]'
-                    : 'bg-gradient-to-r from-sky-500 to-blue-500'
-                }`}
-              />
-            </div>
+              <X size={18} color={isDark ? '#FFFFFF' : '#0F172A'} strokeWidth={2.5} />
+            </TouchableOpacity>
+          </View>
 
-            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-neutral-400' : 'text-slate-600'}`}>
-              {isWateredToday ? (
-                <span className={`font-semibold flex items-center gap-1 ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Your plant has been fully watered for today! Your overall streak increases.
-                </span>
-              ) : (
-                <span>
-                  Each habit you check off sends a fresh droplet 💧 to nourish the plant. Complete 100% of today's work to keep the streak growing!
-                </span>
-              )}
-            </p>
-          </div>
-
-          {/* Plant Growth Stages Roadmap */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between px-1">
-              <h4 className={`text-xs font-extrabold uppercase tracking-wide font-display ${isDark ? 'text-neutral-300' : 'text-slate-900'}`}>
-                Evolution Stages Roadmap
-              </h4>
-              <span className={`text-[10px] font-semibold ${isDark ? 'text-neutral-500' : 'text-slate-500'}`}>
-                Tap to preview
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {PLANT_STAGES.map((s) => {
-                const isUnlocked = currentStreak >= s.minStreak;
-                const isCurrent = stage.level === s.level;
-                const isSelected = activePreviewStage.level === s.level;
+          {/* 2. Top Realm Horizontal Switcher (6 Months Realms) */}
+          <View
+            style={[
+              styles.realmSwitcherContainer,
+              {
+                backgroundColor: isDark ? '#0A0E17' : '#F8FAFC',
+                borderBottomColor: isDark ? '#1E2633' : '#E2E8F0',
+              },
+            ]}
+          >
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.realmSwitcherContent}
+            >
+              {STREAK_REALMS.map((r) => {
+                const isSelected = r.id === activeRealm.id;
+                const isUnlocked = currentStreak >= r.requiredStreak;
 
                 return (
-                  <button
-                    key={s.level}
-                    onClick={() => setSelectedStagePreview(s.level)}
-                    className={`p-3 rounded-2xl border text-left flex items-center justify-between transition-all ${
-                      isSelected
-                        ? isDark
-                          ? 'border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/50'
-                          : 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500/50 shadow-xs'
-                        : isUnlocked
-                        ? isDark
-                          ? 'border-neutral-800 bg-neutral-850 hover:bg-neutral-800'
-                          : 'border-slate-200 bg-white hover:bg-slate-50 shadow-xs'
-                        : isDark
-                        ? 'border-neutral-800/60 bg-neutral-900/60 opacity-60 hover:opacity-80'
-                        : 'border-slate-100 bg-slate-50 opacity-60 hover:opacity-80'
-                    }`}
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[
+                      styles.realmPill,
+                      {
+                        backgroundColor: isDark ? '#121824' : '#FFFFFF',
+                        borderColor: isSelected
+                          ? r.primaryColor
+                          : isDark
+                          ? '#1E2633'
+                          : '#E2E8F0',
+                      },
+                      isSelected && {
+                        backgroundColor: isDark
+                          ? `${r.primaryColor}18`
+                          : `${r.primaryColor}14`,
+                        borderWidth: 1.5,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedRealmId(r.id);
+                      setSelectedStageLevel(null);
+                    }}
+                    activeOpacity={0.8}
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center border p-1 overflow-hidden"
-                        style={{
-                          borderColor: `${s.accentColor}40`,
-                          backgroundColor: `${s.accentColor}15`,
-                        }}
+                    <Text style={styles.realmPillEmoji}>{r.emoji}</Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.realmPillTitle,
+                          {
+                            color: isSelected
+                              ? r.primaryColor
+                              : isDark
+                              ? '#E2E8F0'
+                              : '#1E293B',
+                          },
+                        ]}
                       >
-                        <PlantVisualizer
-                          stage={s}
-                          streak={s.minStreak}
-                          hydrationPercent={isUnlocked ? 100 : 0}
-                          isWateredToday={isUnlocked}
-                          size="sm"
-                          interactive={false}
-                        />
-                      </div>
+                        {r.name}
+                      </Text>
+                      <Text style={[styles.realmPillSub, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                        Month {r.monthNumber} ({r.requiredStreak}d+)
+                      </Text>
+                    </View>
 
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                            {s.name}
-                          </span>
-                          {isCurrent && (
-                            <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500 text-black">
-                              Current
-                            </span>
-                          )}
-                        </div>
-                        <span className={`text-[10px] font-semibold ${isDark ? 'text-neutral-400' : 'text-slate-500'}`}>
-                          Requires {s.minStreak}d streak
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      {isUnlocked ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                      ) : (
-                        <Lock className={`w-3.5 h-3.5 ${isDark ? 'text-neutral-500' : 'text-slate-400'}`} />
-                      )}
-                    </div>
-                  </button>
+                    {!isUnlocked && (
+                      <Lock size={12} color={isDark ? '#64748B' : '#94A3B8'} style={{ marginLeft: 4 }} />
+                    )}
+                  </TouchableOpacity>
                 );
               })}
-            </div>
-          </div>
+            </ScrollView>
+          </View>
 
-          {/* How It Works Explainer */}
-          <div
-            className={`p-3.5 rounded-2xl border text-[11px] space-y-1.5 ${
-              isDark ? 'bg-neutral-950/80 border-neutral-800 text-neutral-400' : 'bg-slate-50 border-slate-200 text-slate-700'
-            }`}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.bodyScroll}
+            showsVerticalScrollIndicator={false}
           >
-            <div className={`flex items-center gap-1.5 font-bold ${isDark ? 'text-neutral-300' : 'text-slate-900'}`}>
-              <Info className="w-3.5 h-3.5 text-sky-500" />
-              <span>How the Plant Streak Works</span>
-            </div>
-            <ul className={`space-y-1 pl-4 list-disc text-[11px] ${isDark ? 'text-neutral-400' : 'text-slate-600'}`}>
-              <li>Every habit you check off provides fresh water droplets.</li>
-              <li>Completing 100% of all scheduled habits waters the plant for that day.</li>
-              <li>Consecutive watered days evolve the plant from a tiny Sprout 🌱 all the way to a Golden Orchard 🍎.</li>
-            </ul>
-          </div>
-        </div>
+            {/* 3. Main Hero Visualizer Card */}
+            <View
+              style={[
+                styles.heroCard,
+                {
+                  backgroundColor: isDark
+                    ? activeRealm.bgColor
+                    : activeRealm.lightBgColor || '#F0FDF4',
+                  borderColor: isDark
+                    ? `${activeRealm.primaryColor}30`
+                    : `${activeRealm.primaryColor}45`,
+                },
+              ]}
+            >
+              {/* Clean Single Thin Circle Portal Outline */}
+              <View
+                style={[
+                  styles.glowRingOuter,
+                  {
+                    borderColor: isDark
+                      ? `${activeRealm.primaryColor}22`
+                      : `${activeRealm.primaryColor}35`,
+                  },
+                ]}
+              />
 
-        {/* Footer */}
-        <div
-          className={`p-4 border-t flex justify-end transition-colors ${
-            isDark ? 'bg-neutral-900 border-neutral-800' : 'bg-slate-50 border-slate-100'
-          }`}
-        >
-          <button
-            onClick={() => setIsPlantGardenModalOpen(false)}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-bold text-xs transition-colors shadow-md flex items-center justify-center gap-1.5"
-          >
-            <span>Back to Habits</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      </motion.div>
-    </div>
+              {/* Stage Pill */}
+              <View
+                style={[
+                  styles.stagePill,
+                  {
+                    backgroundColor: isDark ? '#0F261C' : '#DCFCE7',
+                    borderColor: isDark ? '#194935' : '#86EFAC',
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.stagePillText,
+                    { color: isDark ? '#FFFFFF' : '#065F46' },
+                  ]}
+                >
+                  Stage {activeStage.level} • {activeStage.name}
+                </Text>
+                <View
+                  style={[
+                    styles.stagePillDot,
+                    { backgroundColor: activeRealm.primaryColor },
+                  ]}
+                />
+              </View>
+
+              {/* Animated Vector Mascot */}
+              <View style={styles.plantContainer}>
+                <StreakRealmIllustration
+                  realmId={activeRealm.id}
+                  level={activeStage.level}
+                  isWateredToday={isWateredToday}
+                  size="lg"
+                  isAnimated={true}
+                />
+              </View>
+
+              {/* Plant / Mascot Title & Lore Description */}
+              <Text
+                style={[
+                  styles.plantHeroTitle,
+                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                ]}
+              >
+                {activeStage.name}
+              </Text>
+              <Text
+                style={[
+                  styles.plantHeroDesc,
+                  { color: isDark ? '#94A3B8' : '#475569' },
+                ]}
+              >
+                {activeStage.description}
+              </Text>
+
+              {/* Current & Best Streak Cards */}
+              <View style={styles.streakStatsRow}>
+                <View
+                  style={[
+                    styles.streakStatBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.45)' : '#FFFFFF',
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.streakStatLabel, { color: isDark ? '#8B949E' : '#64748B' }]}>
+                    CURRENT STREAK
+                  </Text>
+                  <View style={styles.streakStatValRow}>
+                    <Text style={styles.streakEmoji}>🔥</Text>
+                    <Text
+                      style={[
+                        styles.streakNumWhite,
+                        { color: isDark ? '#FFFFFF' : '#0F172A' },
+                      ]}
+                    >
+                      {currentStreak} days
+                    </Text>
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.streakStatBox,
+                    {
+                      backgroundColor: isDark ? 'rgba(0, 0, 0, 0.45)' : '#FFFFFF',
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.streakStatLabel, { color: isDark ? '#8B949E' : '#64748B' }]}>
+                    BEST STREAK
+                  </Text>
+                  <View style={styles.streakStatValRow}>
+                    <Text style={styles.streakEmoji}>🏆</Text>
+                    <Text
+                      style={[
+                        styles.streakNumGreen,
+                        { color: activeRealm.primaryColor },
+                      ]}
+                    >
+                      {bestStreak} days
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* 4. EVOLUTION STAGES ROADMAP (Stages 1-6) */}
+            <View style={styles.roadmapHeaderRow}>
+              <Text
+                style={[
+                  styles.roadmapHeading,
+                  { color: isDark ? '#E2E8F0' : '#0F172A' },
+                ]}
+              >
+                {activeRealm.name.toUpperCase()} STAGES
+              </Text>
+              <Text style={[styles.roadmapSub, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                Tap to preview
+              </Text>
+            </View>
+
+            <View style={styles.stagesList}>
+              {activeRealm.stages.map((s) => {
+                const fullStreakRequired = activeRealm.requiredStreak + s.minStreak;
+                const isUnlocked = currentStreak >= fullStreakRequired;
+                const isSelected = activeStage.level === s.level;
+                const isThisCurrent =
+                  isCurrentActiveRealm && naturalProgress.stage.level === s.level;
+
+                return (
+                  <TouchableOpacity
+                    key={s.level}
+                    style={[
+                      styles.stageCard,
+                      {
+                        backgroundColor: isDark ? '#121820' : '#FFFFFF',
+                        borderColor: isDark ? '#1E2633' : '#E2E8F0',
+                      },
+                      isSelected && [
+                        styles.stageCardSelected,
+                        {
+                          borderColor: activeRealm.primaryColor,
+                          backgroundColor: isDark
+                            ? `${activeRealm.primaryColor}14`
+                            : `${activeRealm.primaryColor}10`,
+                        },
+                      ],
+                    ]}
+                    onPress={() => setSelectedStageLevel(s.level)}
+                    activeOpacity={0.8}
+                  >
+                    {/* Stage Thumbnail */}
+                    <View
+                      style={[
+                        styles.stageThumbnail,
+                        {
+                          backgroundColor: isDark ? 'rgba(0, 0, 0, 0.4)' : '#F1F5F9',
+                        },
+                        isSelected && {
+                          borderColor: `${activeRealm.primaryColor}40`,
+                          borderWidth: 1,
+                          backgroundColor: isDark
+                            ? `${activeRealm.primaryColor}10`
+                            : `${activeRealm.primaryColor}15`,
+                        },
+                      ]}
+                    >
+                      <StreakRealmIllustration
+                        realmId={activeRealm.id}
+                        level={s.level}
+                        size="sm"
+                        isAnimated={false}
+                      />
+                    </View>
+
+                    {/* Stage Info */}
+                    <View style={styles.stageInfoCol}>
+                      <View style={styles.stageTitleRow}>
+                        <Text
+                          style={[
+                            styles.stageNameText,
+                            { color: isDark ? '#FFFFFF' : '#0F172A' },
+                          ]}
+                        >
+                          {s.name}
+                        </Text>
+                        {isThisCurrent && (
+                          <View
+                            style={[
+                              styles.currentBadge,
+                              { backgroundColor: activeRealm.primaryColor },
+                            ]}
+                          >
+                            <Text style={styles.currentBadgeText}>CURRENT</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.stageStreakReqText, { color: isDark ? '#8B949E' : '#64748B' }]}>
+                        Requires {s.minStreak}d realm streak ({fullStreakRequired}d total)
+                      </Text>
+                    </View>
+
+                    {/* Status Icon */}
+                    <View style={styles.stageStatusCol}>
+                      {isUnlocked ? (
+                        <View
+                          style={[
+                            styles.checkCircle,
+                            {
+                              borderColor: activeRealm.primaryColor,
+                              backgroundColor: `${activeRealm.primaryColor}15`,
+                            },
+                          ]}
+                        >
+                          <Check size={14} color={activeRealm.primaryColor} strokeWidth={2.5} />
+                        </View>
+                      ) : (
+                        <Lock size={16} color={isDark ? '#6E7681' : '#94A3B8'} />
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 5. 30-Day Realm System Info Card */}
+            <View
+              style={[
+                styles.infoCard,
+                {
+                  backgroundColor: isDark ? '#121820' : '#F8FAFC',
+                  borderColor: isDark ? '#1E2633' : '#E2E8F0',
+                },
+              ]}
+            >
+              <View style={styles.infoHeaderRow}>
+                <Info size={18} color="#0EA5E9" />
+                <Text
+                  style={[
+                    styles.infoTitle,
+                    { color: isDark ? '#FFFFFF' : '#0F172A' },
+                  ]}
+                >
+                  How 30-Day Monthly Realms Work
+                </Text>
+              </View>
+
+              <View style={styles.infoBulletsList}>
+                <View style={styles.bulletRow}>
+                  <Text style={[styles.bulletDot, { color: isDark ? '#94A3B8' : '#64748B' }]}>•</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? '#94A3B8' : '#475569' }]}>
+                    Every 30-day streak milestone completes a realm and awards a permanent mastery trophy!
+                  </Text>
+                </View>
+
+                <View style={styles.bulletRow}>
+                  <Text style={[styles.bulletDot, { color: isDark ? '#94A3B8' : '#64748B' }]}>•</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? '#94A3B8' : '#475569' }]}>
+                    Month 1 unlocks 🌱 Living Garden, Month 2 awakens 🔥 Cosmic Flame, Month 3 hatches 🐉 Dragon Hatchery, and beyond.
+                  </Text>
+                </View>
+
+                <View style={styles.bulletRow}>
+                  <Text style={[styles.bulletDot, { color: isDark ? '#94A3B8' : '#64748B' }]}>•</Text>
+                  <Text style={[styles.bulletText, { color: isDark ? '#94A3B8' : '#475569' }]}>
+                    100% daily habit completion fuels your active mascot with life and unlocks new animations.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* 6. Back to Habits CTA Button */}
+            <TouchableOpacity
+              style={[
+                styles.ctaButton,
+                { backgroundColor: activeRealm.primaryColor },
+              ]}
+              onPress={() => setIsPlantGardenModalOpen(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ctaButtonText}>Back to Habits</Text>
+              <ArrowRight size={18} color="#080E1A" strokeWidth={2.5} />
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
   );
 };
+
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 480,
+    height: '88%',
+    maxHeight: '92%',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#21262D',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.5,
+    shadowRadius: 32,
+    elevation: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  sproutBadgeCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  headerSub: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  realmSwitcherContainer: {
+    borderBottomWidth: 1,
+  },
+  realmSwitcherContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  realmPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    gap: 8,
+    borderWidth: 1,
+  },
+  realmPillEmoji: {
+    fontSize: 16,
+  },
+  realmPillTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  realmPillSub: {
+    fontSize: 10,
+  },
+  bodyScroll: {
+    padding: 16,
+    gap: 14,
+    paddingBottom: 24,
+  },
+  heroCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    alignItems: 'center',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  glowRingOuter: {
+    position: 'absolute',
+    top: 45,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stagePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+  },
+  stagePillText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  stagePillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  plantContainer: {
+    height: 190,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 4,
+  },
+  plantHeroTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginTop: 4,
+  },
+  plantHeroDesc: {
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 17,
+    marginTop: 6,
+    paddingHorizontal: 10,
+  },
+  streakStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    width: '100%',
+  },
+  streakStatBox: {
+    flex: 1,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+  },
+  streakStatLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  streakStatValRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  streakEmoji: {
+    fontSize: 16,
+  },
+  streakNumWhite: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  streakNumGreen: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  roadmapHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  roadmapHeading: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  roadmapSub: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  stagesList: {
+    gap: 10,
+  },
+  stageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    padding: 12,
+    borderWidth: 1.5,
+    gap: 14,
+  },
+  stageCardSelected: {
+    borderWidth: 1.5,
+  },
+  stageThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  stageInfoCol: {
+    flex: 1,
+  },
+  stageTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stageNameText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  currentBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  currentBadgeText: {
+    color: '#080E1A',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  stageStreakReqText: {
+    fontSize: 12,
+    marginTop: 3,
+  },
+  stageStatusCol: {
+    paddingRight: 4,
+  },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoCard: {
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    gap: 12,
+    marginTop: 4,
+  },
+  infoHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  infoTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  infoBulletsList: {
+    gap: 8,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  bulletDot: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  bulletText: {
+    fontSize: 12,
+    lineHeight: 17,
+    flex: 1,
+  },
+  ctaButton: {
+    height: 52,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 6,
+    elevation: 4,
+  },
+  ctaButtonText: {
+    color: '#080E1A',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+});

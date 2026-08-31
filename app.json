@@ -1,25 +1,42 @@
 {
   "expo": {
-    "name": "HabitUp - Daily Habit Tracker",
+    "name": "HabitUp",
     "slug": "habitup-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#0B1120"
     },
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "requireFullScreen": true
+      "bundleIdentifier": "com.habitup.tracker",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B1120"
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0F1D"
       },
       "package": "com.habitup.tracker",
-      "screenOrientation": "portrait"
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "SCHEDULE_EXACT_ALARM"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e1daf393-2cc0-496e-bed2-c77daa57aeb1"
+      }
     }
   }
 }
-

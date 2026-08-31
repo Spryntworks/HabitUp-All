@@ -1,20 +1,25 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+﻿import React, { useEffect, useState } from 'react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  StyleSheet,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { ScanFace, Fingerprint, CheckCircle2, ShieldCheck, X } from 'lucide-react';
+import { Fingerprint, CheckCircle2, ShieldCheck, X } from 'lucide-react-native';
 
 export const BiometricScanModal: React.FC = () => {
   const {
     isBiometricModalOpen,
     setIsBiometricModalOpen,
-    deviceFrame,
     biometricLogin,
     showToast,
     theme,
   } = useHabit();
 
   const isDark = theme === 'dark';
-  const [scanState, setScanState] = useState<'scanning' | 'success' | 'failed'>('scanning');
+  const [scanState, setScanState] = useState<'scanning' | 'success'>('scanning');
 
   useEffect(() => {
     if (!isBiometricModalOpen) {
@@ -28,84 +33,118 @@ export const BiometricScanModal: React.FC = () => {
       const completeTimer = setTimeout(() => {
         biometricLogin();
         setIsBiometricModalOpen(false);
-        showToast(
-          deviceFrame === 'android' ? 'Fingerprint verified. Welcome back!' : 'Face ID verified. Welcome back!',
-          undefined,
-          'success'
-        );
+        showToast('Biometric verified. Welcome back!', undefined, 'success');
       }, 700);
       return () => clearTimeout(completeTimer);
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [isBiometricModalOpen, deviceFrame]);
+  }, [isBiometricModalOpen]);
 
   if (!isBiometricModalOpen) return null;
 
-  const isIos = deviceFrame === 'iphone';
-
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className={`w-full max-w-xs text-center p-6 rounded-3xl shadow-2xl flex flex-col items-center border ${
-          isDark
-            ? 'bg-slate-900 border-slate-800 text-white'
-            : 'bg-white border-slate-200 text-slate-900 shadow-2xl'
-        }`}
-      >
-        <div className="w-full flex justify-end">
-          <button
-            onClick={() => setIsBiometricModalOpen(false)}
-            className={`p-1 rounded-full ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}
+    <Modal visible={isBiometricModalOpen} transparent animationType="fade">
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalBox,
+            { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => setIsBiometricModalOpen(false)}
           >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+            <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+          </TouchableOpacity>
 
-        {/* Biometric Icon animation */}
-        <div className="relative my-4 flex items-center justify-center">
-          <div
-            className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-              scanState === 'success'
-                ? 'bg-emerald-500/15 text-emerald-500 ring-4 ring-emerald-500/30'
-                : 'bg-rose-500/15 text-rose-500 ring-4 ring-rose-500/30 animate-pulse'
-            }`}
-          >
+          <View style={styles.iconCircle}>
             {scanState === 'success' ? (
-              <CheckCircle2 className="w-10 h-10 text-emerald-500" />
-            ) : isIos ? (
-              <ScanFace className="w-10 h-10 text-rose-500 animate-bounce" />
+              <CheckCircle2 size={40} color="#10B981" />
             ) : (
-              <Fingerprint className="w-10 h-10 text-rose-500 animate-pulse" />
+              <Fingerprint size={40} color="#7C5CFF" />
             )}
-          </div>
-        </div>
+          </View>
 
-        <h3 className={`text-base font-extrabold mb-1 font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-          {scanState === 'success'
-            ? 'Authenticated'
-            : isIos
-            ? 'Face ID for HabitUp'
-            : 'Touch Fingerprint Sensor'}
-        </h3>
+          <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+            {scanState === 'success' ? 'Authenticated' : 'Touch Biometric Sensor'}
+          </Text>
 
-        <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-          {scanState === 'success'
-            ? 'Logging in to your account...'
-            : isIos
-            ? 'Double click side button or look directly into front TrueDepth camera'
-            : 'Hold your finger on the optical sensor area'}
-        </p>
+          <Text style={[styles.subtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+            {scanState === 'success'
+              ? 'Logging in to your account...'
+              : 'Hold your finger on the biometric sensor'}
+          </Text>
 
-        <div className={`inline-flex items-center gap-1.5 text-[10px] font-semibold px-3 py-1 rounded-full border ${isDark ? 'text-slate-400 bg-slate-800/60 border-slate-700/50' : 'text-slate-600 bg-slate-100 border-slate-200'}`}>
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-          Hardware Secure Enclave Protected
-        </div>
-      </motion.div>
-    </div>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: isDark ? '#0F172A' : '#F1F5F9' },
+            ]}
+          >
+            <ShieldCheck size={14} color="#10B981" />
+            <Text style={[styles.badgeText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Secure Enclave Protected
+            </Text>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    width: '100%',
+    maxWidth: 300,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    padding: 4,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 16,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+});

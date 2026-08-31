@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   Dumbbell,
   BookOpen,
@@ -54,8 +54,15 @@ import {
   LogOut,
   Sliders,
   Layers,
+  Search,
+  User,
+  Shield,
+  Clock,
+  Target,
+  TrendingUp,
+  Activity,
   LucideIcon,
-} from 'lucide-react';
+} from 'lucide-react-native';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Dumbbell,
@@ -112,21 +119,28 @@ const ICON_MAP: Record<string, LucideIcon> = {
   LogOut,
   Sliders,
   Layers,
+  Search,
+  User,
+  Shield,
+  Clock,
+  Target,
+  TrendingUp,
+  Activity,
 };
 
 interface IconRendererProps {
   name: string;
-  className?: string;
   size?: number;
   color?: string;
+  style?: any;
 }
 
 export const IconRenderer: React.FC<IconRendererProps> = ({
   name,
-  className = 'w-5 h-5',
-  size,
-  color,
+  size = 20,
+  color = '#94A3B8',
+  style,
 }) => {
   const IconComponent = ICON_MAP[name] || Sparkles;
-  return <IconComponent className={className} size={size} color={color} />;
+  return <IconComponent size={size} color={color} style={style} />;
 };

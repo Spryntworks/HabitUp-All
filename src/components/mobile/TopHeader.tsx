@@ -1,6 +1,7 @@
-import React from 'react';
+﻿import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Bell, WifiOff, Sparkles, Moon, Sun } from 'lucide-react';
+import { Bell, WifiOff, Sparkles, Moon, Sun } from 'lucide-react-native';
 
 export const TopHeader: React.FC = () => {
   const {
@@ -10,7 +11,7 @@ export const TopHeader: React.FC = () => {
     toggleTheme,
     isOffline,
     setIsOffline,
-    setIsAuthSessionModalOpen,
+    setIsNotificationModalOpen,
     showToast,
   } = useHabit();
 
@@ -24,22 +25,20 @@ export const TopHeader: React.FC = () => {
   };
 
   return (
-    <header className="px-5 pt-3 pb-1 flex items-center justify-between">
-      <div>
-        <div className="flex items-center gap-1.5">
-          <span className={`text-[13px] font-medium ${isDark ? 'text-neutral-300' : 'text-neutral-600'}`}>
-            {getGreetingTime()}, {user.name.split(' ')[0]}! 👋
-          </span>
-        </div>
-        <h1 className={`text-2xl font-black tracking-tight font-display mt-0.5 ${isDark ? 'text-white' : 'text-neutral-900'}`}>
-          Let's <span className="text-[#7C5CFF]">crush</span> today!
-        </h1>
-      </div>
+    <View style={styles.header}>
+      <View>
+        <Text style={[styles.greeting, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+          {getGreetingTime()}, {user?.name ? user.name.split(' ')[0] : 'Hero'}! 👋
+        </Text>
+        <Text style={[styles.title, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+          Let's <Text style={{ color: '#7C5CFF' }}>crush</Text> today!
+        </Text>
+      </View>
 
-      <div className="flex items-center gap-1.5">
+      <View style={styles.actionRow}>
         {/* Offline status button */}
-        <button
-          onClick={() => {
+        <TouchableOpacity
+          onPress={() => {
             const nextOffline = !isOffline;
             setIsOffline(nextOffline);
             showToast(
@@ -50,61 +49,76 @@ export const TopHeader: React.FC = () => {
               nextOffline ? 'warning' : 'success'
             );
           }}
-          className={`p-2 rounded-xl transition-all ${
-            isOffline
-              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-              : isDark
-              ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60'
-          }`}
-          title={isOffline ? 'Offline Mode active (Click to go online)' : 'Online (Click to simulate offline)'}
+          style={[
+            styles.iconBtn,
+            isOffline && { backgroundColor: 'rgba(245, 158, 11, 0.2)' },
+          ]}
         >
-          {isOffline ? <WifiOff className="w-4 h-4 text-amber-400" /> : <Sparkles className="w-4 h-4 text-neutral-400" />}
-        </button>
+          {isOffline ? (
+            <WifiOff size={18} color="#FBBF24" />
+          ) : (
+            <Sparkles size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+          )}
+        </TouchableOpacity>
 
         {/* Theme toggle */}
-        <button
-          onClick={toggleTheme}
-          className={`p-2 rounded-xl transition-colors ${
-            isDark
-              ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60'
-          }`}
-          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
-        >
+        <TouchableOpacity onPress={toggleTheme} style={styles.iconBtn}>
           {theme === 'dark' ? (
-            <Sun className="w-4 h-4 text-amber-300" />
+            <Sun size={18} color="#FDE047" />
           ) : (
-            <Moon className="w-4 h-4 text-indigo-500" />
+            <Moon size={18} color="#6366F1" />
           )}
-        </button>
+        </TouchableOpacity>
 
         {/* Notifications Bell */}
-        <button
-          onClick={() => {
-            const habitWithReminder = habits.find((h) => h.reminder_time && !h.archived_at && !h.deleted_at && !h.paused_at) || habits[0];
-            if (habitWithReminder) {
-              window.dispatchEvent(
-                new CustomEvent('trigger-habit-reminder', {
-                  detail: { habitId: habitWithReminder.id },
-                })
-              );
-            } else {
-              showToast('🔔 Daily reminders scheduled according to your habit times.', undefined, 'info');
-            }
-          }}
-          className={`relative p-2 rounded-xl transition-colors ${
-            isDark
-              ? 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50'
-              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/60'
-          }`}
-          title="Notifications"
+        <TouchableOpacity
+          onPress={() => setIsNotificationModalOpen(true)}
+          style={styles.iconBtn}
         >
-          <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-neutral-900" />
-        </button>
-      </div>
-    </header>
+          <Bell size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+          <View style={styles.bellBadge} />
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 };
 
+const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  greeting: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '900',
+    marginTop: 2,
+    letterSpacing: -0.5,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconBtn: {
+    padding: 8,
+    borderRadius: 12,
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#F43F5E',
+  },
+});

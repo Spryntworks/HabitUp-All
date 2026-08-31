@@ -17,6 +17,42 @@ export function formatDateKey(d: Date): string {
 }
 
 /**
+ * Format a 24-hour time string ("HH:MM" or "HH:MM:SS") to 12-hour AM/PM format (e.g. "8:00 AM", "12:30 PM", "8:15 PM")
+ */
+export function formatTo12Hour(timeStr?: string | null): string {
+  if (!timeStr) return '';
+  const clean = timeStr.trim();
+  if (!clean) return '';
+
+  // Check if it already contains AM or PM
+  if (/am|pm/i.test(clean)) return clean;
+
+  const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match) {
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    if (hours === 0) hours = 12;
+    return `${hours}:${minutes} ${period}`;
+  }
+
+  if (clean.includes('T')) {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const period = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      if (hours === 0) hours = 12;
+      return `${hours}:${minutes} ${period}`;
+    }
+  }
+
+  return clean;
+}
+
+/**
  * Get day of week index where 0 = Monday, 1 = Tuesday, ..., 6 = Sunday (matching PRD)
  */
 export function getDayOfWeekIndex(d: Date): number {
@@ -28,11 +64,17 @@ export function getDayOfWeekIndex(d: Date): number {
  * Checks if a habit is scheduled on a specific date based on frequency_type & scheduled_days
  */
 export function isHabitScheduledOnDate(habit: Habit, date: Date): boolean {
-  if (habit.frequency_type === 'daily') {
+  if (!habit) return false;
+  if (!habit.frequency_type || habit.frequency_type === 'daily') {
+    return true;
+  }
+  const days = habit.scheduled_days;
+  if (!Array.isArray(days) || days.length === 0) {
     return true;
   }
   const dayIdx = getDayOfWeekIndex(date);
-  return (habit.scheduled_days || []).includes(dayIdx);
+  const jsDay = date.getDay();
+  return days.includes(dayIdx) || days.includes(jsDay);
 }
 
 /**
@@ -46,11 +88,12 @@ export function calculateHabitStats(
   referenceDate: Date = new Date()
 ): HabitCalculatedStats {
   const habitCompletions = completions.filter((c) => c.habit_id === habit.id);
-  const completionSet = new Set(habitCompletions.map((c) => c.completion_date));
+  const completionSet = new Set(habitCompletions.map((c) => (c.completion_date || '').split('T')[0]));
 
   const historyMap: Record<string, boolean> = {};
   habitCompletions.forEach((c) => {
-    historyMap[c.completion_date] = true;
+    const dKey = (c.completion_date || '').split('T')[0];
+    if (dKey) historyMap[dKey] = true;
   });
 
   const todayKey = formatDateKey(referenceDate);

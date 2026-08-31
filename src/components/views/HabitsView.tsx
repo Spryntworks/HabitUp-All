@@ -1,5 +1,13 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Modal,
+  StyleSheet,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
 import {
@@ -15,11 +23,12 @@ import {
   Pause,
   Play,
   Archive,
+  ArchiveRestore,
   Trash2,
-  AlertTriangle,
   Plus,
-} from 'lucide-react';
-import { AVAILABLE_ICONS, HABIT_COLORS } from '../../constants/templates';
+  Sparkles,
+  X,
+} from 'lucide-react-native';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -32,51 +41,50 @@ export const HabitsView: React.FC = () => {
     pauseHabit,
     resumeHabit,
     archiveHabit,
+    unarchiveHabit,
     deleteHabit,
     updateHabit,
     setActiveTab,
     setIsCreateModalOpen,
-    showToast,
+    setIsOnboardingModalOpen,
     theme,
   } = useHabit();
 
   const isDark = theme === 'dark';
+  const [filterTab, setFilterTab] = useState<'active' | 'paused' | 'archived'>('active');
 
-  const activeHabits = habits.filter(
-    (h) => !h.archived_at && !h.deleted_at
-  );
+  const activeHabits = habits.filter((h) => !h.archived_at && !h.deleted_at && !h.paused_at);
+  const pausedHabits = habits.filter((h) => Boolean(h.paused_at) && !h.archived_at && !h.deleted_at);
+  const archivedHabits = habits.filter((h) => Boolean(h.archived_at) && !h.deleted_at);
+
+  const displayedHabits =
+    filterTab === 'active'
+      ? activeHabits
+      : filterTab === 'paused'
+      ? pausedHabits
+      : archivedHabits;
 
   const [selectedHabitId, setSelectedHabitId] = useState<string>(
-    activeHabits[0]?.id || 'h-1'
+    displayedHabits[0]?.id || ''
   );
-
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const [isEditing, setIsEditing] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Edit form state
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editColor, setEditColor] = useState('');
   const [editIcon, setEditIcon] = useState('');
-  const [editFrequency, setEditFrequency] = useState<'daily' | 'custom_days'>('daily');
-  const [editScheduleDays, setEditScheduleDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
 
   const currentHabit =
-    activeHabits.find((h) => h.id === selectedHabitId) ||
-    activeHabits[0] || {
-      id: 'h-1',
-      name: 'Morning Workout',
-      description: '30 minutes • Every Day',
-      color: '#FF5A79',
-      icon: 'Dumbbell',
-      frequency_type: 'daily' as const,
-      scheduled_days: [0, 1, 2, 3, 4, 5, 6],
-    };
+    displayedHabits.find((h) => h.id === selectedHabitId) ||
+    displayedHabits[0] ||
+    null;
 
-  const stats = getHabitStats(currentHabit.id);
-  const isPaused = Boolean(currentHabit.paused_at);
+  const stats = currentHabit ? getHabitStats(currentHabit.id) : null;
+  const isPaused = Boolean(currentHabit?.paused_at);
+  const isArchived = Boolean(currentHabit?.archived_at);
 
   const year = calendarDate.getFullYear();
   const month = calendarDate.getMonth();
@@ -88,475 +96,1190 @@ export const HabitsView: React.FC = () => {
   }).format(calendarDate);
 
   const changeMonth = (offset: number) => {
-    const next = new Date(year, month + offset, 1);
-    setCalendarDate(next);
+    setCalendarDate(new Date(year, month + offset, 1));
   };
 
   const todayKey = formatDateKey(new Date());
 
   const handleStartEdit = () => {
+    if (!currentHabit) return;
     setEditName(currentHabit.name);
-    setEditDesc(currentHabit.description || '30 minutes • Every Day');
-    setEditColor(currentHabit.color || '#FF5A79');
-    setEditIcon(currentHabit.icon || 'Dumbbell');
-    setEditFrequency(currentHabit.frequency_type === 'daily' ? 'daily' : 'custom_days');
-    setEditScheduleDays(currentHabit.scheduled_days || [0, 1, 2, 3, 4, 5, 6]);
-    setShowOptionsMenu(false);
+    setEditDesc(currentHabit.description || '');
+    setEditColor(currentHabit.color || '#7C5CFF');
+    setEditIcon(currentHabit.icon || 'Sparkles');
     setIsEditing(true);
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editName.trim()) return;
-
+  const handleSaveEdit = () => {
+    if (!currentHabit || !editName.trim()) return;
     updateHabit(currentHabit.id, {
       name: editName.trim(),
       description: editDesc.trim(),
       color: editColor,
       icon: editIcon,
-      frequency_type: editFrequency,
-      scheduled_days: editFrequency === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : editScheduleDays,
     });
-
     setIsEditing(false);
-    showToast('Habit updated successfully!', undefined, 'success');
   };
 
   return (
-    <div className={`flex flex-col flex-1 px-5 pt-2 pb-6 space-y-3 select-none ${
-      isDark ? 'text-white' : 'text-neutral-900'
-    }`}>
-      {/* Top Header matching Habit Details Screen */}
-      <div className="flex items-center justify-between py-1 relative">
-        <button
-          onClick={() => setActiveTab('home')}
-          className={`p-2 rounded-xl transition-colors ${
-            isDark ? 'text-neutral-300 hover:text-white hover:bg-slate-800' : 'text-neutral-600 hover:text-neutral-900 hover:bg-slate-100'
-          }`}
-          title="Back"
+    <ScrollView
+      style={[styles.container, { backgroundColor: isDark ? '#080E1A' : '#F8FAFC' }]}
+      contentContainerStyle={styles.contentContainer}
+    >
+      {/* Top Header matching Image 1: [ < ] Habit Details [ ••• ] */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity
+          onPress={() => setActiveTab('home')}
+          style={styles.headerIconButton}
         >
-          <ChevronLeft className="w-6 h-6" />
-        </button>
+          <ChevronLeft size={22} color={isDark ? '#E2E8F0' : '#0F172A'} />
+        </TouchableOpacity>
 
-        <h1 className="text-lg font-bold font-display tracking-tight text-center">
-          {isEditing ? 'Edit Habit' : 'Habit Details'}
-        </h1>
+        <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+          Habit Details
+        </Text>
 
-        <div className="relative">
-          <button
-            onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-            className={`p-2 rounded-xl transition-colors ${
-              isDark ? 'text-neutral-300 hover:text-white hover:bg-slate-800' : 'text-neutral-600 hover:text-neutral-900 hover:bg-slate-100'
-            }`}
-            title="Options"
-          >
-            <MoreHorizontal className="w-5 h-5" />
-          </button>
+        <TouchableOpacity
+          onPress={() => setShowOptionsMenu(true)}
+          style={styles.headerIconButton}
+          disabled={!currentHabit}
+        >
+          <MoreHorizontal size={22} color={isDark ? '#E2E8F0' : '#0F172A'} />
+        </TouchableOpacity>
+      </View>
 
-          {/* Options Dropdown */}
-          <AnimatePresence>
-            {showOptionsMenu && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: -4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: -4 }}
-                className={`absolute right-0 top-10 w-44 rounded-2xl border shadow-xl z-50 p-1.5 ${
-                  isDark ? 'bg-[#162032] border-slate-750 text-white' : 'bg-white border-slate-200 text-neutral-900'
-                }`}
-              >
-                <button
-                  onClick={handleStartEdit}
-                  className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center gap-2 transition-colors ${
-                    isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
-                  }`}
-                >
-                  <Edit3 className="w-4 h-4 text-purple-400" />
-                  <span>Edit Habit</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (isPaused) resumeHabit(currentHabit.id);
-                    else pauseHabit(currentHabit.id);
-                    setShowOptionsMenu(false);
-                  }}
-                  className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center gap-2 transition-colors ${
-                    isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
-                  }`}
-                >
-                  {isPaused ? (
-                    <>
-                      <Play className="w-4 h-4 text-emerald-400" />
-                      <span>Resume Habit</span>
-                    </>
-                  ) : (
-                    <>
-                      <Pause className="w-4 h-4 text-amber-400" />
-                      <span>Pause Habit</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={() => {
-                    archiveHabit(currentHabit.id);
-                    setShowOptionsMenu(false);
-                  }}
-                  className={`w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center gap-2 transition-colors ${
-                    isDark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'
-                  }`}
-                >
-                  <Archive className="w-4 h-4 text-cyan-400" />
-                  <span>Archive Habit</span>
-                </button>
-
-                <div className={`my-1 border-t ${isDark ? 'border-slate-800' : 'border-slate-100'}`} />
-
-                <button
-                  onClick={() => {
-                    setShowOptionsMenu(false);
-                    setShowDeleteConfirm(true);
-                  }}
-                  className="w-full px-3 py-2 text-left text-xs font-semibold rounded-xl flex items-center gap-2 text-rose-500 hover:bg-rose-500/10 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span>Delete Habit</span>
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      {/* Habit Switcher Bar */}
-      {activeHabits.length > 1 && !isEditing && (
-        <div className="flex items-center gap-2 overflow-x-auto py-1 no-scrollbar">
-          {activeHabits.map((h) => {
-            const isSelected = h.id === currentHabit.id;
-            return (
-              <button
-                key={h.id}
-                onClick={() => setSelectedHabitId(h.id)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold shrink-0 flex items-center gap-1.5 transition-all ${
-                  isSelected
-                    ? 'bg-[#7C5CFF] text-white shadow-md shadow-indigo-500/25'
+      {/* Segmented Filter Bar: Active / Paused / Archived */}
+      <View style={[styles.filterBar, { backgroundColor: isDark ? '#131C2E' : '#E2E8F0' }]}>
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filterTab === 'active' && [
+              styles.filterTabActive,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ],
+          ]}
+          onPress={() => {
+            setFilterTab('active');
+            if (activeHabits[0]) setSelectedHabitId(activeHabits[0].id);
+          }}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              {
+                color:
+                  filterTab === 'active'
+                    ? '#7C5CFF'
                     : isDark
-                    ? 'bg-[#162032] text-slate-300 hover:text-white border border-slate-800'
-                    : 'bg-white text-slate-700 hover:text-slate-950 border border-slate-200 shadow-sm'
-                }`}
-              >
-                <div
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ backgroundColor: h.color || '#FF5A79' }}
-                />
-                <span>{h.name}</span>
-              </button>
-            );
-          })}
-        </div>
+                    ? '#94A3B8'
+                    : '#64748B',
+              },
+            ]}
+          >
+            Active ({activeHabits.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filterTab === 'paused' && [
+              styles.filterTabActive,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ],
+          ]}
+          onPress={() => {
+            setFilterTab('paused');
+            if (pausedHabits[0]) setSelectedHabitId(pausedHabits[0].id);
+          }}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              {
+                color:
+                  filterTab === 'paused'
+                    ? '#F59E0B'
+                    : isDark
+                    ? '#94A3B8'
+                    : '#64748B',
+              },
+            ]}
+          >
+            Paused ({pausedHabits.length})
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterTab,
+            filterTab === 'archived' && [
+              styles.filterTabActive,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ],
+          ]}
+          onPress={() => {
+            setFilterTab('archived');
+            if (archivedHabits[0]) setSelectedHabitId(archivedHabits[0].id);
+          }}
+        >
+          <Text
+            style={[
+              styles.filterTabText,
+              {
+                color:
+                  filterTab === 'archived'
+                    ? '#38BDF8'
+                    : isDark
+                    ? '#94A3B8'
+                    : '#64748B',
+              },
+            ]}
+          >
+            Archived ({archivedHabits.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 1. ARCHIVED HABITS LIST VIEW */}
+      {filterTab === 'archived' && (
+        <View style={styles.archivedSection}>
+          {archivedHabits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyBox,
+                {
+                  backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
+            >
+              <View style={[styles.emptyIconCircle, { backgroundColor: 'rgba(56, 189, 248, 0.15)' }]}>
+                <Archive size={28} color="#38BDF8" />
+              </View>
+              <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                No Archived Habits
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Habits you archive will be stored safely here. You can unarchive or restore them anytime!
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.archivedList}>
+              {archivedHabits.map((h) => (
+                <View
+                  key={h.id}
+                  style={[
+                    styles.archivedCard,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <View style={styles.archivedCardTop}>
+                    <View style={[styles.archivedIcon, { backgroundColor: h.color || '#7C5CFF' }]}>
+                      <IconRenderer name={h.icon} size={22} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.archivedName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                        {h.name}
+                      </Text>
+                      <Text style={[styles.archivedDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                        {h.description || 'Archived habit'}
+                      </Text>
+                    </View>
+                    <View style={styles.archivedBadge}>
+                      <Text style={styles.archivedBadgeText}>ARCHIVED</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.archivedActionsRow}>
+                    <TouchableOpacity
+                      style={styles.unarchiveBtn}
+                      onPress={() => unarchiveHabit(h.id)}
+                    >
+                      <ArchiveRestore size={15} color="#10B981" />
+                      <Text style={styles.unarchiveBtnText}>Restore / Unarchive</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteArchivedBtn}
+                      onPress={() => deleteHabit(h.id)}
+                    >
+                      <Trash2 size={15} color="#EF4444" />
+                      <Text style={styles.deleteArchivedBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       )}
 
-      {/* Content Body */}
-      {isEditing ? (
-        /* Edit Form */
-        <form onSubmit={handleSaveEdit} className="space-y-4 pt-2">
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-neutral-400">
-              Habit Name
-            </label>
-            <input
-              type="text"
-              required
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:border-[#7C5CFF] ${
-                isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-neutral-900'
-              }`}
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-neutral-400">
-              Subtitle / Frequency
-            </label>
-            <input
-              type="text"
-              value={editDesc}
-              onChange={(e) => setEditDesc(e.target.value)}
-              placeholder="e.g. 30 minutes • Every Day"
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium focus:outline-none focus:border-[#7C5CFF] ${
-                isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-50 border-slate-300 text-neutral-900'
-              }`}
-            />
-          </div>
-
-          {/* Color Picker */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-neutral-400">
-              Color Theme
-            </label>
-            <div className="flex items-center gap-2 overflow-x-auto py-1">
-              {HABIT_COLORS.map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={() => setEditColor(c.hex)}
-                  className={`w-7 h-7 rounded-xl shrink-0 transition-transform ${
-                    editColor === c.hex ? 'ring-2 ring-white scale-110 shadow-md' : 'opacity-80'
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Icon Selector */}
-          <div>
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1 text-neutral-400">
-              Icon
-            </label>
-            <div className="grid grid-cols-6 gap-2 max-h-28 overflow-y-auto p-1">
-              {AVAILABLE_ICONS.map((ic) => (
-                <button
-                  key={ic}
-                  type="button"
-                  onClick={() => setEditIcon(ic)}
-                  className={`p-2 rounded-xl flex items-center justify-center transition-all ${
-                    editIcon === ic
-                      ? 'bg-[#7C5CFF] text-white shadow-md'
-                      : isDark ? 'bg-slate-800 text-neutral-400' : 'bg-slate-100 text-neutral-600'
-                  }`}
-                >
-                  <IconRenderer name={ic} className="w-4 h-4" />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setIsEditing(false)}
-              className={`flex-1 py-3 font-bold rounded-xl text-xs ${
-                isDark ? 'bg-slate-800 text-white' : 'bg-slate-200 text-neutral-700'
-              }`}
+      {/* 2. PAUSED HABITS LIST VIEW */}
+      {filterTab === 'paused' && (
+        <View style={styles.archivedSection}>
+          {pausedHabits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyBox,
+                {
+                  backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-3 bg-[#7C5CFF] text-white font-bold rounded-xl text-xs shadow-md shadow-indigo-500/25"
-            >
-              Save Changes
-            </button>
-          </div>
-        </form>
-      ) : (
-        /* Habit Details View matching Image */
-        <div className="space-y-4 landscape:space-y-0 landscape:grid landscape:grid-cols-12 landscape:gap-4 md:space-y-0 md:grid md:grid-cols-12 md:gap-4">
-          {/* Left Column in Landscape: Hero Icon + 4 Stats Cards */}
-          <div className="landscape:col-span-6 md:col-span-6 space-y-3">
-            {/* Hero Icon Block & Title */}
-            <div className="flex flex-col items-center justify-center pt-1 pb-1">
-              <div
-                className="w-16 h-16 landscape:w-14 landscape:h-14 rounded-[22px] flex items-center justify-center shrink-0 shadow-lg shadow-rose-500/20 mb-2"
-                style={{ backgroundColor: currentHabit.color || '#FF5A79' }}
-              >
-                <IconRenderer name={currentHabit.icon} className="w-8 h-8 landscape:w-7 landscape:h-7 text-white" />
-              </div>
-
-              <h2 className={`text-lg landscape:text-base font-bold font-display tracking-tight text-center ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                {currentHabit.name}
-              </h2>
-              <p className={`text-xs mt-0.5 text-center ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                {currentHabit.description || '30 minutes • Every Day'}
-              </p>
-            </div>
-
-            {/* 4 Stat Cards in 2x2 Grid matching Image */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* 1. Current Streak Card (Tap to view Streaks Screen!) */}
-              <div
-                onClick={() => setActiveTab('streaks')}
-                className={`p-3 rounded-2xl border flex flex-col justify-between cursor-pointer hover:scale-[1.02] transition-transform ${
-                  isDark ? 'bg-[#162032] border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 text-[#FF8A00]">
-                  <span className="text-sm">🔥</span>
-                  <span className="text-xl font-black font-display text-[#FF8A00]">
-                    {stats.currentStreak}
-                  </span>
-                </div>
-                <span className={`text-[11px] font-semibold mt-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Current Streak
-                </span>
-              </div>
-
-              {/* 2. Best Streak Card */}
-              <div
-                className={`p-3 rounded-2xl border flex flex-col justify-between ${
-                  isDark ? 'bg-[#162032] border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
-                <span className={`text-xl font-black font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {stats.longestStreak}
-                </span>
-                <span className={`text-[11px] font-semibold mt-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Best Streak
-                </span>
-              </div>
-
-              {/* 3. Completion Rate Card */}
-              <div
-                className={`p-3 rounded-2xl border flex flex-col justify-between ${
-                  isDark ? 'bg-[#162032] border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
-                <span className={`text-xl font-black font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {stats.completionRate}%
-                </span>
-                <span className={`text-[11px] font-semibold mt-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Completion Rate
-                </span>
-              </div>
-
-              {/* 4. Total Completions Card */}
-              <div
-                className={`p-3 rounded-2xl border flex flex-col justify-between ${
-                  isDark ? 'bg-[#162032] border-slate-800/80' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
-                <span className={`text-xl font-black font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {stats.totalCompletions}
-                </span>
-                <span className={`text-[11px] font-semibold mt-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Total Completions
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Column in Landscape: Calendar Section */}
-          <div className="landscape:col-span-6 md:col-span-6">
-            <div className={`p-4 rounded-2xl border ${
-              isDark ? 'bg-[#162032]/70 border-slate-800/70 text-white' : 'bg-white border-slate-200 text-neutral-900 shadow-sm'
-            }`}>
-            {/* Header Row */}
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold font-display">Calendar</h3>
-                <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                  {monthName}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => changeMonth(-1)}
-                  className={`p-1 rounded-lg transition-colors ${
-                    isDark ? 'text-neutral-400 hover:text-white hover:bg-slate-800' : 'text-neutral-500 hover:text-neutral-900 hover:bg-slate-100'
-                  }`}
+              <View style={[styles.emptyIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                <Pause size={28} color="#F59E0B" />
+              </View>
+              <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                No Paused Habits
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Paused habits preserve your streak and do not mark missed days.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.archivedList}>
+              {pausedHabits.map((h) => (
+                <View
+                  key={h.id}
+                  style={[
+                    styles.archivedCard,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
                 >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => changeMonth(1)}
-                  className={`p-1 rounded-lg transition-colors ${
-                    isDark ? 'text-neutral-400 hover:text-white hover:bg-slate-800' : 'text-neutral-500 hover:text-neutral-900 hover:bg-slate-100'
-                  }`}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                  <View style={styles.archivedCardTop}>
+                    <View style={[styles.archivedIcon, { backgroundColor: h.color || '#7C5CFF' }]}>
+                      <IconRenderer name={h.icon} size={22} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.archivedName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                        {h.name}
+                      </Text>
+                      <Text style={[styles.archivedDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                        {h.description || 'Paused habit'}
+                      </Text>
+                    </View>
+                    <View style={[styles.archivedBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)' }]}>
+                      <Text style={[styles.archivedBadgeText, { color: '#F59E0B' }]}>PAUSED</Text>
+                    </View>
+                  </View>
 
-            {/* Day Labels (M T W T F S S) */}
-            <div className={`grid grid-cols-7 gap-1 text-center text-[11px] font-bold mb-2 ${
-              isDark ? 'text-slate-400' : 'text-slate-600'
-            }`}>
-              {DAY_LABELS.map((l, i) => (
-                <span key={i}>{l}</span>
+                  <View style={styles.archivedActionsRow}>
+                    <TouchableOpacity
+                      style={styles.unarchiveBtn}
+                      onPress={() => resumeHabit(h.id)}
+                    >
+                      <Play size={15} color="#10B981" />
+                      <Text style={styles.unarchiveBtnText}>Resume Habit</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.deleteArchivedBtn}
+                      onPress={() => archiveHabit(h.id)}
+                    >
+                      <Archive size={15} color="#38BDF8" />
+                      <Text style={[styles.deleteArchivedBtnText, { color: '#38BDF8' }]}>Archive</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ))}
-            </div>
+            </View>
+          )}
+        </View>
+      )}
 
-            {/* Days Grid with Circular Node Chips */}
-            <div className="grid grid-cols-7 gap-1.5">
-              {daysInMonth.map((item) => {
-                const isScheduled = isHabitScheduledOnDate(currentHabit, item.date);
-                const isDone = completions.some(
-                  (c) => c.habit_id === currentHabit.id && c.completion_date === item.key
-                );
-                const isCurrentToday = item.key === todayKey;
-                const isPast = item.key < todayKey;
-                const isMissed = !isDone && isScheduled && isPast;
+      {/* 3. ACTIVE HABITS VIEW */}
+      {filterTab === 'active' && (
+        <>
+          {activeHabits.length === 0 ? (
+            <View
+              style={[
+                styles.emptyBox,
+                {
+                  backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                  borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                },
+              ]}
+            >
+              <View style={styles.emptyIconCircle}>
+                <Sparkles size={28} color="#7C5CFF" />
+              </View>
+              <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                No Active Habits
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Create your first habit or start with templates.
+              </Text>
 
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => toggleCompletion(currentHabit.id, item.key)}
-                    disabled={!item.isCurrentMonth}
-                    className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center text-xs font-semibold transition-all relative ${
-                      !item.isCurrentMonth
-                        ? 'opacity-25 text-neutral-400'
-                        : isDone
-                        ? isCurrentToday
-                          ? 'bg-[#22D3A8] text-white shadow-md ring-2 ring-[#7C5CFF] ring-offset-2 ring-offset-[#0B1120] font-bold'
-                          : 'bg-[#22D3A8] text-white shadow-sm font-bold'
-                        : isMissed
-                        ? 'bg-[#FF5A79] text-white shadow-sm font-bold'
-                        : isCurrentToday
-                        ? isDark
-                          ? 'bg-[#162032] text-white ring-2 ring-[#7C5CFF] font-bold'
-                          : 'bg-white text-slate-900 ring-2 ring-[#7C5CFF] font-bold'
+              <View style={styles.emptyActions}>
+                <TouchableOpacity
+                  style={styles.emptyAddBtn}
+                  onPress={() => setIsCreateModalOpen(true)}
+                >
+                  <Plus size={16} color="#FFFFFF" />
+                  <Text style={styles.emptyAddBtnText}>Add Habit</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.emptyTplBtn,
+                    {
+                      backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                      borderColor: isDark ? '#334155' : '#CBD5E1',
+                    },
+                  ]}
+                  onPress={() => setIsOnboardingModalOpen(true)}
+                >
+                  <Sparkles size={16} color="#7C5CFF" />
+                  <Text style={[styles.emptyTplBtnText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                    Templates
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+        <>
+          {/* Horizontal Habit Switcher Pills */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.horizontalSelector}
+          >
+            {activeHabits.map((h) => {
+              const isSelected = h.id === currentHabit?.id;
+              return (
+                <TouchableOpacity
+                  key={h.id}
+                  style={[
+                    styles.habitPill,
+                    {
+                      backgroundColor: isSelected
+                        ? '#7C5CFF'
                         : isDark
-                        ? 'bg-[#1E293B] text-slate-300 hover:text-white'
-                        : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                    }`}
-                    title={`${item.key}: ${isDone ? 'Completed' : isMissed ? 'Missed' : 'Pending'}`}
+                        ? '#131C2E'
+                        : '#FFFFFF',
+                      borderColor: isSelected
+                        ? '#7C5CFF'
+                        : isDark
+                        ? '#1E293B'
+                        : '#E2E8F0',
+                    },
+                  ]}
+                  onPress={() => setSelectedHabitId(h.id)}
+                >
+                  <View
+                    style={[
+                      styles.pillDot,
+                      {
+                        backgroundColor: isSelected ? 'rgba(255,255,255,0.4)' : h.color || '#FF4D6D',
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.habitPillText,
+                      { color: isSelected ? '#FFFFFF' : isDark ? '#E2E8F0' : '#334155' },
+                    ]}
                   >
-                    {item.dayNumber}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
+                    {h.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Hero Icon, Habit Name & Description */}
+          {currentHabit && stats && (
+            <View style={styles.heroSection}>
+              <View
+                style={[
+                  styles.heroIconBox,
+                  { backgroundColor: currentHabit.color || '#7C5CFF' },
+                ]}
+              >
+                <IconRenderer name={currentHabit.icon} size={32} color="#FFFFFF" />
+              </View>
+
+              <Text style={[styles.heroHabitName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                {currentHabit.name}
+              </Text>
+              <Text style={[styles.heroHabitDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                {currentHabit.description || '10 mins mindfulness & calm breathing'}
+              </Text>
+
+              {/* 2x2 Stats Grid matching Image 1 */}
+              <View style={styles.statsGrid}>
+                {/* 1. Current Streak */}
+                <View
+                  style={[
+                    styles.statBox,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <View style={styles.statValueRow}>
+                    <Text style={{ fontSize: 20 }}>🔥</Text>
+                    <Text style={styles.currentStreakValue}>
+                      {stats.currentStreak}
+                    </Text>
+                  </View>
+                  <Text style={[styles.statLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Current Streak
+                  </Text>
+                </View>
+
+                {/* 2. Best Streak */}
+                <View
+                  style={[
+                    styles.statBox,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    {stats.longestStreak}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Best Streak
+                  </Text>
+                </View>
+
+                {/* 3. Completion Rate */}
+                <View
+                  style={[
+                    styles.statBox,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    {stats.completionRate}%
+                  </Text>
+                  <Text style={[styles.statLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Completion Rate
+                  </Text>
+                </View>
+
+                {/* 4. Total Completions */}
+                <View
+                  style={[
+                    styles.statBox,
+                    {
+                      backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                      borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.statValue, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    {stats.totalCompletions}
+                  </Text>
+                  <Text style={[styles.statLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Total Completions
+                  </Text>
+                </View>
+              </View>
+
+              {/* Calendar Card in Habits Tab matching Image 1 & 2 */}
+              <View
+                style={[
+                  styles.calendarCard,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                  },
+                ]}
+              >
+                {/* Calendar Header */}
+                <View style={styles.calHeaderRow}>
+                  <View>
+                    <Text style={[styles.calCardTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                      Calendar
+                    </Text>
+                    <Text style={[styles.calMonthText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                      {monthName}
+                    </Text>
+                  </View>
+                  <View style={styles.calNavArrows}>
+                    <TouchableOpacity onPress={() => changeMonth(-1)} style={styles.arrowBtn}>
+                      <ChevronLeft size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => changeMonth(1)} style={styles.arrowBtn}>
+                      <ChevronRight size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Day Labels M T W T F S S */}
+                <View style={styles.dayLabelsRow}>
+                  {DAY_LABELS.map((d, i) => (
+                    <Text key={i} style={[styles.dayLabelText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                      {d}
+                    </Text>
+                  ))}
+                </View>
+
+                {/* Date Matrix Circular Nodes */}
+                <View style={styles.calGrid}>
+                  {daysInMonth.map((item, index) => {
+                    if (!item) {
+                      return <View key={`empty-${index}`} style={styles.calNodePlaceholder} />;
+                    }
+
+                    const isScheduled = isHabitScheduledOnDate(currentHabit, item.date);
+                    const isDone = completions.some(
+                      (c) => c.habit_id === currentHabit.id && c.completion_date === item.key
+                    );
+                    const isCurrentToday = item.key === todayKey;
+                    const isPast = item.key < todayKey;
+                    const isMissed = item.isCurrentMonth && !isDone && isScheduled && isPast;
+
+                    const textColor = !item.isCurrentMonth
+                      ? isDark
+                        ? '#475569'
+                        : '#94A3B8'
+                      : isDone || isMissed
+                      ? '#FFFFFF'
+                      : isCurrentToday
+                      ? isDark
+                        ? '#FFFFFF'
+                        : '#7C5CFF'
+                      : isDark
+                      ? '#FFFFFF'
+                      : '#0F172A';
+
+                    return (
+                      <TouchableOpacity
+                        key={item.key}
+                        style={[
+                          styles.calNode,
+                          !item.isCurrentMonth && {
+                            backgroundColor: 'transparent',
+                          },
+                          item.isCurrentMonth && isDone && styles.nodeCompleted,
+                          item.isCurrentMonth && isMissed && styles.nodeMissed,
+                          isCurrentToday && !isDone && !isMissed && [
+                            styles.nodeToday,
+                            {
+                              borderColor: '#7C5CFF',
+                              backgroundColor: isDark ? '#1C273C' : '#F5F3FF',
+                            },
+                          ],
+                          item.isCurrentMonth &&
+                            !isDone &&
+                            !isMissed &&
+                            !isCurrentToday && {
+                              backgroundColor: isDark ? '#1C273C' : '#F1F5F9',
+                            },
+                        ]}
+                        onPress={() => toggleCompletion(currentHabit.id, item.key)}
+                      >
+                        <Text
+                          style={[
+                            styles.calNodeText,
+                            {
+                              color: textColor,
+                              fontWeight:
+                                isDone || isMissed || isCurrentToday ? '800' : '600',
+                            },
+                          ]}
+                        >
+                          {item.dayNumber}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+          )}
+        </>
+      )}
+      </>
       )}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
-          <div className={`w-full max-w-sm p-5 rounded-2xl border ${isDark ? 'bg-[#162032] border-slate-700 text-white' : 'bg-white border-slate-200 text-neutral-900'}`}>
-            <div className="flex items-center gap-2 text-rose-500 mb-2">
-              <AlertTriangle className="w-5 h-5" />
-              <h4 className="font-bold text-sm">Delete Habit?</h4>
-            </div>
-            <p className="text-xs text-neutral-400 mb-4">
-              This will delete "{currentHabit.name}" and all of its logged history. This cannot be undone.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className={`flex-1 py-2 rounded-xl text-xs font-bold ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  deleteHabit(currentHabit.id);
-                  setShowDeleteConfirm(false);
+      {/* Options Menu Modal */}
+      {currentHabit && (
+        <Modal visible={showOptionsMenu} transparent animationType="fade">
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowOptionsMenu(false)}
+          >
+            <View
+              style={[
+                styles.modalBox,
+                { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.modalItem}
+                onPress={() => {
+                  setShowOptionsMenu(false);
+                  handleStartEdit();
                 }}
-                className="flex-1 py-2 bg-rose-500 text-white rounded-xl text-xs font-bold"
               >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+                <Edit3 size={18} color="#38BDF8" />
+                <Text style={[styles.modalItemText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                  Edit Habit
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalItem}
+                onPress={() => {
+                  setShowOptionsMenu(false);
+                  if (isPaused) resumeHabit(currentHabit.id);
+                  else pauseHabit(currentHabit.id);
+                }}
+              >
+                {isPaused ? <Play size={18} color="#34D399" /> : <Pause size={18} color="#FBBF24" />}
+                <Text style={[styles.modalItemText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                  {isPaused ? 'Resume Habit' : 'Pause Habit'}
+                </Text>
+              </TouchableOpacity>
+
+              {isArchived ? (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setShowOptionsMenu(false);
+                    unarchiveHabit(currentHabit.id);
+                  }}
+                >
+                  <ArchiveRestore size={18} color="#10B981" />
+                  <Text style={[styles.modalItemText, { color: '#10B981' }]}>
+                    Restore / Unarchive Habit
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => {
+                    setShowOptionsMenu(false);
+                    archiveHabit(currentHabit.id);
+                  }}
+                >
+                  <Archive size={18} color="#C084FC" />
+                  <Text style={[styles.modalItemText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
+                    Archive Habit
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.modalItem}
+                onPress={() => {
+                  setShowOptionsMenu(false);
+                  deleteHabit(currentHabit.id);
+                }}
+              >
+                <Trash2 size={18} color="#F43F5E" />
+                <Text style={[styles.modalItemText, { color: '#F43F5E' }]}>
+                  Delete Habit
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       )}
-    </div>
+
+      {/* Edit Habit Modal */}
+      <Modal visible={isEditing} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.editModalBox,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.editHeader}>
+              <Text style={[styles.modalBoxTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                Edit Habit
+              </Text>
+              <TouchableOpacity onPress={() => setIsEditing(false)}>
+                <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                Habit Name
+              </Text>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
+                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                  },
+                ]}
+                value={editName}
+                onChangeText={setEditName}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                Description
+              </Text>
+              <TextInput
+                style={[
+                  styles.textInput,
+                  {
+                    backgroundColor: isDark ? '#0F172A' : '#F8FAFC',
+                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                  },
+                ]}
+                value={editDesc}
+                onChangeText={setEditDesc}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveEdit}>
+              <Text style={styles.saveBtnText}>Save Changes</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 40,
+  },
+  topHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  headerIconButton: {
+    padding: 6,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    borderRadius: 14,
+    padding: 4,
+    marginHorizontal: 16,
+    marginBottom: 14,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  filterTabActive: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  filterTabText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  archivedSection: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  archivedList: {
+    gap: 10,
+  },
+  archivedCard: {
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 12,
+  },
+  archivedCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  archivedIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  archivedName: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  archivedDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  archivedBadge: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  archivedBadgeText: {
+    color: '#38BDF8',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  archivedActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(148, 163, 184, 0.15)',
+    paddingTop: 10,
+  },
+  unarchiveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  unarchiveBtnText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deleteArchivedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  deleteArchivedBtnText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  horizontalSelector: {
+    paddingHorizontal: 16,
+    gap: 10,
+    paddingVertical: 10,
+  },
+  habitPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  pillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  habitPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  heroSection: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginTop: 12,
+  },
+  heroIconBox: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 8,
+    marginBottom: 12,
+  },
+  heroHabitName: {
+    fontSize: 24,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  heroHabitDesc: {
+    fontSize: 13,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 20,
+    width: '100%',
+  },
+  statBox: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    justifyContent: 'space-between',
+    minHeight: 85,
+  },
+  statValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  currentStreakValue: {
+    color: '#FF8A00',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 8,
+  },
+  calendarCard: {
+    width: '100%',
+    marginTop: 16,
+    padding: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+  },
+  calHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  calCardTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  calMonthText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  calNavArrows: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  arrowBtn: {
+    padding: 6,
+  },
+  dayLabelsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 10,
+  },
+  dayLabelText: {
+    fontSize: 11,
+    fontWeight: '800',
+    width: 38,
+    textAlign: 'center',
+  },
+  calGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-around',
+    gap: 6,
+  },
+  calNodePlaceholder: {
+    width: 38,
+    height: 38,
+  },
+  calNode: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nodeCompleted: {
+    backgroundColor: '#22D3A8',
+  },
+  nodeMissed: {
+    backgroundColor: '#FF4D6D',
+    shadowColor: '#FF4D6D',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  nodeToday: {
+    borderWidth: 2.5,
+    backgroundColor: '#131C2E',
+  },
+  nodeInactiveMonth: {
+    opacity: 0.25,
+  },
+  calNodeText: {
+    fontSize: 13,
+  },
+  emptyBox: {
+    marginHorizontal: 20,
+    marginTop: 24,
+    padding: 24,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  emptyActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 18,
+  },
+  emptyAddBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  emptyAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  emptyTplBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  emptyTplBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalBox: {
+    width: '100%',
+    maxWidth: 280,
+    borderRadius: 20,
+    padding: 12,
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+  },
+  modalItemText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  editModalBox: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 24,
+    padding: 20,
+    gap: 14,
+  },
+  editHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalBoxTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+  },
+  saveBtn: {
+    backgroundColor: '#7C5CFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 14,
+    marginTop: 6,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+});

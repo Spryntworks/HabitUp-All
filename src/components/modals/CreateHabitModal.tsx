@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import {
+  View,
+  Text,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  TextInput,
+  Switch,
+  Platform,
+  StyleSheet,
+} from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import {
   HABIT_COLORS,
@@ -9,7 +19,8 @@ import {
 } from '../../constants/templates';
 import { FrequencyType, QuickStartTemplate } from '../../types';
 import { IconRenderer } from '../common/IconRenderer';
-import { ArrowLeft, Sparkles, Clock, Calendar, Check, X, Bell } from 'lucide-react';
+import { formatTo12Hour } from '../../utils/streakCalculator';
+import { ArrowLeft, Check, X, Bell, Sparkles, Clock } from 'lucide-react-native';
 
 export const CreateHabitModal: React.FC = () => {
   const { isCreateModalOpen, setIsCreateModalOpen, createHabit, theme } = useHabit();
@@ -17,16 +28,41 @@ export const CreateHabitModal: React.FC = () => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('Dumbbell');
-  const [selectedColor, setSelectedColor] = useState('#FF6B6B');
+  const [selectedColor, setSelectedColor] = useState('#FF5A79');
   const [frequencyType, setFrequencyType] = useState<FrequencyType>('daily');
   const [scheduledDays, setScheduledDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [reminderEnabled, setReminderEnabled] = useState<boolean>(true);
-  const [reminderTime, setReminderTime] = useState<string>('08:00');
+  const [reminderEnabled, setReminderEnabled] = useState(true);
+  const [reminderHour, setReminderHour] = useState('08');
+  const [reminderMinute, setReminderMinute] = useState('00');
+  const [reminderPeriod, setReminderPeriod] = useState<'AM' | 'PM'>('AM');
+  const [reminderTime, setReminderTime] = useState('08:00');
   const [activeTab, setActiveTab] = useState<'custom' | 'templates'>('custom');
 
   const isDark = theme === 'dark';
 
   if (!isCreateModalOpen) return null;
+
+  const updateTime12 = (h: string, m: string, p: 'AM' | 'PM') => {
+    setReminderHour(h);
+    setReminderMinute(m);
+    setReminderPeriod(p);
+
+    let hNum = parseInt(h || '8', 10);
+    if (isNaN(hNum) || hNum < 1) hNum = 1;
+    if (hNum > 12) hNum = 12;
+    let mNum = parseInt(m || '0', 10);
+    if (isNaN(mNum) || mNum < 0) mNum = 0;
+    if (mNum > 59) mNum = 59;
+
+    let h24 = hNum;
+    if (p === 'AM') {
+      if (hNum === 12) h24 = 0;
+    } else {
+      if (hNum !== 12) h24 = hNum + 12;
+    }
+    const final24 = `${String(h24).padStart(2, '0')}:${String(mNum).padStart(2, '0')}`;
+    setReminderTime(final24);
+  };
 
   const handleApplyTemplate = (tpl: QuickStartTemplate) => {
     setName(tpl.name);
@@ -35,7 +71,16 @@ export const CreateHabitModal: React.FC = () => {
     setSelectedColor(tpl.color);
     setFrequencyType(tpl.frequency_type);
     setScheduledDays(tpl.scheduled_days);
-    setReminderTime(tpl.defaultTime);
+    
+    // Parse defaultTime (24h) to 12h
+    const tParts = (tpl.defaultTime || '08:00').split(':');
+    let h = parseInt(tParts[0] || '8', 10);
+    const m = (tParts[1] || '00').padStart(2, '0');
+    const p: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h === 0) h = 12;
+    updateTime12(String(h).padStart(2, '0'), m, p);
+
     setReminderEnabled(true);
     setActiveTab('custom');
   };
@@ -50,9 +95,24 @@ export const CreateHabitModal: React.FC = () => {
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = () => {
     if (!name.trim()) return;
+
+    // Directly compute 24-hour time from current 12-hour values
+    let hNum = parseInt(reminderHour || '8', 10);
+    if (isNaN(hNum) || hNum < 1) hNum = 1;
+    if (hNum > 12) hNum = 12;
+    let mNum = parseInt(reminderMinute || '0', 10);
+    if (isNaN(mNum) || mNum < 0) mNum = 0;
+    if (mNum > 59) mNum = 59;
+
+    let h24 = hNum;
+    if (reminderPeriod === 'AM') {
+      if (hNum === 12) h24 = 0;
+    } else {
+      if (hNum !== 12) h24 = hNum + 12;
+    }
+    const computedTime = `${String(h24).padStart(2, '0')}:${String(mNum).padStart(2, '0')}`;
 
     createHabit({
       name: name.trim(),
@@ -62,387 +122,829 @@ export const CreateHabitModal: React.FC = () => {
       frequency_type: frequencyType,
       scheduled_days: frequencyType === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : scheduledDays,
       reminder_enabled: reminderEnabled,
-      reminder_time: reminderEnabled ? reminderTime : undefined,
+      reminder_time: reminderEnabled ? computedTime : undefined,
     });
 
     setIsCreateModalOpen(false);
     setName('');
     setDescription('');
     setSelectedIcon('Dumbbell');
-    setSelectedColor('#FF6B6B');
+    setSelectedColor('#FF5A79');
     setFrequencyType('daily');
+    setReminderHour('08');
+    setReminderMinute('00');
+    setReminderPeriod('AM');
+    setReminderTime('08:00');
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm">
-      <motion.div
-        initial={{ y: '100%', opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        className={`w-full max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col border ${
-          isDark
-            ? 'bg-[#111827] border-neutral-800 text-white'
-            : 'bg-white border-neutral-200 text-neutral-900'
-        }`}
-      >
-        {/* Top Header matching Image 2 */}
-        <div className={`px-5 py-4 flex items-center justify-between border-b ${isDark ? 'border-neutral-800' : 'border-neutral-100'}`}>
-          <button
-            type="button"
-            onClick={() => setIsCreateModalOpen(false)}
-            className={`p-1.5 rounded-full transition-colors ${
-              isDark ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
-            }`}
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+    <Modal visible={isCreateModalOpen} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: isDark ? '#111827' : '#FFFFFF' },
+          ]}
+        >
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: isDark ? '#1F2937' : '#F1F5F9' }]}>
+            <TouchableOpacity
+              onPress={() => setIsCreateModalOpen(false)}
+              style={[
+                styles.closeBtn,
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+              ]}
+              activeOpacity={0.7}
+            >
+              <X size={18} color={isDark ? '#FFFFFF' : '#0F172A'} strokeWidth={2.5} />
+            </TouchableOpacity>
+            <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              New Habit
+            </Text>
+            <View style={{ width: 32 }} />
+          </View>
 
-          <h2 className="text-base font-bold tracking-tight">Create Habit</h2>
+          {/* Sub Tabs: Custom vs Templates */}
+          <View style={[styles.tabBar, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+            <TouchableOpacity
+              style={[
+                styles.tabBtn,
+                activeTab === 'custom' && { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' },
+              ]}
+              onPress={() => setActiveTab('custom')}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'custom' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                ]}
+              >
+                Custom Habit
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabBtn,
+                activeTab === 'templates' && { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' },
+              ]}
+              onPress={() => setActiveTab('templates')}
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  { color: activeTab === 'templates' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                ]}
+              >
+                ⚡ Quick Templates
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-          <button
-            type="button"
-            onClick={handleSave}
-            className="text-sm font-bold text-[#7C5CFF] hover:text-[#6C4BFA] px-2 py-1 transition-colors"
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.bodyScroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            Save
-          </button>
-        </div>
-
-        {/* Tab switcher: Custom vs Templates */}
-        <div className={`px-5 pt-3 pb-1 flex gap-2 border-b ${isDark ? 'border-neutral-800/60' : 'border-neutral-100'}`}>
-          <button
-            type="button"
-            onClick={() => setActiveTab('custom')}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              activeTab === 'custom'
-                ? isDark
-                  ? 'bg-neutral-800 text-white border border-neutral-700'
-                  : 'bg-neutral-100 text-neutral-900 border border-neutral-200'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            Custom Habit
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('templates')}
-            className={`flex-1 py-1.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-              activeTab === 'templates'
-                ? 'bg-[#7C5CFF]/20 text-[#7C5CFF] border border-[#7C5CFF]/40'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#7C5CFF]" />
-            Templates
-          </button>
-        </div>
-
-        {/* Modal Scrollable Body */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1">
-          {activeTab === 'templates' ? (
-            <div className="space-y-2.5">
-              <p className={`text-xs ${isDark ? 'text-neutral-400' : 'text-neutral-500'} mb-2`}>
-                Choose a pre-configured template to jumpstart your daily routine:
-              </p>
-              <div className="grid grid-cols-1 gap-2">
+            {activeTab === 'templates' ? (
+              <View style={styles.templateList}>
                 {QUICK_START_TEMPLATES.map((tpl) => (
-                  <button
+                  <TouchableOpacity
                     key={tpl.id}
-                    type="button"
-                    onClick={() => handleApplyTemplate(tpl)}
-                    className={`flex items-center gap-3 p-3 rounded-2xl border transition-all text-left group ${
-                      isDark
-                        ? 'bg-[#1F2937] hover:bg-neutral-750 border-neutral-800'
-                        : 'bg-neutral-50 hover:bg-neutral-100 border-neutral-200'
-                    }`}
+                    style={[
+                      styles.templateCard,
+                      {
+                        backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                        borderColor: isDark ? '#334155' : '#E2E8F0',
+                      },
+                    ]}
+                    onPress={() => handleApplyTemplate(tpl)}
                   >
-                    <div
-                      className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-sm"
-                      style={{ backgroundColor: tpl.color }}
-                    >
-                      <IconRenderer name={tpl.icon} className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className={`font-bold text-sm ${isDark ? 'text-white' : 'text-neutral-900'} group-hover:text-[#7C5CFF] transition-colors`}>
-                          {tpl.name}
-                        </span>
-                        <span className={`text-[11px] font-semibold flex items-center gap-1 ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                          <Clock className="w-3 h-3" /> {tpl.defaultTime}
-                        </span>
-                      </div>
-                      <p className={`text-xs truncate mt-0.5 ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                    <View style={[styles.tplIconCircle, { backgroundColor: tpl.color }]}>
+                      <IconRenderer name={tpl.icon} size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.tplName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                        {tpl.name}
+                      </Text>
+                      <Text style={[styles.tplDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
                         {tpl.description}
-                      </p>
-                    </div>
-                  </button>
+                      </Text>
+                    </View>
+                    <Sparkles size={16} color="#7C5CFF" />
+                  </TouchableOpacity>
                 ))}
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={handleSave} className="space-y-4">
-              {/* Preview Icon with Sparkles matching Image 2 */}
-              <div className="flex flex-col items-center justify-center py-2 relative">
-                <div className="relative">
-                  {/* Decorative sparkles around the icon */}
-                  <span className="absolute -top-2 -left-3 text-amber-400 text-sm animate-pulse">✦</span>
-                  <span className="absolute -bottom-1 -right-3 text-amber-300 text-xs animate-pulse">✨</span>
-                  <span className="absolute top-1 -right-4 text-purple-400 text-xs">✦</span>
-                  
-                  <div
-                    className="w-16 h-16 rounded-3xl flex items-center justify-center text-white shadow-xl transition-transform hover:scale-105"
-                    style={{
-                      backgroundColor: selectedColor,
-                      boxShadow: `0 8px 24px ${selectedColor}40`,
-                    }}
-                  >
-                    <IconRenderer name={selectedIcon} className="w-8 h-8 text-white" />
-                  </div>
-                </div>
-              </div>
+              </View>
+            ) : (
+              <View style={styles.form}>
+                {/* Habit Name */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Habit Name
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      {
+                        backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+                        borderColor: isDark ? '#374151' : '#CBD5E1',
+                        color: isDark ? '#FFFFFF' : '#0F172A',
+                      },
+                    ]}
+                    placeholder="e.g. Read 10 pages"
+                    placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                    value={name}
+                    onChangeText={setName}
+                  />
+                </View>
 
-              {/* Habit Name */}
-              <div>
-                <label className={`block text-xs font-semibold mb-1.5 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  Habit Name
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Morning Workout"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#7C5CFF] border transition-all ${
-                    isDark
-                      ? 'bg-[#1F2937] border-neutral-750 text-white placeholder-neutral-500'
-                      : 'bg-neutral-50 border-neutral-200 text-neutral-900 placeholder-neutral-400'
-                  }`}
-                />
-              </div>
+                {/* Description */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Description / Motivation
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.textInput,
+                      {
+                        backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+                        borderColor: isDark ? '#374151' : '#CBD5E1',
+                        color: isDark ? '#FFFFFF' : '#0F172A',
+                      },
+                    ]}
+                    placeholder="e.g. Expand knowledge before bedtime"
+                    placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+                    value={description}
+                    onChangeText={setDescription}
+                  />
+                </View>
 
-              {/* Description (optional) */}
-              <div>
-                <label className={`block text-xs font-semibold mb-1.5 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  Description (optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="30 minutes of exercise"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-2xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#7C5CFF] border transition-all ${
-                    isDark
-                      ? 'bg-[#1F2937] border-neutral-750 text-white placeholder-neutral-500'
-                      : 'bg-neutral-50 border-neutral-200 text-neutral-900 placeholder-neutral-400'
-                  }`}
-                />
-              </div>
-
-              {/* Choose Icon */}
-              <div>
-                <label className={`block text-xs font-semibold mb-2 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  Choose Icon
-                </label>
-                <div className="flex items-center gap-2 overflow-x-auto py-1.5 scrollbar-none">
-                  {AVAILABLE_ICONS.map((iconName) => (
-                    <button
-                      key={iconName}
-                      type="button"
-                      onClick={() => setSelectedIcon(iconName)}
-                      className={`w-11 h-11 rounded-2xl shrink-0 flex items-center justify-center transition-all ${
-                        selectedIcon === iconName
-                          ? 'bg-[#7C5CFF] text-white shadow-md shadow-indigo-500/30 scale-105'
-                          : isDark
-                          ? 'bg-[#1F2937] text-neutral-400 hover:text-white border border-neutral-750'
-                          : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900 border border-neutral-200'
-                      }`}
-                    >
-                      <IconRenderer name={iconName} className="w-5 h-5" />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Choose Color */}
-              <div>
-                <label className={`block text-xs font-semibold mb-2 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  Choose Color
-                </label>
-                <div className="flex items-center gap-3 overflow-x-auto py-1">
-                  {HABIT_COLORS.map((c) => (
-                    <button
-                      key={c.hex}
-                      type="button"
-                      onClick={() => setSelectedColor(c.hex)}
-                      className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center transition-transform ${
-                        selectedColor === c.hex
-                          ? 'ring-2 ring-white ring-offset-2 ring-offset-neutral-900 scale-110'
-                          : 'hover:scale-105 opacity-85 hover:opacity-100'
-                      }`}
-                      style={{ backgroundColor: c.hex }}
-                    >
-                      {selectedColor === c.hex && <Check className="w-4 h-4 text-white stroke-[3]" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Schedule */}
-              <div>
-                <label className={`block text-xs font-semibold mb-2 ${isDark ? 'text-neutral-300' : 'text-neutral-700'}`}>
-                  Schedule
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrequencyType('daily');
-                      setScheduledDays([0, 1, 2, 3, 4, 5, 6]);
-                    }}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                      frequencyType === 'daily'
-                        ? 'bg-[#7C5CFF] text-white shadow-md shadow-indigo-500/30'
-                        : isDark
-                        ? 'bg-[#1F2937] text-neutral-400 hover:text-white border border-neutral-750'
-                        : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900 border border-neutral-200'
-                    }`}
-                  >
-                    Every Day
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFrequencyType('custom_days');
-                      setScheduledDays([0, 1, 2, 3, 4]); // Mon-Fri
-                    }}
-                    className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                      frequencyType === 'custom_days'
-                        ? 'bg-[#7C5CFF] text-white shadow-md shadow-indigo-500/30'
-                        : isDark
-                        ? 'bg-[#1F2937] text-neutral-400 hover:text-white border border-neutral-750'
-                        : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900 border border-neutral-200'
-                    }`}
-                  >
-                    Specific Days
-                  </button>
-                </div>
-
-                {frequencyType === 'custom_days' && (
-                  <div className="grid grid-cols-7 gap-1 mt-2.5">
-                    {DAYS_OF_WEEK.map((d) => {
-                      const isSelected = scheduledDays.includes(d.index);
+                {/* Color Palette */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Accent Color
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colorRow}>
+                    {HABIT_COLORS.map((c) => {
+                      const isSelected = c.hex === selectedColor;
                       return (
-                        <button
-                          key={d.index}
-                          type="button"
-                          onClick={() => toggleDay(d.index)}
-                          className={`py-2 rounded-xl text-xs font-bold transition-all ${
-                            isSelected
-                              ? 'bg-[#7C5CFF] text-white shadow-sm'
-                              : isDark
-                              ? 'bg-[#1F2937] text-neutral-400 hover:text-white'
-                              : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-                          }`}
+                        <TouchableOpacity
+                          key={c.hex}
+                          style={[
+                            styles.colorCircle,
+                            { backgroundColor: c.hex },
+                            isSelected && styles.colorSelected,
+                          ]}
+                          onPress={() => setSelectedColor(c.hex)}
                         >
-                          {d.short}
-                        </button>
+                          {isSelected && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+                        </TouchableOpacity>
                       );
                     })}
-                  </div>
-                )}
-              </div>
+                  </ScrollView>
+                </View>
 
-              {/* Reminder Time & Notification */}
-              <div className={`p-3.5 rounded-2xl border ${isDark ? 'bg-[#1F2937] border-neutral-750' : 'bg-neutral-50 border-neutral-200'}`}>
-                <div className="flex items-center justify-between mb-2.5">
-                  <div className="flex items-center gap-2">
-                    <Bell className="w-4 h-4 text-[#7C5CFF]" />
-                    <div>
-                      <span className={`text-xs font-bold block ${isDark ? 'text-white' : 'text-neutral-900'}`}>
-                        {name.trim()
-                          ? (name.trim().toLowerCase().endsWith('time') ? name.trim() : `${name.trim()} Time`)
-                          : 'Scheduled Habit Time'}
-                      </span>
-                      <span className={`text-[10px] ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                        Receive alert & chime at your chosen time
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setReminderEnabled(!reminderEnabled)}
-                    className={`w-10 h-6 rounded-full transition-colors relative p-0.5 ${
-                      reminderEnabled ? 'bg-[#7C5CFF]' : 'bg-neutral-600'
-                    }`}
-                  >
-                    <div
-                      className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                        reminderEnabled ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </div>
+                {/* Icon Grid */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Icon
+                  </Text>
+                  <View style={styles.iconGrid}>
+                    {AVAILABLE_ICONS.slice(0, 16).map((iconName) => {
+                      const isSelected = iconName === selectedIcon;
+                      return (
+                        <TouchableOpacity
+                          key={iconName}
+                          style={[
+                            styles.iconCell,
+                            isSelected && {
+                              backgroundColor: selectedColor,
+                            },
+                            !isSelected && {
+                              backgroundColor: isDark ? '#1F2937' : '#F1F5F9',
+                            },
+                          ]}
+                          onPress={() => setSelectedIcon(iconName)}
+                        >
+                          <IconRenderer
+                            name={iconName}
+                            size={18}
+                            color={isSelected ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B'}
+                          />
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                {/* Frequency */}
+                <View style={styles.fieldGroup}>
+                  <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Frequency
+                  </Text>
+                  <View style={styles.freqRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.freqBtn,
+                        frequencyType === 'daily' && { backgroundColor: '#7C5CFF' },
+                        frequencyType !== 'daily' && { backgroundColor: isDark ? '#1F2937' : '#F1F5F9' },
+                      ]}
+                      onPress={() => setFrequencyType('daily')}
+                    >
+                      <Text
+                        style={[
+                          styles.freqBtnText,
+                          { color: frequencyType === 'daily' ? '#FFFFFF' : isDark ? '#CBD5E1' : '#334155' },
+                        ]}
+                      >
+                        Every Day
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.freqBtn,
+                        frequencyType === 'custom_days' && { backgroundColor: '#7C5CFF' },
+                        frequencyType !== 'custom_days' && { backgroundColor: isDark ? '#1F2937' : '#F1F5F9' },
+                      ]}
+                      onPress={() => setFrequencyType('custom_days')}
+                    >
+                      <Text
+                        style={[
+                          styles.freqBtnText,
+                          { color: frequencyType === 'custom_days' ? '#FFFFFF' : isDark ? '#CBD5E1' : '#334155' },
+                        ]}
+                      >
+                        Specific Days
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {frequencyType === 'custom_days' && (
+                    <View style={styles.daysRow}>
+                      {DAYS_OF_WEEK.map((day) => {
+                        const isDaySelected = scheduledDays.includes(day.index);
+                        return (
+                          <TouchableOpacity
+                            key={day.index}
+                            style={[
+                              styles.dayChip,
+                              isDaySelected && { backgroundColor: selectedColor },
+                              !isDaySelected && { backgroundColor: isDark ? '#1F2937' : '#F1F5F9' },
+                            ]}
+                            onPress={() => toggleDay(day.index)}
+                          >
+                            <Text
+                              style={[
+                                styles.dayChipText,
+                                { color: isDaySelected ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B' },
+                              ]}
+                            >
+                              {day.short}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+
+                {/* Reminder Settings */}
+                <View style={styles.reminderRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Bell size={18} color="#7C5CFF" />
+                    <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                      Daily Reminder
+                    </Text>
+                  </View>
+                  <Switch
+                    value={reminderEnabled}
+                    onValueChange={setReminderEnabled}
+                    trackColor={{ false: '#CBD5E1', true: '#7C5CFF' }}
+                    thumbColor="#FFFFFF"
+                  />
+                </View>
 
                 {reminderEnabled && (
-                  <div className="space-y-2 pt-1 border-t border-neutral-700/40">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-purple-400 shrink-0" />
-                      <input
-                        type="time"
-                        value={reminderTime}
-                        onChange={(e) => setReminderTime(e.target.value)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-[#7C5CFF] ${
-                          isDark
-                            ? 'bg-[#111827] border-neutral-700 text-white'
-                            : 'bg-white border-neutral-300 text-neutral-900'
-                        }`}
-                      />
-                      <span className={`text-[11px] ${isDark ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                        (Local time)
-                      </span>
-                    </div>
+                  <View
+                    style={[
+                      styles.timeSection,
+                      {
+                        backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+                        borderColor: isDark ? '#374151' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    {/* Header Label */}
+                    <View style={styles.timeHeaderRow}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                        <Clock size={16} color="#7C5CFF" />
+                        <Text style={[styles.timeLabel, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                          Reminder Time
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.timePreviewBadge,
+                          { backgroundColor: isDark ? '#0F172A' : '#EDE9FE' },
+                        ]}
+                      >
+                        <Text style={styles.timePreviewBadgeText}>
+                          {reminderHour || '08'}:{reminderMinute || '00'} {reminderPeriod}
+                        </Text>
+                      </View>
+                    </View>
 
-                    {/* Quick Time Presets */}
-                    <div className="flex items-center gap-1.5 pt-1">
-                      {[
-                        { label: '07:00', name: 'Morning' },
-                        { label: '12:00', name: 'Noon' },
-                        { label: '18:00', name: 'Evening' },
-                        { label: '21:00', name: 'Night' },
-                      ].map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => setReminderTime(preset.label)}
-                          className={`flex-1 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-                            reminderTime === preset.label
-                              ? 'bg-[#7C5CFF] text-white border-[#7C5CFF]'
-                              : isDark
-                              ? 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:text-white'
-                              : 'bg-white text-neutral-600 border-neutral-200 hover:text-neutral-900'
-                          }`}
+                    {/* Interactive 12-Hour Time Picker & AM/PM Switch */}
+                    <View style={styles.timePickerRow}>
+                      {/* Hour Input Box */}
+                      <View style={styles.timeInputUnitBox}>
+                        <Text style={[styles.timeUnitLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                          Hour
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.timeUnitInput,
+                            {
+                              backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                              borderColor: isDark ? '#4B5563' : '#CBD5E1',
+                              color: isDark ? '#FFFFFF' : '#0F172A',
+                            },
+                          ]}
+                          value={reminderHour}
+                          onChangeText={(val) => {
+                            const num = val.replace(/[^0-9]/g, '');
+                            if (num.length <= 2) {
+                              updateTime12(num, reminderMinute, reminderPeriod);
+                            }
+                          }}
+                          onBlur={() => {
+                            let h = parseInt(reminderHour || '8', 10);
+                            if (isNaN(h) || h < 1) h = 1;
+                            if (h > 12) h = 12;
+                            updateTime12(String(h).padStart(2, '0'), reminderMinute, reminderPeriod);
+                          }}
+                          placeholder="08"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          maxLength={2}
+                        />
+                      </View>
+
+                      <Text style={[styles.timeColonText, { color: isDark ? '#94A3B8' : '#64748B' }]}>:</Text>
+
+                      {/* Minute Input Box */}
+                      <View style={styles.timeInputUnitBox}>
+                        <Text style={[styles.timeUnitLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                          Min
+                        </Text>
+                        <TextInput
+                          style={[
+                            styles.timeUnitInput,
+                            {
+                              backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                              borderColor: isDark ? '#4B5563' : '#CBD5E1',
+                              color: isDark ? '#FFFFFF' : '#0F172A',
+                            },
+                          ]}
+                          value={reminderMinute}
+                          onChangeText={(val) => {
+                            const num = val.replace(/[^0-9]/g, '');
+                            if (num.length <= 2) {
+                              updateTime12(reminderHour, num, reminderPeriod);
+                            }
+                          }}
+                          onBlur={() => {
+                            let m = parseInt(reminderMinute || '0', 10);
+                            if (isNaN(m) || m < 0) m = 0;
+                            if (m > 59) m = 59;
+                            updateTime12(reminderHour, String(m).padStart(2, '0'), reminderPeriod);
+                          }}
+                          placeholder="00"
+                          placeholderTextColor="#94A3B8"
+                          keyboardType="number-pad"
+                          maxLength={2}
+                        />
+                      </View>
+
+                      {/* AM / PM Segmented Selector */}
+                      <View
+                        style={[
+                          styles.periodSelectorBox,
+                          {
+                            backgroundColor: isDark ? '#0F172A' : '#E2E8F0',
+                            borderColor: isDark ? '#334155' : '#CBD5E1',
+                          },
+                        ]}
+                      >
+                        <TouchableOpacity
+                          style={[
+                            styles.periodBtn,
+                            reminderPeriod === 'AM' && styles.periodBtnActive,
+                          ]}
+                          onPress={() => updateTime12(reminderHour, reminderMinute, 'AM')}
+                          activeOpacity={0.8}
                         >
-                          {preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+                          <Text
+                            style={[
+                              styles.periodBtnText,
+                              {
+                                color: reminderPeriod === 'AM' ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B',
+                                fontWeight: reminderPeriod === 'AM' ? '900' : '600',
+                              },
+                            ]}
+                          >
+                            AM
+                          </Text>
+                        </TouchableOpacity>
 
-              {/* Bottom CTA Button */}
-              <button
-                type="submit"
-                className="w-full py-3.5 rounded-2xl bg-[#7C5CFF] hover:bg-[#6C4BFA] text-white font-bold text-sm shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 mt-4"
+                        <TouchableOpacity
+                          style={[
+                            styles.periodBtn,
+                            reminderPeriod === 'PM' && styles.periodBtnActive,
+                          ]}
+                          onPress={() => updateTime12(reminderHour, reminderMinute, 'PM')}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.periodBtnText,
+                              {
+                                color: reminderPeriod === 'PM' ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B',
+                                fontWeight: reminderPeriod === 'PM' ? '900' : '600',
+                              },
+                            ]}
+                          >
+                            PM
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {/* Quick Presets */}
+                    <View style={styles.timePresetsGrid}>
+                      {[
+                        { label: '🌅 7:00 AM Morning', h: '07', m: '00', p: 'AM' as const },
+                        { label: '☀️ 8:30 AM Daytime', h: '08', m: '30', p: 'AM' as const },
+                        { label: '🌆 6:00 PM Evening', h: '06', m: '00', p: 'PM' as const },
+                        { label: '🌙 9:00 PM Night', h: '09', m: '00', p: 'PM' as const },
+                      ].map((preset) => {
+                        const isSelected =
+                          reminderHour === preset.h &&
+                          reminderMinute === preset.m &&
+                          reminderPeriod === preset.p;
+                        return (
+                          <TouchableOpacity
+                            key={preset.label}
+                            style={[
+                              styles.timePresetChip,
+                              {
+                                backgroundColor: isSelected
+                                  ? '#7C5CFF'
+                                  : isDark
+                                  ? '#111827'
+                                  : '#FFFFFF',
+                                borderColor: isSelected
+                                  ? '#7C5CFF'
+                                  : isDark
+                                  ? '#374151'
+                                  : '#E2E8F0',
+                              },
+                            ]}
+                            onPress={() => updateTime12(preset.h, preset.m, preset.p)}
+                          >
+                            <Text
+                              style={[
+                                styles.timePresetText,
+                                {
+                                  color: isSelected
+                                    ? '#FFFFFF'
+                                    : isDark
+                                    ? '#CBD5E1'
+                                    : '#475569',
+                                  fontWeight: isSelected ? '800' : '600',
+                                },
+                              ]}
+                            >
+                              {preset.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Footer Submit */}
+          {activeTab === 'custom' && (
+            <View style={[styles.footer, { borderTopColor: isDark ? '#1F2937' : '#F1F5F9' }]}>
+              <TouchableOpacity
+                style={[
+                  styles.saveBtn,
+                  { backgroundColor: name.trim() ? '#7C5CFF' : isDark ? '#374151' : '#CBD5E1' },
+                ]}
+                onPress={handleSave}
+                disabled={!name.trim()}
               >
-                Create Habit
-              </button>
-            </form>
+                <Text style={styles.saveBtnText}>Create Habit</Text>
+              </TouchableOpacity>
+            </View>
           )}
-        </div>
-      </motion.div>
-    </div>
+        </View>
+      </View>
+    </Modal>
   );
 };
 
+const styles = StyleSheet.create({
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    height: '88%',
+    maxHeight: '92%',
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBar: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 12,
+    padding: 3,
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 10,
+  },
+  tabBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  bodyScroll: {
+    padding: 20,
+    paddingBottom: 30,
+  },
+  form: {
+    gap: 16,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  textInput: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    ...(Platform.OS === 'web'
+      ? {
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+          outlineStyle: 'none',
+        }
+      : {}),
+  } as any,
+  colorRow: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 4,
+  },
+  colorCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  colorSelected: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  iconCell: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freqRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  freqBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  freqBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  daysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  dayChip: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dayChipText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  reminderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  timeSection: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+  },
+  timeHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timeLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  timePreviewBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  timePreviewBadgeText: {
+    color: '#7C5CFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  timePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 4,
+  },
+  timeInputUnitBox: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  timeUnitLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  timeUnitInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    fontSize: 16,
+    fontWeight: '900',
+    width: 60,
+    textAlign: 'center',
+    ...(Platform.OS === 'web'
+      ? {
+          outlineWidth: 0,
+          outlineColor: 'transparent',
+          outlineStyle: 'none',
+        }
+      : {}),
+  } as any,
+  timeColonText: {
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: 16,
+  },
+  periodSelectorBox: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+    marginLeft: 'auto',
+    marginTop: 16,
+    gap: 2,
+  },
+  periodBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  periodBtnActive: {
+    backgroundColor: '#7C5CFF',
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  periodBtnText: {
+    fontSize: 13,
+  },
+  timePresetsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
+  timePresetChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  timePresetText: {
+    fontSize: 11,
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+  },
+  saveBtn: {
+    height: 50,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  templateList: {
+    gap: 10,
+  },
+  templateCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+  },
+  tplIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tplName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  tplDesc: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+});

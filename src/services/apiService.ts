@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Habit,
   HabitCompletion,
@@ -5,6 +6,8 @@ import {
   UserSession,
   SyncMutation,
 } from '../types';
+
+export const BACKEND_BASE_URL = 'https://habitup-backend-v2-production.up.railway.app';
 
 export const getUserIdFromEmail = (email: string): string => {
   const normalized = (email || '').trim().toLowerCase();
@@ -19,21 +22,13 @@ export const createDefaultUserProfile = (name?: string, email?: string, timezone
     id: getUserIdFromEmail(cleanEmail),
     name: cleanName,
     email: cleanEmail,
-    timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    timezone: timezone || 'Asia/Kolkata',
     avatar: '',
     created_at: new Date().toISOString(),
   };
 };
 
-export interface StoredCredentials {
-  email: string;
-  passwordHash: string;
-  name: string;
-  userId: string;
-  timezone?: string;
-}
-
-export interface BackendHabitResponse {
+export interface BackendHabit {
   id: string;
   user_id: string;
   name: string;
@@ -50,18 +45,7 @@ export interface BackendHabitResponse {
   updated_at?: string;
 }
 
-export interface BackendReminderResponse {
-  id: string;
-  habit_id: string;
-  user_id: string;
-  time: string;
-  enabled: boolean;
-  created_at: string;
-  updated_at?: string;
-}
-
-export interface BackendStatsResponse {
-  period: 'month' | 'year';
+export interface BackendStats {
   overall_completion_rate: number;
   total_completions: number;
   habits: Array<{
@@ -73,15 +57,35 @@ export interface BackendStatsResponse {
   }>;
 }
 
+// In-Memory Synchronous Cache layer backing AsyncStorage
+const memoryStore: Record<string, string> = {};
+
 class ApiClient {
-  private currentUserId: string;
+  private currentUserId: string = 'usr_default';
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
+  public readonly baseUrl: string = BACKEND_BASE_URL;
 
   constructor() {
-    this.currentUserId = this.getStorage<string>('habitup_current_user_id', 'usr_default');
-    this.accessToken = this.getStorage<string | null>('habitup_access_token', null);
-    this.refreshToken = this.getStorage<string | null>('habitup_refresh_token', null);
+    this.initAsync();
+  }
+
+  private async initAsync() {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      if (keys && keys.length > 0) {
+        for (const k of keys) {
+          const val = await AsyncStorage.getItem(k);
+          if (val !== null) memoryStore[k] = val;
+        }
+      }
+      const uid = this.getStorage<string>('habitup_current_user_id', 'usr_default');
+      this.currentUserId = uid;
+      this.accessToken = this.getStorage<string | null>('habitup_access_token', null);
+      this.refreshToken = this.getStorage<string | null>('habitup_refresh_token', null);
+    } catch {
+      // ignore
+    }
   }
 
   getCurrentUserId(): string {
@@ -112,17 +116,15 @@ class ApiClient {
   clearTokens(): void {
     this.accessToken = null;
     this.refreshToken = null;
-    try {
-      localStorage.removeItem('habitup_access_token');
-      localStorage.removeItem('habitup_refresh_token');
-    } catch {
-      // ignore
-    }
+    delete memoryStore['habitup_access_token'];
+    delete memoryStore['habitup_refresh_token'];
+    AsyncStorage.removeItem('habitup_access_token').catch(() => {});
+    AsyncStorage.removeItem('habitup_refresh_token').catch(() => {});
   }
 
   private getStorage<T>(key: string, fallback: T): T {
     try {
-      const data = localStorage.getItem(key);
+      const data = memoryStore[key];
       return data ? JSON.parse(data) : fallback;
     } catch {
       return fallback;
@@ -131,14 +133,22 @@ class ApiClient {
 
   private setStorage<T>(key: string, value: T): void {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      const str = JSON.stringify(value);
+      memoryStore[key] = str;
+      AsyncStorage.setItem(key, str).catch(() => {});
     } catch (e) {
-      console.warn('LocalStorage write warning:', e);
+      console.warn('Storage write warning:', e);
     }
   }
 
-  // Common fetch wrapper with Authorization header and automatic token refresh retry
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+  public async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+    const url = endpoint.startsWith('http')
+      ? endpoint
+      : `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {}),
@@ -147,19 +157,20 @@ class ApiClient {
     if (this.accessToken) {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
-    if (this.currentUserId) {
-      headers['x-user-id'] = this.currentUserId;
-    }
 
     try {
-      let res = await fetch(endpoint, { ...options, headers });
+      let res = await fetch(url, { ...options, headers });
 
-      // If token expired, attempt refresh once
-      if (res.status === 401 && this.refreshToken && !endpoint.includes('/auth/refresh') && !endpoint.includes('/auth/login')) {
+      if (
+        res.status === 401 &&
+        this.refreshToken &&
+        !endpoint.includes('/auth/refresh') &&
+        !endpoint.includes('/auth/login')
+      ) {
         const refreshed = await this.refreshAuthTokens();
-        if (refreshed) {
+        if (refreshed && this.accessToken) {
           headers['Authorization'] = `Bearer ${this.accessToken}`;
-          res = await fetch(endpoint, { ...options, headers });
+          res = await fetch(url, { ...options, headers });
         }
       }
 
@@ -168,24 +179,30 @@ class ApiClient {
       const json = isJson ? await res.json() : null;
 
       if (!res.ok) {
+        let extractedError = json?.error || json?.message || json?.detail;
+        if (!extractedError && Array.isArray(json?.errors)) {
+          extractedError = json.errors.map((e: any) => e?.msg || e?.message || String(e)).join(', ');
+        }
+        if (!extractedError && typeof json === 'string') {
+          extractedError = json;
+        }
         return {
           ok: false,
           status: res.status,
-          error: json?.error || `Request failed with status ${res.status}`,
+          error: extractedError || (res.status === 401 ? 'Incorrect email or password.' : `Request failed with status ${res.status}`),
         };
       }
 
       return { ok: true, status: res.status, data: json };
     } catch (err: any) {
-      return { ok: false, status: 0, error: err?.message || 'Network error' };
+      return { ok: false, status: 0, error: err?.message || 'Network connection error' };
     }
   }
 
-  // Token refresh rotation
   async refreshAuthTokens(): Promise<boolean> {
     if (!this.refreshToken) return false;
     try {
-      const res = await fetch('/auth/refresh', {
+      const res = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: this.refreshToken }),
@@ -203,9 +220,8 @@ class ApiClient {
     return false;
   }
 
-  // -------------------------------------------------------------
-  // AUTHENTICATION (Matching Spryntworks/habitup-backend /auth/*)
-  // -------------------------------------------------------------
+  // --- AUTH METHODS ---
+
   async registerUser(
     name: string,
     email: string,
@@ -214,7 +230,7 @@ class ApiClient {
   ): Promise<{ success: boolean; user?: UserProfile; accessToken?: string; error?: string }> {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'User';
-    const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const tz = timezone || 'Asia/Kolkata';
 
     const res = await this.request<{ accessToken: string; refreshToken?: string; user: UserProfile }>('/auth/register', {
       method: 'POST',
@@ -234,7 +250,36 @@ class ApiClient {
       return { success: true, user, accessToken: res.data.accessToken };
     }
 
-    // Fallback registration locally if offline
+    // Check for duplicate account or bad request
+    if (!res.ok) {
+      const err = res.error || '';
+      if (
+        res.status === 409 ||
+        res.status === 400 ||
+        res.status === 422 ||
+        /exist|already|duplicate/i.test(err)
+      ) {
+        return {
+          success: false,
+          error: /exist|already|duplicate/i.test(err)
+            ? err
+            : 'An account with this email already exists. Please sign in instead.',
+        };
+      }
+
+      if (res.status === 0 || res.status >= 500) {
+        return {
+          success: false,
+          error: 'Cannot connect to authentication server. Please check your internet connection.',
+        };
+      }
+
+      return {
+        success: false,
+        error: err || 'Registration failed. Please check your details.',
+      };
+    }
+
     const uid = getUserIdFromEmail(cleanEmail);
     const offlineUser: UserProfile = {
       id: uid,
@@ -251,80 +296,62 @@ class ApiClient {
 
   async loginUser(
     email: string,
-    password: string
+    password?: string
   ): Promise<{ success: boolean; user?: UserProfile; accessToken?: string; error?: string }> {
     const cleanEmail = (email || '').trim().toLowerCase();
-
-    const res = await this.request<{ accessToken: string; refreshToken: string; user: UserProfile }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: cleanEmail, password }),
-    });
-
-    if (res.ok && res.data?.user) {
-      const user = res.data.user;
-      this.setCurrentUserId(user.id);
-      this.setTokens(res.data.accessToken, res.data.refreshToken);
-      this.saveUser(user, user.id);
-      return { success: true, user, accessToken: res.data.accessToken };
+    if (!cleanEmail) {
+      return { success: false, error: 'Email address is required.' };
     }
 
-    if (res.status === 401 || res.status === 400) {
-      return { success: false, error: res.error || 'Invalid email or password.' };
+    if (password) {
+      const res = await this.request<{ accessToken: string; refreshToken?: string; user: UserProfile }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: cleanEmail, password }),
+      });
+
+      if (res.ok && res.data?.user) {
+        const user = res.data.user;
+        this.setCurrentUserId(user.id);
+        this.setTokens(res.data.accessToken, res.data.refreshToken);
+        this.saveUser(user, user.id);
+        return { success: true, user, accessToken: res.data.accessToken };
+      }
+
+      // Explicit authentication failure (Wrong password or email not found)
+      if (
+        !res.ok &&
+        (res.status === 401 ||
+          res.status === 400 ||
+          res.status === 403 ||
+          res.status === 404 ||
+          (res.error && /invalid|wrong|password|credential|not found/i.test(res.error)))
+      ) {
+        return {
+          success: false,
+          error: res.error && !res.error.includes('status') ? res.error : 'Incorrect email or password. Please try again.',
+        };
+      }
+
+      if (res.status === 0 || res.status >= 500) {
+        return {
+          success: false,
+          error: 'Cannot connect to authentication server. Please check your internet connection.',
+        };
+      }
     }
 
-    // Fallback offline login
     const uid = getUserIdFromEmail(cleanEmail);
     const existing = this.getUser(uid);
+    const userToUse: UserProfile = existing && existing.id
+      ? existing
+      : createDefaultUserProfile(cleanEmail.split('@')[0], cleanEmail);
     this.setCurrentUserId(uid);
-    return { success: true, user: existing };
+    this.saveUser(userToUse, uid);
+    return { success: true, user: userToUse };
   }
 
-  async socialAuthUser(
-    provider: 'google' | 'apple',
-    profile: { name: string; email: string; avatar?: string; timezone?: string }
-  ): Promise<{ success: boolean; user?: UserProfile; accessToken?: string; error?: string }> {
-    const cleanEmail = (profile.email || '').trim().toLowerCase();
-    const cleanName = (profile.name || '').trim() || (provider === 'google' ? 'Google User' : 'Apple User');
-    const tz = profile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    const socialSecret = `SocialPass#${cleanEmail.replace(/[^a-zA-Z0-9]/g, '')}#2026!`;
-
-    // 1. Try logging into the backend with the social credentials
-    const loginRes = await this.loginUser(cleanEmail, socialSecret);
-    if (loginRes.success && loginRes.user) {
-      if (profile.avatar && !loginRes.user.avatar) {
-        loginRes.user.avatar = profile.avatar;
-        this.saveUser(loginRes.user, loginRes.user.id);
-      }
-      return loginRes;
-    }
-
-    // 2. If not registered, register user on the backend
-    const regRes = await this.registerUser(cleanName, cleanEmail, socialSecret, tz);
-    if (regRes.success && regRes.user) {
-      if (profile.avatar) {
-        regRes.user.avatar = profile.avatar;
-        this.saveUser(regRes.user, regRes.user.id);
-      }
-      return regRes;
-    }
-
-    // 3. Offline / local fallback
-    const uid = getUserIdFromEmail(cleanEmail);
-    const localUser: UserProfile = {
-      id: uid,
-      name: cleanName,
-      email: cleanEmail,
-      timezone: tz,
-      avatar: profile.avatar || '',
-      created_at: new Date().toISOString(),
-    };
-    this.setCurrentUserId(uid);
-    this.saveUser(localUser, uid);
-    return { success: true, user: localUser };
-  }
-
-  async getMe(): Promise<UserProfile | null> {
-    const res = await this.request<{ user: UserProfile }>('/auth/me', { method: 'GET' });
+  async fetchMe(): Promise<UserProfile | null> {
+    const res = await this.request<{ user: UserProfile }>('/auth/me');
     if (res.ok && res.data?.user) {
       this.saveUser(res.data.user, res.data.user.id);
       return res.data.user;
@@ -333,204 +360,266 @@ class ApiClient {
   }
 
   async logoutUser(): Promise<void> {
-    if (this.refreshToken) {
-      try {
+    try {
+      if (this.refreshToken) {
         await this.request('/auth/logout', {
           method: 'POST',
           body: JSON.stringify({ refreshToken: this.refreshToken }),
         });
-      } catch {
-        // ignore
       }
+    } catch {
+      // ignore
+    } finally {
+      this.clearTokens();
     }
-    this.clearTokens();
   }
 
-  async logoutAllSessions(): Promise<void> {
-    await this.request('/auth/logout-all', { method: 'POST' });
-    this.clearTokens();
-  }
-
-  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
-    const res = await this.request<{ message: string }>('/auth/reset-password/request', {
-      method: 'POST',
-      body: JSON.stringify({ email }),
-    });
-    return {
-      success: res.ok,
-      message: res.data?.message || 'If that email exists, a password reset link has been sent.',
-    };
-  }
-
-  async confirmPasswordReset(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
-    const res = await this.request<{ message: string }>('/auth/reset-password/confirm', {
-      method: 'POST',
-      body: JSON.stringify({ token, newPassword }),
-    });
-    return {
-      success: res.ok,
-      message: res.data?.message || (res.ok ? 'Password reset successfully.' : res.error || 'Reset failed'),
-    };
-  }
-
-  // -------------------------------------------------------------
-  // HABITS API (Matching Spryntworks/habitup-backend /habits/*)
-  // -------------------------------------------------------------
-  async fetchHabits(targetUserId?: string): Promise<Habit[]> {
-    const uid = targetUserId || this.currentUserId;
-    const res = await this.request<{ habits: BackendHabitResponse[] }>('/habits', { method: 'GET' });
-
-    if (res.ok && Array.isArray(res.data?.habits)) {
-      const converted: Habit[] = res.data.habits.map((h) => ({
-        id: h.id,
-        user_id: h.user_id || uid,
-        name: h.name,
-        description: h.description || '',
-        icon: h.icon || '🎯',
-        color: h.color || '#10B981',
-        frequency_type: h.frequency_type === 'daily' ? 'daily' : 'custom_days',
-        scheduled_days: Array.isArray(h.schedule) ? h.schedule : [0, 1, 2, 3, 4, 5, 6],
-        reminder_enabled: false,
-        created_at: h.created_at || new Date().toISOString(),
-        updated_at: h.updated_at || h.created_at || new Date().toISOString(),
-        paused_at: h.paused_at,
-        archived_at: h.archived_at,
-        deleted_at: h.deleted_at,
-      }));
-
-      this.saveHabits(converted, uid);
-      return converted;
+  async requestPasswordReset(email: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) {
+      return { success: false, error: 'Please enter a valid email address.' };
     }
 
-    return this.getHabits(uid);
-  }
+    try {
+      // 1. Try exact Swagger endpoint /auth/reset-password/request
+      let res = await this.request<{ message?: string; success?: boolean }>('/auth/reset-password/request', {
+        method: 'POST',
+        body: JSON.stringify({ email: cleanEmail }),
+      });
 
-  async fetchArchivedHabits(targetUserId?: string): Promise<Habit[]> {
-    const uid = targetUserId || this.currentUserId;
-    const res = await this.request<{ habits: BackendHabitResponse[] }>('/habits/archived', { method: 'GET' });
+      // 2. Fallback to /auth/forgot-password if needed
+      if (!res.ok && res.status === 404) {
+        res = await this.request<{ message?: string; success?: boolean }>('/auth/forgot-password', {
+          method: 'POST',
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+      }
 
-    if (res.ok && Array.isArray(res.data?.habits)) {
-      return res.data.habits.map((h) => ({
-        id: h.id,
-        user_id: h.user_id || uid,
-        name: h.name,
-        description: h.description || '',
-        icon: h.icon || '🎯',
-        color: h.color || '#10B981',
-        frequency_type: h.frequency_type === 'daily' ? 'daily' : 'custom_days',
-        scheduled_days: Array.isArray(h.schedule) ? h.schedule : [0, 1, 2, 3, 4, 5, 6],
-        reminder_enabled: false,
-        created_at: h.created_at,
-        updated_at: h.updated_at || h.created_at,
-        paused_at: h.paused_at,
-        archived_at: h.archived_at,
-        deleted_at: h.deleted_at,
-      }));
-    }
-    return this.getHabits(uid).filter((h) => !!h.archived_at);
-  }
+      if (res.ok) {
+        return {
+          success: true,
+          message: res.data?.message || 'Password reset token has been sent to your email.',
+        };
+      }
 
-  async createHabit(habit: Habit, targetUserId?: string): Promise<Habit> {
-    const uid = targetUserId || this.currentUserId;
-    const payload = {
-      name: habit.name,
-      description: habit.description || null,
-      icon: habit.icon,
-      color: habit.color,
-      frequency_type: habit.frequency_type === 'daily' ? 'daily' : 'scheduled',
-      schedule: habit.scheduled_days,
-    };
-
-    const res = await this.request<{ habit: BackendHabitResponse }>('/habits', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-
-    if (res.ok && res.data?.habit) {
-      const serverHabit = res.data.habit;
-      const completeHabit: Habit = {
-        ...habit,
-        id: serverHabit.id,
-        user_id: serverHabit.user_id || uid,
-        created_at: serverHabit.created_at,
-        updated_at: serverHabit.updated_at || serverHabit.created_at,
+      return {
+        success: false,
+        error: res.error || 'Unable to process reset request. Please check your email or try again.',
       };
+    } catch {
+      return {
+        success: false,
+        error: 'Network connection error. Please check your internet connection.',
+      };
+    }
+  }
 
-      // If reminder is attached, create reminder on backend
-      if (habit.reminder_time && habit.reminder_enabled) {
-        this.createReminder(completeHabit.id, habit.reminder_time);
+  async resetPassword(
+    token: string,
+    newPassword: string,
+    email?: string
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    const cleanToken = (token || '').trim();
+    const cleanPassword = (newPassword || '').trim();
+    if (!cleanToken || !cleanPassword) {
+      return { success: false, error: 'Reset token and new password are required.' };
+    }
+
+    try {
+      // 1. Try exact Swagger endpoint /auth/reset-password/confirm
+      let res = await this.request<{ message?: string; success?: boolean }>('/auth/reset-password/confirm', {
+        method: 'POST',
+        body: JSON.stringify({
+          token: cleanToken,
+          newPassword: cleanPassword,
+        }),
+      });
+
+      // 2. Fallback to /auth/reset-password if needed
+      if (!res.ok && res.status === 404) {
+        res = await this.request<{ message?: string; success?: boolean }>('/auth/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            token: cleanToken,
+            password: cleanPassword,
+            newPassword: cleanPassword,
+            email: email ? email.trim().toLowerCase() : undefined,
+          }),
+        });
       }
 
-      return completeHabit;
-    }
+      if (res.ok) {
+        return {
+          success: true,
+          message: res.data?.message || 'Password has been reset successfully. Please sign in.',
+        };
+      }
 
-    return { ...habit, user_id: uid };
-  }
-
-  async updateHabit(id: string, updates: Partial<Habit>): Promise<void> {
-    const payload: any = {};
-    if (updates.name !== undefined) payload.name = updates.name;
-    if (updates.description !== undefined) payload.description = updates.description;
-    if (updates.icon !== undefined) payload.icon = updates.icon;
-    if (updates.color !== undefined) payload.color = updates.color;
-    if (updates.frequency_type !== undefined) {
-      payload.frequency_type = updates.frequency_type === 'daily' ? 'daily' : 'scheduled';
-    }
-    if (updates.scheduled_days !== undefined) {
-      payload.schedule = updates.scheduled_days;
-    }
-
-    await this.request(`/habits/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  async deleteHabit(id: string): Promise<void> {
-    await this.request(`/habits/${id}`, { method: 'DELETE' });
-  }
-
-  async pauseHabit(id: string): Promise<void> {
-    await this.request(`/habits/${id}/pause`, { method: 'PATCH' });
-  }
-
-  async unpauseHabit(id: string): Promise<void> {
-    await this.request(`/habits/${id}/unpause`, { method: 'PATCH' });
-  }
-
-  async archiveHabit(id: string): Promise<void> {
-    await this.request(`/habits/${id}/archive`, { method: 'PATCH' });
-  }
-
-  async unarchiveHabit(id: string): Promise<void> {
-    await this.request(`/habits/${id}/unarchive`, { method: 'PATCH' });
-  }
-
-  // -------------------------------------------------------------
-  // COMPLETIONS API (Matching Spryntworks/habitup-backend)
-  // -------------------------------------------------------------
-  async toggleCompletion(habitId: string, dateStr?: string): Promise<{ completion?: HabitCompletion; streak?: number }> {
-    const today = dateStr || new Date().toISOString().slice(0, 10);
-    const existing = this.getCompletions().find((c) => c.habit_id === habitId && c.completion_date === today);
-    if (existing) {
-      const res = await this.removeCompletion(habitId, today);
-      return { streak: res.streak };
-    } else {
-      return await this.addCompletion(habitId);
+      return {
+        success: false,
+        error: res.error || 'Invalid, expired, or already used reset token.',
+      };
+    } catch {
+      return {
+        success: false,
+        error: 'Network connection error. Please check your internet connection.',
+      };
     }
   }
 
-  async addCompletion(habitId: string): Promise<{ completion?: HabitCompletion; streak?: number }> {
+  // --- HABITS SERVER INTEGRATION ---
+
+  mapBackendHabitToLocal(h: BackendHabit, fallbackTime?: string, fallbackEnabled?: boolean, fallbackDays?: number[]): Habit {
+    const existing = this.getHabits().find((localH) => localH.id === h.id || (localH.name && localH.name.toLowerCase() === h.name.toLowerCase()));
+    const reminder_time = fallbackTime || existing?.reminder_time || '08:00';
+    const reminder_enabled = fallbackEnabled !== undefined ? fallbackEnabled : (existing?.reminder_enabled !== undefined ? existing.reminder_enabled : true);
+
+    let scheduled_days = [0, 1, 2, 3, 4, 5, 6];
+    if (Array.isArray(h.schedule) && h.schedule.length > 0) {
+      scheduled_days = h.schedule;
+    } else if (Array.isArray((h as any).days) && (h as any).days.length > 0) {
+      scheduled_days = (h as any).days;
+    } else if (Array.isArray(fallbackDays) && fallbackDays.length > 0) {
+      scheduled_days = fallbackDays;
+    } else if (existing && Array.isArray(existing.scheduled_days) && existing.scheduled_days.length > 0) {
+      scheduled_days = existing.scheduled_days;
+    }
+
+    const freq = h.frequency_type === 'daily' || !h.frequency_type ? 'daily' : 'custom_days';
+
+    return {
+      id: h.id,
+      user_id: h.user_id,
+      name: h.name,
+      description: h.description || undefined,
+      icon: h.icon || 'Sparkles',
+      color: h.color || '#7C5CFF',
+      frequency_type: freq,
+      scheduled_days: freq === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : scheduled_days,
+      reminder_enabled,
+      reminder_time,
+      paused_at: h.paused_at,
+      archived_at: h.archived_at,
+      deleted_at: h.deleted_at,
+      created_at: h.created_at,
+      updated_at: h.updated_at || h.created_at,
+    };
+  }
+
+  async fetchHabitsFromServer(): Promise<Habit[]> {
+    try {
+      const activeRes = await this.request<{ habits: BackendHabit[] }>('/habits');
+      const archivedRes = await this.request<{ habits: BackendHabit[] }>('/habits/archived');
+
+      if (activeRes.ok) {
+        const allBackendHabits: BackendHabit[] = [
+          ...(Array.isArray(activeRes.data?.habits) ? activeRes.data.habits : []),
+          ...(archivedRes.ok && Array.isArray(archivedRes.data?.habits) ? archivedRes.data.habits : []),
+        ];
+
+        const localHabits = allBackendHabits.map((h) => this.mapBackendHabitToLocal(h));
+        this.saveHabits(localHabits);
+        return localHabits;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch habits from server:', err);
+    }
+    return this.getHabits();
+  }
+
+  async createHabitOnServer(habitData: Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Promise<Habit | null> {
+    try {
+      const res = await this.request<{ habit: BackendHabit }>('/habits', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: habitData.name,
+          description: habitData.description || null,
+          icon: habitData.icon || 'Sparkles',
+          color: habitData.color || '#7C5CFF',
+          frequency_type: habitData.frequency_type === 'daily' ? 'daily' : 'scheduled',
+          days: habitData.frequency_type === 'custom_days' ? habitData.scheduled_days : undefined,
+        }),
+      });
+
+      if (res.ok && res.data?.habit) {
+        return this.mapBackendHabitToLocal(
+          res.data.habit,
+          habitData.reminder_time,
+          habitData.reminder_enabled,
+          habitData.scheduled_days
+        );
+      }
+    } catch (err) {
+      console.warn('Server habit creation error:', err);
+    }
+    return null;
+  }
+
+  async updateHabitOnServer(habitId: string, updates: Partial<Habit>): Promise<boolean> {
+    try {
+      const payload: any = {};
+      if (updates.name !== undefined) payload.name = updates.name;
+      if (updates.description !== undefined) payload.description = updates.description;
+      if (updates.icon !== undefined) payload.icon = updates.icon;
+      if (updates.color !== undefined) payload.color = updates.color;
+      if (updates.frequency_type !== undefined) {
+        payload.frequency_type = updates.frequency_type === 'daily' ? 'daily' : 'scheduled';
+      }
+      if (updates.scheduled_days !== undefined) {
+        payload.days = updates.scheduled_days;
+      }
+
+      const res = await this.request(`/habits/${habitId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async pauseHabitOnServer(habitId: string): Promise<boolean> {
+    const res = await this.request(`/habits/${habitId}/pause`, { method: 'PATCH' });
+    return res.ok;
+  }
+
+  async unpauseHabitOnServer(habitId: string): Promise<boolean> {
+    const res = await this.request(`/habits/${habitId}/unpause`, { method: 'PATCH' });
+    return res.ok;
+  }
+
+  async archiveHabitOnServer(habitId: string): Promise<boolean> {
+    const res = await this.request(`/habits/${habitId}/archive`, { method: 'PATCH' });
+    return res.ok;
+  }
+
+  async unarchiveHabitOnServer(habitId: string): Promise<boolean> {
+    const res = await this.request(`/habits/${habitId}/unarchive`, { method: 'PATCH' });
+    return res.ok;
+  }
+
+  async deleteHabitOnServer(habitId: string): Promise<boolean> {
+    const res = await this.request(`/habits/${habitId}`, { method: 'DELETE' });
+    return res.ok;
+  }
+
+  // --- COMPLETIONS SERVER INTEGRATION ---
+
+  async addCompletion(habitId: string, dateStr?: string): Promise<{ completion?: HabitCompletion; streak?: number }> {
+    const targetDate = (dateStr || new Date().toISOString().split('T')[0]).split('T')[0];
+    const payload = { completion_date: targetDate };
     const res = await this.request<{ completion: any; streak: number }>(`/habits/${habitId}/completions`, {
       method: 'POST',
+      body: JSON.stringify(payload),
     });
-    if (res.ok && res.data) {
+    if (res.ok && res.data?.completion) {
       return {
         completion: {
           id: res.data.completion.id,
-          habit_id: res.data.completion.habit_id,
-          user_id: res.data.completion.user_id,
-          completion_date: res.data.completion.completion_date,
+          habit_id: res.data.completion.habit_id || habitId,
+          user_id: res.data.completion.user_id || this.currentUserId,
+          completion_date: targetDate,
           completed_at: res.data.completion.completed_at || new Date().toISOString(),
         },
         streak: res.data.streak,
@@ -546,69 +635,72 @@ class ApiClient {
     return { streak: res.data?.streak };
   }
 
-  // -------------------------------------------------------------
-  // REMINDERS API (Matching Spryntworks/habitup-backend)
-  // -------------------------------------------------------------
-  async createReminder(habitId: string, time: string): Promise<BackendReminderResponse | null> {
-    const res = await this.request<{ reminder: BackendReminderResponse }>(`/habits/${habitId}/reminders`, {
-      method: 'POST',
-      body: JSON.stringify({ time }),
-    });
-    return res.ok && res.data ? res.data.reminder : null;
+  async fetchCompletionsFromServer(habits: Habit[]): Promise<HabitCompletion[]> {
+    const allCompletions: HabitCompletion[] = [];
+    if (!habits || habits.length === 0) return allCompletions;
+
+    try {
+      await Promise.all(
+        habits.map(async (habit) => {
+          try {
+            const res = await this.request<{ completions: any[] }>(`/habits/${habit.id}/completions`);
+            if (res.ok && Array.isArray(res.data?.completions)) {
+              res.data.completions.forEach((c) => {
+                const dateKey = (c.completed_on || c.completion_date || '').split('T')[0];
+                if (dateKey) {
+                  allCompletions.push({
+                    id: c.id || `comp-${habit.id}-${dateKey}`,
+                    habit_id: c.habit_id || habit.id,
+                    user_id: c.user_id || this.currentUserId,
+                    completion_date: dateKey,
+                    completed_at: c.completed_at || `${dateKey}T12:00:00.000Z`,
+                  });
+                }
+              });
+            }
+          } catch {
+            // ignore per habit
+          }
+        })
+      );
+    } catch (err) {
+      console.warn('Error fetching server completions:', err);
+    }
+
+    return allCompletions;
   }
 
-  async getReminders(habitId: string): Promise<BackendReminderResponse[]> {
-    const res = await this.request<{ reminders: BackendReminderResponse[] }>(`/habits/${habitId}/reminders`, {
-      method: 'GET',
-    });
-    return res.ok && Array.isArray(res.data?.reminders) ? res.data.reminders : [];
+  async fetchStatsFromServer(): Promise<BackendStats | null> {
+    const res = await this.request<BackendStats>('/habits/stats');
+    if (res.ok && res.data) {
+      return res.data;
+    }
+    return null;
   }
 
-  async updateReminder(reminderId: string, fields: { time?: string; enabled?: boolean }): Promise<void> {
-    await this.request(`/reminders/${reminderId}`, {
-      method: 'PATCH',
-      body: JSON.stringify(fields),
-    });
-  }
+  // --- LOCAL STORAGE CACHE HELPERS ---
 
-  async deleteReminder(reminderId: string): Promise<void> {
-    await this.request(`/reminders/${reminderId}`, {
-      method: 'DELETE',
-    });
-  }
-
-  // -------------------------------------------------------------
-  // STATS API (Matching Spryntworks/habitup-backend)
-  // -------------------------------------------------------------
-  async getHabitStats(habitId: string, period: 'month' | 'year' = 'month') {
-    const res = await this.request<{
-      habit_id: string;
-      period: string;
-      current_streak: number;
-      best_streak: number;
-      total_completions: number;
-      completion_rate: number;
-    }>(`/habits/${habitId}/stats?period=${period}`, { method: 'GET' });
-    return res.ok ? res.data : null;
-  }
-
-  async getUserStats(period: 'month' | 'year' = 'month'): Promise<BackendStatsResponse | null> {
-    const res = await this.request<BackendStatsResponse>(`/stats?period=${period}`, { method: 'GET' });
-    return res.ok && res.data ? res.data : null;
-  }
-
-  // Backend Health check
-  async checkHealth(): Promise<{ status: string; db: string }> {
-    const res = await this.request<{ status: string; db: string }>('/health', { method: 'GET' });
-    return res.ok && res.data ? res.data : { status: 'offline', db: 'unknown' };
-  }
-
-  // -------------------------------------------------------------
-  // LOCAL STORAGE & CACHE SYNCHRONIZATION HELPERS
-  // -------------------------------------------------------------
-  getHabits(targetUserId?: string): Habit[] {
+  getHabits(targetUserId?: string, email?: string): Habit[] {
     const uid = targetUserId || this.currentUserId;
-    return this.getStorage<Habit[]>(`habitup_habits_${uid}`, []);
+    const directHabits = this.getStorage<Habit[]>(`habitup_habits_${uid}`, []);
+    let emailHabits: Habit[] = [];
+    if (email) {
+      const emailUid = getUserIdFromEmail(email);
+      if (emailUid !== uid) {
+        emailHabits = this.getStorage<Habit[]>(`habitup_habits_${emailUid}`, []);
+      }
+    }
+    const defaultHabits = this.getStorage<Habit[]>('habitup_habits_usr_default', []);
+
+    const combined = [...directHabits, ...emailHabits, ...defaultHabits];
+    const seen = new Set<string>();
+    return combined.filter((h) => {
+      if (!h || !h.id) return false;
+      const key = `${h.id}_${h.name}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   saveHabits(habits: Habit[], targetUserId?: string): void {
@@ -616,9 +708,28 @@ class ApiClient {
     this.setStorage(`habitup_habits_${uid}`, habits);
   }
 
-  getCompletions(targetUserId?: string): HabitCompletion[] {
+  getCompletions(targetUserId?: string, email?: string): HabitCompletion[] {
     const uid = targetUserId || this.currentUserId;
-    return this.getStorage<HabitCompletion[]>(`habitup_completions_${uid}`, []);
+    const directCompletions = this.getStorage<HabitCompletion[]>(`habitup_completions_${uid}`, []);
+    let emailCompletions: HabitCompletion[] = [];
+    if (email) {
+      const emailUid = getUserIdFromEmail(email);
+      if (emailUid !== uid) {
+        emailCompletions = this.getStorage<HabitCompletion[]>(`habitup_completions_${emailUid}`, []);
+      }
+    }
+    const defaultCompletions = this.getStorage<HabitCompletion[]>('habitup_completions_usr_default', []);
+
+    const combined = [...directCompletions, ...emailCompletions, ...defaultCompletions];
+    const seen = new Set<string>();
+    return combined.filter((c) => {
+      if (!c || !c.habit_id) return false;
+      const dateKey = (c.completion_date || '').split('T')[0];
+      const key = `${c.habit_id}_${dateKey}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   saveCompletions(completions: HabitCompletion[], targetUserId?: string): void {
@@ -643,8 +754,8 @@ class ApiClient {
     const initialSessions: UserSession[] = [
       {
         id: `sess-${Date.now()}`,
-        device_id: 'dev-browser-current',
-        device_name: 'Current Session (Spryntworks API)',
+        device_id: 'dev-mobile-app',
+        device_name: 'HabitUp Mobile (React Native)',
         ip_address: 'Active JWT Session',
         created_at: new Date().toISOString(),
         last_used_at: new Date().toISOString(),
@@ -675,15 +786,6 @@ class ApiClient {
     this.saveCompletions([], uid);
     this.saveSessions(this.getSessions(uid), uid);
     this.saveSyncQueue([], uid);
-  }
-
-  async fetchCompletions(targetUserId?: string): Promise<HabitCompletion[]> {
-    const uid = targetUserId || this.currentUserId;
-    return this.getCompletions(uid);
-  }
-
-  async syncMutations(mutations: SyncMutation[], targetUserId?: string) {
-    return { success: true };
   }
 }
 

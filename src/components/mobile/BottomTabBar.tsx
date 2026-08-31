@@ -1,7 +1,7 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+﻿import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Home, CheckSquare, BarChart2, Calendar, Plus } from 'lucide-react';
+import { Home, CheckSquare, BarChart2, Calendar, Plus } from 'lucide-react-native';
 
 export const BottomTabBar: React.FC = () => {
   const { activeTab, setActiveTab, setIsCreateModalOpen, theme } = useHabit();
@@ -12,26 +12,26 @@ export const BottomTabBar: React.FC = () => {
       style={[
         styles.nav,
         {
-          backgroundColor: isDark ? '#0B1120' : '#FFFFFF',
-          borderColor: isDark ? '#1E293B' : '#E2E8F0',
+          backgroundColor: isDark ? '#0A0F1D' : '#FFFFFF',
+          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
         },
       ]}
     >
-      {/* Home Tab */}
+      {/* 1. Home Tab */}
       <TouchableOpacity
         onPress={() => setActiveTab('home')}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
         <Home
-          size={20}
-          color={activeTab === 'home' ? '#7C5CFF' : isDark ? '#94A3B8' : '#475569'}
-          strokeWidth={activeTab === 'home' ? 2.5 : 2}
+          size={22}
+          color={activeTab === 'home' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+          strokeWidth={activeTab === 'home' ? 2.5 : 1.8}
         />
         <Text
           style={[
             styles.tabLabel,
-            { color: activeTab === 'home' ? '#7C5CFF' : isDark ? '#94A3B8' : '#334155' },
+            { color: activeTab === 'home' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
             activeTab === 'home' && styles.activeTabLabel,
           ]}
         >
@@ -39,21 +39,21 @@ export const BottomTabBar: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* Habits Tab */}
+      {/* 2. Habits Tab */}
       <TouchableOpacity
         onPress={() => setActiveTab('habits')}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
         <CheckSquare
-          size={20}
-          color={activeTab === 'habits' ? '#7C5CFF' : isDark ? '#94A3B8' : '#475569'}
-          strokeWidth={activeTab === 'habits' ? 2.5 : 2}
+          size={22}
+          color={activeTab === 'habits' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+          strokeWidth={activeTab === 'habits' ? 2.5 : 1.8}
         />
         <Text
           style={[
             styles.tabLabel,
-            { color: activeTab === 'habits' ? '#7C5CFF' : isDark ? '#94A3B8' : '#334155' },
+            { color: activeTab === 'habits' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
             activeTab === 'habits' && styles.activeTabLabel,
           ]}
         >
@@ -61,32 +61,32 @@ export const BottomTabBar: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* Center Floating Plus Action Button */}
+      {/* 3. Center Floating Elevated Plus Button */}
       <View style={styles.floatingCenterWrapper}>
         <TouchableOpacity
           onPress={() => setIsCreateModalOpen(true)}
           style={styles.floatingButton}
           activeOpacity={0.85}
         >
-          <Plus size={22} color="#FFFFFF" strokeWidth={3} />
+          <Plus size={26} color="#FFFFFF" strokeWidth={2.8} />
         </TouchableOpacity>
       </View>
 
-      {/* Stats Tab */}
+      {/* 4. Stats Tab */}
       <TouchableOpacity
         onPress={() => setActiveTab('stats')}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
         <BarChart2
-          size={20}
-          color={activeTab === 'stats' ? '#7C5CFF' : isDark ? '#94A3B8' : '#475569'}
-          strokeWidth={activeTab === 'stats' ? 2.5 : 2}
+          size={22}
+          color={activeTab === 'stats' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+          strokeWidth={activeTab === 'stats' ? 2.5 : 1.8}
         />
         <Text
           style={[
             styles.tabLabel,
-            { color: activeTab === 'stats' ? '#7C5CFF' : isDark ? '#94A3B8' : '#334155' },
+            { color: activeTab === 'stats' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
             activeTab === 'stats' && styles.activeTabLabel,
           ]}
         >
@@ -94,21 +94,21 @@ export const BottomTabBar: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* Calendar Tab */}
+      {/* 5. Calendar Tab */}
       <TouchableOpacity
         onPress={() => setActiveTab('calendar')}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
         <Calendar
-          size={20}
-          color={activeTab === 'calendar' ? '#7C5CFF' : isDark ? '#94A3B8' : '#475569'}
-          strokeWidth={activeTab === 'calendar' ? 2.5 : 2}
+          size={22}
+          color={activeTab === 'calendar' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+          strokeWidth={activeTab === 'calendar' ? 2.5 : 1.8}
         />
         <Text
           style={[
             styles.tabLabel,
-            { color: activeTab === 'calendar' ? '#7C5CFF' : isDark ? '#94A3B8' : '#334155' },
+            { color: activeTab === 'calendar' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
             activeTab === 'calendar' && styles.activeTabLabel,
           ]}
         >
@@ -123,42 +123,44 @@ const styles = StyleSheet.create({
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-around',
+    justifyContent: 'space-between',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderTopWidth: 1,
-    zIndex: 30,
+    height: Platform.OS === 'ios' ? 70 : 64,
+    zIndex: 40,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    paddingVertical: 2,
+    flex: 1,
   },
   tabLabel: {
-    fontSize: 10,
-    marginTop: 2,
-    fontWeight: '500',
+    fontSize: 11,
+    marginTop: 3,
+    fontWeight: '600',
   },
   activeTabLabel: {
     fontWeight: '800',
   },
   floatingCenterWrapper: {
-    top: -14,
+    top: -16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 60,
   },
   floatingButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#7C5CFF',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#7C5CFF',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
     elevation: 8,
   },
 });
-
-

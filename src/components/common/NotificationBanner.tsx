@@ -1,38 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Bell, Check, X, Clock } from 'lucide-react';
-import { InAppNotification } from '../../services/notificationService';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from 'react-native';
+import { Bell, Check, X, Clock } from 'lucide-react-native';
+import { InAppNotification, addInAppNotificationListener } from '../../services/notificationService';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from './IconRenderer';
+import { formatTo12Hour } from '../../utils/streakCalculator';
 
 export const NotificationBanner: React.FC = () => {
   const { toggleCompletion, theme } = useHabit();
   const [currentNotification, setCurrentNotification] = useState<InAppNotification | null>(null);
-
   const isDark = theme === 'dark';
+  const translateY = useRef(new Animated.Value(-80)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const handleNotification = (e: Event) => {
-      const customEvent = e as CustomEvent<InAppNotification>;
-      if (customEvent.detail) {
-        setCurrentNotification(customEvent.detail);
-      }
-    };
+    const unsubscribe = addInAppNotificationListener((notif) => {
+      setCurrentNotification(notif);
+      Animated.parallel([
+        Animated.spring(translateY, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 14,
+          stiffness: 120,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
 
-    window.addEventListener('habitup-inapp-notification', handleNotification);
-    return () => {
-      window.removeEventListener('habitup-inapp-notification', handleNotification);
-    };
+    return unsubscribe;
   }, []);
 
   // Auto dismiss after 7 seconds
   useEffect(() => {
     if (!currentNotification) return;
     const timer = setTimeout(() => {
-      setCurrentNotification(null);
+      dismiss();
     }, 7000);
     return () => clearTimeout(timer);
   }, [currentNotification]);
+
+  const dismiss = () => {
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -80,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setCurrentNotification(null);
+    });
+  };
 
   if (!currentNotification) return null;
 
@@ -40,88 +66,156 @@ export const NotificationBanner: React.FC = () => {
     if (currentNotification.habitId) {
       toggleCompletion(currentNotification.habitId);
     }
-    setCurrentNotification(null);
+    dismiss();
   };
 
+  const AnimatedView = Animated.View as any;
+
   return (
-    <div className="fixed top-3 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none select-none">
-      <AnimatePresence>
-        {currentNotification && (
-          <motion.div
-            initial={{ opacity: 0, y: -40, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -30, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 22, stiffness: 350 }}
-            className={`w-full max-w-sm rounded-3xl p-3.5 shadow-2xl border pointer-events-auto backdrop-blur-md flex items-center gap-3 relative ${
-              isDark
-                ? 'bg-[#182032]/95 border-slate-700/80 text-white shadow-slate-950/60'
-                : 'bg-white/95 border-slate-200/90 text-neutral-900 shadow-xl shadow-slate-300/60'
-            }`}
+    <AnimatedView
+      style={[
+        styles.wrapper,
+        {
+          opacity,
+          transform: [{ translateY }],
+        },
+      ]}
+    >
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+          },
+        ]}
+      >
+        {/* Left Squircle Icon */}
+        <View
+          style={[
+            styles.iconWrapper,
+            { backgroundColor: currentNotification.color || '#7C5CFF' },
+          ]}
+        >
+          {currentNotification.icon ? (
+            <IconRenderer name={currentNotification.icon} size={22} color="#FFFFFF" />
+          ) : (
+            <Bell size={22} color="#FFFFFF" />
+          )}
+        </View>
+
+        {/* Center Text Info */}
+        <View style={styles.textWrapper}>
+          <Text
+            style={[
+              styles.title,
+              { color: isDark ? '#FFFFFF' : '#0F172A' },
+            ]}
+            numberOfLines={1}
           >
-            {/* Left Habit / Notification Icon */}
-            <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-md"
-              style={{
-                backgroundColor: currentNotification.color || '#7C5CFF',
-              }}
-            >
-              {currentNotification.icon ? (
-                <IconRenderer name={currentNotification.icon} className="w-5 h-5" />
-              ) : (
-                <Bell className="w-5 h-5 text-white" />
-              )}
-            </div>
+            {currentNotification.title}
+          </Text>
+          <Text
+            style={[
+              styles.body,
+              { color: isDark ? '#94A3B8' : '#64748B' },
+            ]}
+            numberOfLines={2}
+          >
+            {currentNotification.body}
+          </Text>
+        </View>
 
-            {/* Middle Title & Body */}
-            <div className="flex-1 min-w-0 pr-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-black truncate font-display">
-                  {currentNotification.title}
-                </span>
-                {currentNotification.reminderTime && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-purple-500/20 text-purple-400 flex items-center gap-0.5">
-                    <Clock className="w-2.5 h-2.5" />
-                    {currentNotification.reminderTime}
-                  </span>
-                )}
-              </div>
-              <p
-                className={`text-[11px] truncate mt-0.5 leading-snug ${
-                  isDark ? 'text-neutral-300' : 'text-neutral-600'
-                }`}
-              >
-                {currentNotification.body}
-              </p>
-            </div>
+        {/* Right Timestamp Badge & Dismiss */}
+        <View style={styles.rightColumn}>
+          {currentNotification.reminderTime ? (
+            <View style={styles.timeTag}>
+              <Clock size={11} color="#C084FC" />
+              <Text style={styles.timeText}>{formatTo12Hour(currentNotification.reminderTime)}</Text>
+            </View>
+          ) : (
+            <View style={styles.timeTag}>
+              <Clock size={11} color="#C084FC" />
+              <Text style={styles.timeText}>Just now</Text>
+            </View>
+          )}
 
-            {/* Right Action Buttons */}
-            <div className="flex items-center gap-1 shrink-0">
-              {currentNotification.habitId && (
-                <button
-                  onClick={handleComplete}
-                  className="px-2.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-neutral-950 font-black text-[11px] flex items-center gap-1 shadow-md shadow-emerald-500/30 active:scale-95 transition-all"
-                  title="Mark habit completed"
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  Done
-                </button>
-              )}
-
-              <button
-                onClick={() => setCurrentNotification(null)}
-                className={`p-1.5 rounded-xl transition-colors ${
-                  isDark
-                    ? 'text-neutral-400 hover:text-white hover:bg-slate-800'
-                    : 'text-neutral-400 hover:text-neutral-800 hover:bg-slate-100'
-                }`}
-                title="Dismiss"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+          <TouchableOpacity style={styles.dismissBtn} onPress={dismiss}>
+            <X size={15} color={isDark ? '#94A3B8' : '#64748B'} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </AnimatedView>
   );
 };
+
+const styles = StyleSheet.create({
+  wrapper: {
+    position: 'absolute',
+    top: 48,
+    left: 14,
+    right: 14,
+    zIndex: 9999,
+  },
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+    gap: 12,
+  },
+  iconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  textWrapper: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+  },
+  body: {
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  rightColumn: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  timeTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(124, 92, 255, 0.2)',
+    borderColor: 'rgba(192, 132, 252, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+  },
+  timeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#C084FC',
+  },
+  dismissBtn: {
+    padding: 4,
+  },
+});
