@@ -134,6 +134,8 @@ interface HabitContextType {
   friends: FriendUser[];
   socialFeed: SocialFeedActivity[];
   adoptFriendHabit: (habit: FriendPublicHabit, friendName: string) => Promise<void>;
+  createSharedHabit: (friendId: string, habitName: string, icon?: string, color?: string, time?: string) => void;
+  addFriendByCodeOrUsername: (input: string) => void;
   sendKudos: (activityId: string) => void;
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
@@ -1116,6 +1118,136 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [showToast]
   );
 
+  const createSharedHabit = useCallback(
+    (friendId: string, habitName: string, icon?: string, color?: string, time?: string) => {
+      // 1. Add to current user's habits
+      createHabit({
+        name: habitName,
+        description: 'Shared habit buddy routine 🤝',
+        icon: icon || 'Target',
+        color: color || '#7C5CFF',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: time || '08:00',
+        reminder_enabled: !!time,
+      });
+
+      // 2. Add to friend's habits list
+      setFriends((prev) =>
+        prev.map((f) => {
+          if (f.id === friendId) {
+            const newFriendHabit: FriendPublicHabit = {
+              id: `fh-shared-${Date.now()}`,
+              name: habitName,
+              description: `Shared with ${user?.name || 'You'}`,
+              icon: icon || 'Target',
+              color: color || '#7C5CFF',
+              frequency_type: 'daily',
+              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+              reminder_time: time || '08:00',
+              currentStreak: 0,
+              isCompletedToday: false,
+              adoptersCount: 2,
+            };
+            return {
+              ...f,
+              habits: [newFriendHabit, ...f.habits],
+            };
+          }
+          return f;
+        })
+      );
+
+      if (soundEnabled) soundService.playCompletionChime();
+      if (hapticsEnabled) {
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        } catch {}
+      }
+      showToast(`Shared habit "${habitName}" created for both of you! 🤝`, undefined, 'success');
+    },
+    [createHabit, user, soundEnabled, hapticsEnabled, showToast]
+  );
+
+  const addFriendByCodeOrUsername = useCallback(
+    (input: string) => {
+      const clean = input.trim();
+      if (!clean) return;
+
+      const lower = clean.toLowerCase();
+      // Look for existing friend
+      const match = friends.find(
+        (f) =>
+          f.username.toLowerCase() === lower ||
+          f.username.toLowerCase() === `@${lower.replace(/^@/, '')}` ||
+          f.email.toLowerCase() === lower ||
+          `habit-${f.name.slice(0, 3).toLowerCase()}77` === lower ||
+          f.name.toLowerCase().includes(lower)
+      );
+
+      if (match) {
+        setFriends((prev) =>
+          prev.map((f) =>
+            f.id === match.id ? { ...f, isFriend: true, requestStatus: 'accepted' } : f
+          )
+        );
+        if (soundEnabled) soundService.playCompletionChime();
+        showToast(`Added ${match.name} (@${match.username.replace(/^@/, '')})! 🤝`, undefined, 'success');
+      } else {
+        const usernameClean = clean.startsWith('@') ? clean : `@${clean}`;
+        const displayName = clean.replace(/^@/, '').split(/[._\s]/)[0];
+        const capitalized = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+
+        const newBuddy: FriendUser = {
+          id: `friend-${Date.now()}`,
+          name: capitalized || 'Habit Buddy',
+          username: usernameClean,
+          email: `${clean.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'buddy'}@gmail.com`,
+          avatar: '🤝',
+          bio: 'Habit buddy on HabitUp! Building streaks together.',
+          plantStage: '🌿 Healthy Sprout (Lvl 2)',
+          currentStreak: 5,
+          totalCompletions: 18,
+          isFriend: true,
+          requestStatus: 'accepted',
+          habits: [
+            {
+              id: `fh-custom-${Date.now()}`,
+              name: 'Daily 20m Focus',
+              description: 'Consistency is key!',
+              icon: 'Zap',
+              color: '#7C5CFF',
+              frequency_type: 'daily',
+              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+              reminder_time: '08:00',
+              currentStreak: 5,
+              isCompletedToday: true,
+              adoptersCount: 1,
+            },
+            {
+              id: `fh-custom-2-${Date.now()}`,
+              name: 'Drink 2L Water',
+              description: 'Daily hydration habit',
+              icon: 'Droplets',
+              color: '#38BDF8',
+              frequency_type: 'daily',
+              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+              reminder_time: '09:00',
+              currentStreak: 7,
+              isCompletedToday: false,
+              adoptersCount: 2,
+            },
+          ],
+        };
+
+        setFriends((prev) => [newBuddy, ...prev]);
+        if (soundEnabled) soundService.playCompletionChime();
+        showToast(`Connected with ${newBuddy.name} (${usernameClean})! 🤝`, undefined, 'success');
+      }
+    },
+    [friends, soundEnabled, showToast]
+  );
+
   const removeFriend = useCallback(
     (friendId: string) => {
       setFriends((prev) =>
@@ -1208,6 +1340,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         friends,
         socialFeed,
         adoptFriendHabit,
+        createSharedHabit,
+        addFriendByCodeOrUsername,
         sendKudos,
         sendFriendRequest,
         acceptFriendRequest,
