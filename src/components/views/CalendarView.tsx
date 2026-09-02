@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useHabit } from '../../context/HabitContext';
@@ -20,8 +19,6 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Check,
-  Plus,
-  X,
 } from 'lucide-react-native';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -30,9 +27,7 @@ export const CalendarView: React.FC = () => {
   const {
     habits,
     completions,
-    toggleCompletion,
     setActiveTab,
-    setIsCreateModalOpen,
     theme,
   } = useHabit();
 
@@ -42,7 +37,6 @@ export const CalendarView: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
   const todayKey = formatDateKey(new Date());
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<string>(todayKey);
-  const [showQuickLogModal, setShowQuickLogModal] = useState<boolean>(false);
 
   const year = calendarDate.getFullYear();
   const month = calendarDate.getMonth();
@@ -350,7 +344,7 @@ export const CalendarView: React.FC = () => {
         </View>
       </View>
 
-      {/* Habits List for Selected Day */}
+      {/* Habits List for Selected Day (Reflects home check-ins) */}
       <View style={styles.habitsListContainer}>
         {displayHabitsForDay.map((habit) => {
           const isDone = completions.some(
@@ -358,7 +352,7 @@ export const CalendarView: React.FC = () => {
           );
 
           return (
-            <TouchableOpacity
+            <View
               key={habit.id}
               style={[
                 styles.habitItemCard,
@@ -379,8 +373,6 @@ export const CalendarView: React.FC = () => {
                     : '#E2E8F0',
                 },
               ]}
-              onPress={() => toggleCompletion(habit.id, selectedCalendarDay)}
-              activeOpacity={0.8}
             >
               <View style={styles.habitItemLeft}>
                 <View
@@ -406,22 +398,30 @@ export const CalendarView: React.FC = () => {
                 </View>
               </View>
 
-              {/* Right Circular Checkbox */}
-              <TouchableOpacity
-                style={[
-                  styles.checkboxCircle,
-                  isDone
-                    ? styles.checkboxChecked
-                    : [
-                        styles.checkboxUnchecked,
-                        { borderColor: isDark ? '#334155' : '#CBD5E1' },
-                      ],
-                ]}
-                onPress={() => toggleCompletion(habit.id, selectedCalendarDay)}
-              >
-                {isDone && <Check size={14} color="#0B1120" strokeWidth={3} />}
-              </TouchableOpacity>
-            </TouchableOpacity>
+              {/* Status Badge reflecting Home completions */}
+              {isDone ? (
+                <View style={styles.doneStatusBadge}>
+                  <Check size={12} color="#10B981" strokeWidth={3} />
+                  <Text style={styles.doneStatusText}>Completed</Text>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.pendingStatusBadge,
+                    { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.pendingStatusText,
+                      { color: isDark ? '#94A3B8' : '#64748B' },
+                    ]}
+                  >
+                    Pending
+                  </Text>
+                </View>
+              )}
+            </View>
           );
         })}
 
@@ -433,116 +433,6 @@ export const CalendarView: React.FC = () => {
           </View>
         )}
       </View>
-
-      {/* Bottom CTA Buttons Row matching Image */}
-      <View style={styles.bottomCtaRow}>
-        <TouchableOpacity
-          style={styles.quickLogBtn}
-          onPress={() => setShowQuickLogModal(true)}
-        >
-          <Plus size={16} color="#FFFFFF" strokeWidth={3} />
-          <Text style={styles.quickLogBtnText}>Quick Log</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.newHabitBtn,
-            {
-              backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-              borderColor: isDark ? '#1E293B' : '#CBD5E1',
-            },
-          ]}
-          onPress={() => setIsCreateModalOpen(true)}
-        >
-          <Plus size={16} color={isDark ? '#E2E8F0' : '#0F172A'} strokeWidth={2.5} />
-          <Text style={[styles.newHabitBtnText, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>
-            New Habit
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Quick Log Modal */}
-      <Modal visible={showQuickLogModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
-              styles.modalBox,
-              { backgroundColor: isDark ? '#131C2E' : '#FFFFFF' },
-            ]}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                Quick Log ({selectedCalendarDay})
-              </Text>
-              <TouchableOpacity onPress={() => setShowQuickLogModal(false)}>
-                <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 280 }}>
-              {activeHabits.map((h) => {
-                const isDone = completions.some(
-                  (c) => c.habit_id === h.id && c.completion_date === selectedCalendarDay
-                );
-
-                return (
-                  <TouchableOpacity
-                    key={h.id}
-                    style={[
-                      styles.quickLogItem,
-                      {
-                        backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-                        borderColor: isDark ? '#334155' : '#E2E8F0',
-                      },
-                    ]}
-                    onPress={() => toggleCompletion(h.id, selectedCalendarDay)}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <View
-                        style={[
-                          styles.quickLogIcon,
-                          { backgroundColor: h.color || '#7C5CFF' },
-                        ]}
-                      >
-                        <IconRenderer name={h.icon} size={16} color="#FFFFFF" />
-                      </View>
-                      <Text
-                        style={[
-                          styles.quickLogName,
-                          { color: isDark ? '#FFFFFF' : '#0F172A' },
-                        ]}
-                      >
-                        {h.name}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.checkboxCircle,
-                        isDone
-                          ? styles.checkboxChecked
-                          : [
-                              styles.checkboxUnchecked,
-                              { borderColor: isDark ? '#475569' : '#CBD5E1' },
-                            ],
-                      ]}
-                    >
-                      {isDone && <Check size={14} color="#0B1120" strokeWidth={3} />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.doneBtn}
-              onPress={() => setShowQuickLogModal(false)}
-            >
-              <Text style={styles.doneBtnText}>Done</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 };
@@ -761,23 +651,28 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2,
   },
-  checkboxCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  doneStatusBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(34, 211, 168, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
-  checkboxUnchecked: {
-    borderWidth: 1.5,
+  doneStatusText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '800',
   },
-  checkboxChecked: {
-    backgroundColor: '#22D3A8',
-    shadowColor: '#22D3A8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
-    elevation: 3,
+  pendingStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  pendingStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   emptyDayBox: {
     padding: 16,
@@ -785,100 +680,5 @@ const styles = StyleSheet.create({
   },
   emptyDayText: {
     fontSize: 12,
-  },
-  bottomCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  quickLogBtn: {
-    flex: 1.2,
-    backgroundColor: '#7C5CFF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 18,
-    gap: 6,
-    shadowColor: '#7C5CFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  quickLogBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  newHabitBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    gap: 6,
-  },
-  newHabitBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'flex-end',
-  },
-  modalBox: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    padding: 20,
-    paddingBottom: 36,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  quickLogItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 8,
-  },
-  quickLogIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickLogName: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  doneBtn: {
-    backgroundColor: '#7C5CFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 16,
-    marginTop: 12,
-  },
-  doneBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
   },
 });
