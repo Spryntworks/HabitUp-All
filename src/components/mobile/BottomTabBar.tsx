@@ -1,7 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Home, CheckSquare, BarChart2, Calendar, Plus } from 'lucide-react-native';
+import { Home, Users, BarChart2, Calendar, Plus } from 'lucide-react-native';
 
 export const BottomTabBar: React.FC = () => {
   const { activeTab, setActiveTab, setIsCreateModalOpen, theme } = useHabit();
@@ -39,25 +39,25 @@ export const BottomTabBar: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* 2. Habits Tab */}
+      {/* 2. Friends Tab */}
       <TouchableOpacity
-        onPress={() => setActiveTab('habits')}
+        onPress={() => setActiveTab('friends')}
         style={styles.tabButton}
         activeOpacity={0.7}
       >
-        <CheckSquare
+        <Users
           size={22}
-          color={activeTab === 'habits' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
-          strokeWidth={activeTab === 'habits' ? 2.5 : 1.8}
+          color={activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+          strokeWidth={activeTab === 'friends' ? 2.5 : 1.8}
         />
         <Text
           style={[
             styles.tabLabel,
-            { color: activeTab === 'habits' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
-            activeTab === 'habits' && styles.activeTabLabel,
+            { color: activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
+            activeTab === 'friends' && styles.activeTabLabel,
           ]}
         >
-          Habits
+          Friends
         </Text>
       </TouchableOpacity>
 

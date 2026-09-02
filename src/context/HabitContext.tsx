@@ -19,7 +19,11 @@ import {
   ColorTheme,
   HabitCalculatedStats,
   OverallStats,
+  FriendUser,
+  FriendPublicHabit,
+  SocialFeedActivity,
 } from '../types';
+import { INITIAL_FRIENDS, INITIAL_FEED } from '../constants/socialData';
 import { localApi, getUserIdFromEmail, createDefaultUserProfile } from '../services/apiService';
 import {
   notificationService,
@@ -125,6 +129,15 @@ interface HabitContextType {
   // Stats helpers
   getHabitStats: (habitId: string, refDate?: Date) => HabitCalculatedStats;
   overallStats: OverallStats;
+
+  // Social & Friends Hub
+  friends: FriendUser[];
+  socialFeed: SocialFeedActivity[];
+  adoptFriendHabit: (habit: FriendPublicHabit, friendName: string) => Promise<void>;
+  sendKudos: (activityId: string) => void;
+  sendFriendRequest: (friendId: string) => void;
+  acceptFriendRequest: (friendId: string) => void;
+  removeFriend: (friendId: string) => void;
 }
 
 const HabitContext = createContext<HabitContextType | null>(null);
@@ -187,6 +200,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
 
+  // Social & Community State
+  const [friends, setFriends] = useState<FriendUser[]>(INITIAL_FRIENDS);
+  const [socialFeed, setSocialFeed] = useState<SocialFeedActivity[]>(INITIAL_FEED);
+
   // Load initial settings & restore previous data from backend on startup
   useEffect(() => {
     const bootstrap = async () => {
@@ -225,6 +242,23 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (activeUser && activeUser.id) {
           setUser(activeUser);
+          setIsAuthenticated(true);
+        }
+
+        // Restore persistent Friends and Activity Feed
+        const savedFriendsStr = await AsyncStorage.getItem('habitup_social_friends_v1');
+        if (savedFriendsStr) {
+          try {
+            const parsed = JSON.parse(savedFriendsStr);
+            if (Array.isArray(parsed) && parsed.length > 0) setFriends(parsed);
+          } catch {}
+        }
+        const savedFeedStr = await AsyncStorage.getItem('habitup_social_feed_v1');
+        if (savedFeedStr) {
+          try {
+            const parsed = JSON.parse(savedFeedStr);
+            if (Array.isArray(parsed) && parsed.length > 0) setSocialFeed(parsed);
+          } catch {}
         }
 
         // 3. Restore habits, completions, sessions for this user
@@ -976,6 +1010,126 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [habits, completions, selectedDate]);
 
+  // Social & Community Actions
+  const adoptFriendHabit = useCallback(
+    async (friendHabit: FriendPublicHabit, friendName: string) => {
+      createHabit({
+        name: friendHabit.name,
+        description: friendHabit.description || `Adopted from ${friendName}`,
+        icon: friendHabit.icon,
+        color: friendHabit.color,
+        frequency_type: friendHabit.frequency_type,
+        scheduled_days: friendHabit.scheduled_days,
+        reminder_time: friendHabit.reminder_time,
+        reminder_enabled: !!friendHabit.reminder_time,
+      });
+
+      const newFeedItem: SocialFeedActivity = {
+        id: `feed-adopt-${Date.now()}`,
+        friendId: user?.id || 'me',
+        friendName: user?.name ? user.name.split(' ')[0] : 'You',
+        friendUsername: '@' + (user?.name?.toLowerCase().replace(/\s+/g, '_') || 'you'),
+        friendAvatar: user?.avatar || '🌟',
+        habitName: friendHabit.name,
+        habitIcon: friendHabit.icon,
+        habitColor: friendHabit.color,
+        type: 'habit_adopted',
+        timestamp: 'Just now',
+        kudosCount: 0,
+        hasGivenKudos: false,
+      };
+
+      setSocialFeed((prev) => [newFeedItem, ...prev]);
+
+      setFriends((prev) =>
+        prev.map((f) => ({
+          ...f,
+          habits: f.habits.map((h) =>
+            h.id === friendHabit.id ? { ...h, adoptersCount: (h.adoptersCount || 0) + 1 } : h
+          ),
+        }))
+      );
+
+      if (soundEnabled) soundService.playCompletionChime();
+      if (hapticsEnabled) {
+        try {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        } catch {}
+      }
+      showToast(`Adopted "${friendHabit.name}" from ${friendName}! 🎉`, undefined, 'success');
+    },
+    [createHabit, user, soundEnabled, hapticsEnabled, showToast]
+  );
+
+  const sendKudos = useCallback(
+    (activityId: string) => {
+      setSocialFeed((prev) =>
+        prev.map((item) => {
+          if (item.id === activityId) {
+            const nextState = !item.hasGivenKudos;
+            return {
+              ...item,
+              hasGivenKudos: nextState,
+              kudosCount: nextState ? item.kudosCount + 1 : Math.max(0, item.kudosCount - 1),
+            };
+          }
+          return item;
+        })
+      );
+      if (soundEnabled) soundService.playClickSound();
+      if (hapticsEnabled) {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        } catch {}
+      }
+      showToast('Cheer & kudos sent! 🔥', undefined, 'success');
+    },
+    [soundEnabled, hapticsEnabled, showToast]
+  );
+
+  const sendFriendRequest = useCallback(
+    (friendId: string) => {
+      setFriends((prev) =>
+        prev.map((f) =>
+          f.id === friendId
+            ? { ...f, isFriend: true, requestStatus: 'accepted' }
+            : f
+        )
+      );
+      if (soundEnabled) soundService.playClickSound();
+      showToast('Connected as habit buddies! 🤝', undefined, 'success');
+    },
+    [soundEnabled, showToast]
+  );
+
+  const acceptFriendRequest = useCallback(
+    (friendId: string) => {
+      setFriends((prev) =>
+        prev.map((f) =>
+          f.id === friendId
+            ? { ...f, isFriend: true, requestStatus: 'accepted' }
+            : f
+        )
+      );
+      showToast('Friend request accepted! 🎉', undefined, 'success');
+    },
+    [showToast]
+  );
+
+  const removeFriend = useCallback(
+    (friendId: string) => {
+      setFriends((prev) =>
+        prev.map((f) =>
+          f.id === friendId
+            ? { ...f, isFriend: false, requestStatus: 'none' }
+            : f
+        )
+      );
+      showToast('Friend removed.', undefined, 'info');
+    },
+    [showToast]
+  );
+
   return (
     <HabitContext.Provider
       value={{
@@ -1051,6 +1205,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         syncWithBackend,
         getHabitStats,
         overallStats,
+        friends,
+        socialFeed,
+        adoptFriendHabit,
+        sendKudos,
+        sendFriendRequest,
+        acceptFriendRequest,
+        removeFriend,
       }}
     >
       {children}

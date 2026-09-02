@@ -7,7 +7,7 @@ import { HabitUpLogo } from './components/common/HabitUpLogo';
 import { MobileShell } from './components/mobile/MobileShell';
 import { AuthView } from './components/views/AuthView';
 import { HomeView } from './components/views/HomeView';
-import { HabitsView } from './components/views/HabitsView';
+import { FriendsView } from './components/views/FriendsView';
 import { CalendarView } from './components/views/CalendarView';
 import { StatsView } from './components/views/StatsView';
 import { StreaksView } from './components/views/StreaksView';
@@ -49,7 +49,7 @@ const AppContent: React.FC = () => {
       <NotificationBanner />
 
       {activeTab === 'home' && <HomeView />}
-      {activeTab === 'habits' && <HabitsView />}
+      {(activeTab === 'friends' || activeTab === 'habits') && <FriendsView />}
       {activeTab === 'calendar' && <CalendarView />}
       {activeTab === 'stats' && <StatsView />}
       {activeTab === 'streaks' && <StreaksView />}

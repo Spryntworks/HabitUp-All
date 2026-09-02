@@ -111,6 +111,52 @@ export interface SyncMutation {
   status: 'pending' | 'synced' | 'failed';
 }
 
-export type TabType = 'home' | 'habits' | 'calendar' | 'stats' | 'streaks' | 'settings';
+export interface FriendPublicHabit {
+  id: string;
+  name: string;
+  description?: string;
+  icon: string;
+  color: string;
+  frequency_type: FrequencyType;
+  scheduled_days: number[];
+  reminder_time?: string;
+  currentStreak: number;
+  isCompletedToday: boolean;
+  adoptersCount: number;
+}
+
+export interface FriendUser {
+  id: string;
+  name: string;
+  username: string; // e.g. "@alex_runner"
+  email: string;
+  avatar: string; // emoji or avatar color
+  bio?: string;
+  plantStage: string; // e.g. "🌳 Grand Oak"
+  currentStreak: number;
+  totalCompletions: number;
+  isFriend: boolean;
+  requestStatus: 'none' | 'pending_sent' | 'pending_received' | 'accepted';
+  habits: FriendPublicHabit[];
+}
+
+export interface SocialFeedActivity {
+  id: string;
+  friendId: string;
+  friendName: string;
+  friendUsername: string;
+  friendAvatar: string;
+  habitName: string;
+  habitIcon: string;
+  habitColor: string;
+  type: 'completed' | 'streak_milestone' | 'habit_adopted' | 'garden_level_up';
+  streakCount?: number;
+  timestamp: string;
+  kudosCount: number;
+  hasGivenKudos: boolean;
+}
+
+export type TabType = 'home' | 'friends' | 'habits' | 'calendar' | 'stats' | 'streaks' | 'settings';
 export type DeviceFrameType = 'iphone' | 'android' | 'fullscreen';
 export type ColorTheme = 'dark' | 'light';
+
