@@ -24,9 +24,6 @@ import {
   Sun,
   Volume2,
   Smartphone,
-  Wifi,
-  WifiOff,
-  RefreshCw,
   FileSpreadsheet,
   LogOut,
   Camera,
@@ -44,23 +41,16 @@ export const SettingsView: React.FC = () => {
     setHapticsEnabled,
     soundEnabled,
     setSoundEnabled,
-    isOffline,
-    setIsOffline,
-    syncQueue,
     habits,
     completions,
     getHabitStats,
     setActiveTab,
     setIsAuthSessionModalOpen,
     logout,
-    isSyncing,
-    syncWithBackend,
     showToast,
   } = useHabit();
 
   const isDark = theme === 'dark';
-
-  const pendingCount = syncQueue.length;
 
   const handleExportCSV = async () => {
     try {
@@ -408,153 +398,24 @@ export const SettingsView: React.FC = () => {
         </View>
       </View>
 
-      {/* OFFLINE & SYNC Card matching Image 2 */}
-      <View
+      {/* Simplified Standalone Export CSV Button */}
+      <TouchableOpacity
         style={[
-          styles.sectionCard,
+          styles.exportCsvBtn,
           {
             backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
             borderColor: isDark ? '#1E293B' : '#E2E8F0',
           },
         ]}
+        onPress={handleExportCSV}
       >
-        <View style={styles.syncHeaderRow}>
-          <Text style={[styles.sectionTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            OFFLINE & SYNC
-          </Text>
-          <View
-            style={[
-              styles.syncBadge,
-              {
-                backgroundColor: isOffline
-                  ? 'rgba(239, 68, 68, 0.15)'
-                  : isSyncing
-                  ? 'rgba(56, 189, 248, 0.15)'
-                  : pendingCount > 0
-                  ? 'rgba(245, 158, 11, 0.15)'
-                  : 'rgba(16, 185, 129, 0.15)',
-                borderColor: isOffline
-                  ? 'rgba(239, 68, 68, 0.3)'
-                  : isSyncing
-                  ? 'rgba(56, 189, 248, 0.3)'
-                  : pendingCount > 0
-                  ? 'rgba(245, 158, 11, 0.3)'
-                  : 'rgba(16, 185, 129, 0.3)',
-              },
-            ]}
-          >
-            <Text
-              style={[
-                styles.syncBadgeText,
-                {
-                  color: isOffline
-                    ? '#EF4444'
-                    : isSyncing
-                    ? '#38BDF8'
-                    : pendingCount > 0
-                    ? '#F59E0B'
-                    : '#10B981',
-                },
-              ]}
-            >
-              {isOffline
-                ? 'OFFLINE'
-                : isSyncing
-                ? 'SYNCING...'
-                : pendingCount > 0
-                ? `${pendingCount} PENDING`
-                : 'SYNCED'}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={[styles.syncDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-          Habits update instantly even without internet, and sync automatically when connected.
+        <FileSpreadsheet size={18} color="#10B981" />
+        <Text style={[styles.exportCsvBtnText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+          Export CSV File
         </Text>
+      </TouchableOpacity>
 
-        <View style={styles.syncActionsRow}>
-          <TouchableOpacity
-            style={[
-              styles.syncBtn,
-              {
-                backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-                borderColor: isDark ? '#334155' : '#CBD5E1',
-              },
-            ]}
-            onPress={() => {
-              setIsOffline(!isOffline);
-              showToast(
-                !isOffline ? 'Switched to Offline Mode' : 'Switched to Online Mode',
-                undefined,
-                !isOffline ? 'info' : 'success'
-              );
-            }}
-          >
-            {isOffline ? (
-              <Wifi size={16} color={isDark ? '#E2E8F0' : '#0F172A'} />
-            ) : (
-              <WifiOff size={16} color={isDark ? '#E2E8F0' : '#0F172A'} />
-            )}
-            <Text style={[styles.syncBtnText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-              {isOffline ? 'Go Online' : 'Simulate Offline'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.syncBtn,
-              {
-                backgroundColor: isDark ? '#1E293B' : '#F0F9FF',
-                borderColor: isDark ? '#334155' : '#BAE6FD',
-              },
-            ]}
-            disabled={isSyncing}
-            onPress={syncWithBackend}
-          >
-            <RefreshCw size={16} color="#38BDF8" />
-            <Text style={[styles.syncBtnText, { color: '#38BDF8' }]}>
-              {isSyncing ? 'Syncing...' : `Sync Now (${pendingCount})`}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* DATA EXPORT Card matching Image 3 */}
-      <View
-        style={[
-          styles.sectionCard,
-          {
-            backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
-          },
-        ]}
-      >
-        <Text style={[styles.sectionTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-          DATA EXPORT
-        </Text>
-
-        <Text style={[styles.syncDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-          Export all your habits, schedules, and check-in history as a spreadsheet CSV file.
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.exportCsvBtn,
-            {
-              backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-              borderColor: isDark ? '#334155' : '#CBD5E1',
-            },
-          ]}
-          onPress={handleExportCSV}
-        >
-          <FileSpreadsheet size={18} color="#10B981" />
-          <Text style={[styles.exportCsvBtnText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-            Export CSV File
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Sign Out Button matching Image 3 */}
+      {/* Sign Out Button */}
       <TouchableOpacity style={styles.signOutBtn} onPress={logout}>
         <LogOut size={18} color="#FF4D6D" />
         <Text style={styles.signOutBtnText}>Sign Out</Text>
@@ -756,57 +617,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FF4D6D',
   },
-  syncHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  syncBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  syncBadgeText: {
-    fontSize: 9,
-    fontWeight: '900',
-  },
-  syncDesc: {
-    fontSize: 12,
-    lineHeight: 18,
-    marginBottom: 14,
-  },
-  syncActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  syncBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 6,
-  },
-  syncBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
   exportCsvBtn: {
+    marginHorizontal: 20,
+    marginBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 16,
+    paddingVertical: 14,
+    borderRadius: 20,
     borderWidth: 1,
     gap: 8,
   },
   exportCsvBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   signOutBtn: {

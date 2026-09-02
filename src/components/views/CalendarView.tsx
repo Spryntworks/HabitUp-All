@@ -48,6 +48,12 @@ export const CalendarView: React.FC = () => {
   const month = calendarDate.getMonth();
   const daysInMonth = getMonthCalendarDays(year, month);
 
+  // Group days into 7-day rows (weeks)
+  const weeks: (typeof daysInMonth)[] = [];
+  for (let i = 0; i < daysInMonth.length; i += 7) {
+    weeks.push(daysInMonth.slice(i, i + 7));
+  }
+
   const monthName = new Intl.DateTimeFormat('en-US', {
     month: 'long',
     year: 'numeric',
@@ -130,133 +136,145 @@ export const CalendarView: React.FC = () => {
       {/* Days of Week Header */}
       <View style={styles.dayLabelsRow}>
         {DAY_LABELS.map((d, i) => (
-          <Text key={i} style={[styles.dayLabelText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-            {d}
-          </Text>
+          <View key={i} style={styles.dayCol}>
+            <Text style={[styles.dayLabelText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+              {d}
+            </Text>
+          </View>
         ))}
       </View>
 
-      {/* Calendar Matrix Nodes Grid matching Image 3, 4 & Partial split */}
-      <View style={styles.calGrid}>
-        {daysInMonth.map((item, index) => {
-          if (!item) {
-            return <View key={`empty-${index}`} style={styles.calNodeWrapper} />;
-          }
+      {/* Calendar Matrix Rows (7 columns per row) */}
+      <View style={styles.calGridContainer}>
+        {weeks.map((week, wIdx) => (
+          <View key={`week-${wIdx}`} style={styles.weekRow}>
+            {week.map((item, index) => {
+              if (!item) {
+                return (
+                  <View key={`empty-${wIdx}-${index}`} style={styles.dayCol}>
+                    <View style={styles.calNodeWrapper} />
+                  </View>
+                );
+              }
 
-          const scheduledForDay = activeHabits.filter((h) =>
-            isHabitScheduledOnDate(h, item.date)
-          );
-          const doneForDay = scheduledForDay.filter((h) =>
-            completions.some(
-              (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === item.key
-            )
-          );
+              const scheduledForDay = activeHabits.filter((h) =>
+                isHabitScheduledOnDate(h, item.date)
+              );
+              const doneForDay = scheduledForDay.filter((h) =>
+                completions.some(
+                  (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === item.key
+                )
+              );
 
-          const isCurrentToday = item.key === todayKey;
-          const isSelected = item.key === selectedCalendarDay;
-          const isPast = item.key < todayKey;
-          const totalDue = scheduledForDay.length;
-          const doneCount = doneForDay.length;
+              const isCurrentToday = item.key === todayKey;
+              const isSelected = item.key === selectedCalendarDay;
+              const isPast = item.key < todayKey;
+              const totalDue = scheduledForDay.length;
+              const doneCount = doneForDay.length;
 
-          let nodeType: 'completed' | 'partial' | 'missed' | 'pending' = 'pending';
-          if (item.isCurrentMonth && totalDue > 0) {
-            if (doneCount === totalDue) {
-              nodeType = 'completed';
-            } else if (doneCount > 0) {
-              nodeType = 'partial';
-            } else if (isPast) {
-              nodeType = 'missed';
-            }
-          }
+              let nodeType: 'completed' | 'partial' | 'missed' | 'pending' = 'pending';
+              if (item.isCurrentMonth && totalDue > 0) {
+                if (doneCount === totalDue) {
+                  nodeType = 'completed';
+                } else if (doneCount > 0) {
+                  nodeType = 'partial';
+                } else if (isPast) {
+                  nodeType = 'missed';
+                }
+              }
 
-          const nodeTextColor = !item.isCurrentMonth
-            ? isDark
-              ? '#475569'
-              : '#94A3B8'
-            : nodeType === 'completed' || nodeType === 'missed' || nodeType === 'partial'
-            ? '#FFFFFF'
-            : isCurrentToday
-            ? isDark
-              ? '#FFFFFF'
-              : '#7C5CFF'
-            : isDark
-            ? '#FFFFFF'
-            : '#0F172A';
+              const nodeTextColor = !item.isCurrentMonth
+                ? isDark
+                  ? '#334155'
+                  : '#CBD5E1'
+                : nodeType === 'completed' || nodeType === 'missed' || nodeType === 'partial'
+                ? '#FFFFFF'
+                : isCurrentToday
+                ? isDark
+                  ? '#FFFFFF'
+                  : '#7C5CFF'
+                : isDark
+                ? '#FFFFFF'
+                : '#0F172A';
 
-          if (nodeType === 'partial') {
-            return (
-              <TouchableOpacity
-                key={item.key}
-                activeOpacity={0.8}
-                onPress={() => setSelectedCalendarDay(item.key)}
-                style={[
-                  styles.calNodeWrapper,
-                  isCurrentToday && [
-                    styles.todayRing,
-                    { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
-                  ],
-                  isSelected && !isCurrentToday && styles.selectedRing,
-                ]}
-              >
-                <LinearGradient
-                  colors={['#22D3A8', '#22D3A8', '#FF4D6D', '#FF4D6D']}
-                  locations={[0, 0.5, 0.5, 1]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={[styles.calNode, styles.nodePartial]}
-                >
-                  <Text style={[styles.calNodeText, { color: '#FFFFFF', fontWeight: '900' }]}>
-                    {item.dayNumber}
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            );
-          }
+              if (nodeType === 'partial') {
+                return (
+                  <View key={item.key} style={styles.dayCol}>
+                    <TouchableOpacity
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedCalendarDay(item.key)}
+                      style={[
+                        styles.calNodeWrapper,
+                        isCurrentToday && [
+                          styles.todayRing,
+                          { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
+                        ],
+                        isSelected && !isCurrentToday && styles.selectedRing,
+                      ]}
+                    >
+                      <LinearGradient
+                        colors={['#22D3A8', '#22D3A8', '#FF4D6D', '#FF4D6D']}
+                        locations={[0, 0.5, 0.5, 1]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={[styles.calNode, styles.nodePartial]}
+                      >
+                        <Text style={[styles.calNodeText, { color: '#FFFFFF', fontWeight: '900' }]}>
+                          {item.dayNumber}
+                        </Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
 
-          return (
-            <TouchableOpacity
-              key={item.key}
-              activeOpacity={0.8}
-              style={[
-                styles.calNodeWrapper,
-                isCurrentToday && [
-                  styles.todayRing,
-                  { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
-                ],
-                isSelected && !isCurrentToday && styles.selectedRing,
-              ]}
-              onPress={() => setSelectedCalendarDay(item.key)}
-            >
-              <View
-                style={[
-                  styles.calNode,
-                  !item.isCurrentMonth && {
-                    backgroundColor: 'transparent',
-                  },
-                  item.isCurrentMonth && nodeType === 'completed' && styles.nodeCompleted,
-                  item.isCurrentMonth && nodeType === 'missed' && styles.nodeMissed,
-                  item.isCurrentMonth &&
-                    nodeType === 'pending' && {
-                      backgroundColor: isDark ? '#162032' : '#F1F5F9',
-                    },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.calNodeText,
-                    {
-                      color: nodeTextColor,
-                      fontWeight:
-                        nodeType !== 'pending' || isCurrentToday || isSelected ? '800' : '600',
-                    },
-                  ]}
-                >
-                  {item.dayNumber}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+              return (
+                <View key={item.key} style={styles.dayCol}>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={[
+                      styles.calNodeWrapper,
+                      isCurrentToday && [
+                        styles.todayRing,
+                        { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
+                      ],
+                      isSelected && !isCurrentToday && styles.selectedRing,
+                    ]}
+                    onPress={() => setSelectedCalendarDay(item.key)}
+                  >
+                    <View
+                      style={[
+                        styles.calNode,
+                        !item.isCurrentMonth && {
+                          backgroundColor: 'transparent',
+                        },
+                        item.isCurrentMonth && nodeType === 'completed' && styles.nodeCompleted,
+                        item.isCurrentMonth && nodeType === 'missed' && styles.nodeMissed,
+                        item.isCurrentMonth &&
+                          nodeType === 'pending' && {
+                            backgroundColor: isDark ? '#162032' : '#F1F5F9',
+                          },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.calNodeText,
+                          {
+                            color: nodeTextColor,
+                            fontWeight:
+                              nodeType !== 'pending' || isCurrentToday || isSelected ? '800' : '600',
+                          },
+                        ]}
+                      >
+                        {item.dayNumber}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        ))}
       </View>
 
       {/* Legend Row matching Image */}
@@ -578,22 +596,29 @@ const styles = StyleSheet.create({
   },
   dayLabelsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     marginBottom: 8,
   },
+  dayCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dayLabelText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
-    width: 38,
     textAlign: 'center',
   },
-  calGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-around',
+  calGridContainer: {
     paddingHorizontal: 16,
     gap: 6,
+  },
+  weekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   calNodeWrapper: {
     width: 38,

@@ -274,18 +274,16 @@ export function getMonthCalendarDays(year: number, month: number): { date: Date;
     });
   }
 
-  // Pad end of week
-  const remainder = 42 - days.length; // 6 rows of 7 days
-  if (remainder > 0 && remainder < 14) {
-    for (let i = 1; i <= remainder; i++) {
-      const padDate = new Date(year, month + 1, i);
-      days.push({
-        date: padDate,
-        key: formatDateKey(padDate),
-        dayNumber: padDate.getDate(),
-        isCurrentMonth: false,
-      });
-    }
+  // Pad to complete the final week (multiple of 7)
+  let nextMonthDay = 1;
+  while (days.length % 7 !== 0) {
+    const padDate = new Date(year, month + 1, nextMonthDay++);
+    days.push({
+      date: padDate,
+      key: formatDateKey(padDate),
+      dayNumber: padDate.getDate(),
+      isCurrentMonth: false,
+    });
   }
 
   return days;
