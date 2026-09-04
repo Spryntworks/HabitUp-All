@@ -225,9 +225,6 @@ export const FriendsView: React.FC = () => {
             <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
               Friends & Mutual Progress
             </Text>
-            <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Adopt habits & track real-time accountability together
-            </Text>
           </View>
         </View>
 
