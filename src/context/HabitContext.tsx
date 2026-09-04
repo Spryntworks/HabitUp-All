@@ -1208,7 +1208,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               currentStreak: 0,
               isCompletedToday: false,
               adoptersCount: 2,
-              weeklyHistory: [true, true, true, false, true, true, false],
+              weeklyHistory: [false, false, false, false, false, false, false],
             };
             return {
               ...f,
@@ -1264,22 +1264,28 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const toggleFriendHabitCompletion = useCallback(
     (friendId: string, habitId: string) => {
+      const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0
       setFriends((prev) =>
         prev.map((f) => {
           if (f.id === friendId) {
             return {
               ...f,
-              habits: f.habits.map((h) =>
-                h.id === habitId
-                  ? {
-                      ...h,
-                      isCompletedToday: !h.isCompletedToday,
-                      currentStreak: !h.isCompletedToday
-                        ? h.currentStreak + 1
-                        : Math.max(0, h.currentStreak - 1),
-                    }
-                  : h
-              ),
+              habits: f.habits.map((h) => {
+                if (h.id === habitId) {
+                  const nextCompleted = !h.isCompletedToday;
+                  const nextWeekly = [...(h.weeklyHistory || [false, false, false, false, false, false, false])];
+                  nextWeekly[todayIndex] = nextCompleted;
+                  return {
+                    ...h,
+                    isCompletedToday: nextCompleted,
+                    currentStreak: nextCompleted
+                      ? h.currentStreak + 1
+                      : Math.max(0, h.currentStreak - 1),
+                    weeklyHistory: nextWeekly,
+                  };
+                }
+                return h;
+              }),
             };
           }
           return f;
@@ -1326,9 +1332,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           email: `${clean.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'buddy'}@gmail.com`,
           avatar: '🤝',
           bio: 'Habit buddy on HabitUp! Building streaks together.',
-          plantStage: '🌿 Healthy Sprout (Lvl 2)',
-          currentStreak: 5,
-          totalCompletions: 18,
+          plantStage: '🌱 Fresh Seedling (Lvl 1)',
+          currentStreak: 0,
+          totalCompletions: 0,
           isFriend: true,
           requestStatus: 'accepted',
           habits: [
@@ -1341,24 +1347,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               frequency_type: 'daily',
               scheduled_days: [0, 1, 2, 3, 4, 5, 6],
               reminder_time: '08:00',
-              currentStreak: 5,
-              isCompletedToday: true,
-              adoptersCount: 1,
-              weeklyHistory: [true, true, true, true, true, true, false],
-            },
-            {
-              id: `fh-custom-2-${Date.now()}`,
-              name: 'Drink 2L Water',
-              description: 'Daily hydration habit',
-              icon: 'Droplets',
-              color: '#38BDF8',
-              frequency_type: 'daily',
-              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
-              reminder_time: '09:00',
-              currentStreak: 7,
+              currentStreak: 0,
               isCompletedToday: false,
-              adoptersCount: 2,
-              weeklyHistory: [true, true, true, true, false, true, false],
+              adoptersCount: 1,
+              weeklyHistory: [false, false, false, false, false, false, false],
             },
           ],
         };

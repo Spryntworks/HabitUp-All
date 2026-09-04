@@ -351,7 +351,7 @@ export const FriendsView: React.FC = () => {
                   const friendDone = friendHabit.isCompletedToday;
                   const bothDone = myDone && friendDone;
                   const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
-                  const friendWeekly = friendHabit.weeklyHistory || [true, true, true, true, true, true, false];
+                  const friendWeekly = friendHabit.weeklyHistory || [false, false, false, false, false, false, false];
 
                   return (
                     <View
@@ -402,7 +402,7 @@ export const FriendsView: React.FC = () => {
                         <View style={styles.sharedStreakBox}>
                           <Flame size={12} color="#F59E0B" fill="#F59E0B" />
                           <Text style={styles.sharedStreakText}>
-                            {Math.max(friendHabit.currentStreak, 1)}d Shared Streak
+                            {friendHabit.currentStreak}d Shared Streak
                           </Text>
                         </View>
                       </View>
