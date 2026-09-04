@@ -7,3 +7,7 @@ coverage/
 .env*
 !.env.example
 .expo/
+android/
+ios/
+build_output/
+*.apk
