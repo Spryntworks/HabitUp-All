@@ -336,6 +336,29 @@ async function removeMutualRecords(userIdOrEmail: string, friendIdOrEmail: strin
   } catch {}
 }
 
+async function removeMutualSharedHabitRecord(userIdOrEmail: string, friendIdOrEmail: string, habitName: string): Promise<void> {
+  try {
+    const uKey = (userIdOrEmail || '').toLowerCase();
+    const fKey = (friendIdOrEmail || '').toLowerCase();
+    const hName = (habitName || '').trim().toLowerCase();
+
+    const habitsList = await getMutualSharedHabits();
+    const filteredHabits = habitsList.filter((h) => {
+      const aId = (h.userA.id || '').toLowerCase();
+      const aEmail = (h.userA.email || '').toLowerCase();
+      const bId = (h.userB.id || '').toLowerCase();
+      const bEmail = (h.userB.email || '').toLowerCase();
+      const sameHabit = h.habitName.trim().toLowerCase() === hName;
+      const match =
+        sameHabit &&
+        (((aId === uKey || aEmail === uKey) && (bId === fKey || bEmail === fKey)) ||
+          ((aId === fKey || aEmail === fKey) && (bId === uKey || bEmail === uKey)));
+      return !match;
+    });
+    await AsyncStorage.setItem('habitup_mutual_shared_habits_v1', JSON.stringify(filteredHabits));
+  } catch {}
+}
+
 export function getDefaultFriendStarterHabits(friendName: string): FriendPublicHabit[] {
   const seed = (friendName || 'friend').toLowerCase();
   if (seed.includes('ram')) {
@@ -1593,18 +1616,28 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [updateHabit, isOffline, addMutationToQueue]);
 
-  const deleteHabit = useCallback((habitId: string) => {
-    setHabits((prev) => prev.filter((h) => h.id !== habitId));
-    setCompletions((prev) => prev.filter((c) => c.habit_id !== habitId));
-    if (isOffline) {
-      addMutationToQueue(`/habits/${habitId}`, 'DELETE', null);
-    } else {
-      localApi.deleteHabitOnServer(habitId).catch(() => {
+  const deleteHabit = useCallback(
+    (habitId: string) => {
+      const targetHabit = habits.find((h) => h.id === habitId);
+      if (targetHabit && targetHabit.buddy_id && targetHabit.is_shared) {
+        removeMutualSharedHabitRecord(user?.id || '', targetHabit.buddy_id, targetHabit.name);
+        if (user?.email) {
+          removeMutualSharedHabitRecord(user.email, targetHabit.buddy_id, targetHabit.name);
+        }
+      }
+      setHabits((prev) => prev.filter((h) => h.id !== habitId));
+      setCompletions((prev) => prev.filter((c) => c.habit_id !== habitId));
+      if (isOffline) {
         addMutationToQueue(`/habits/${habitId}`, 'DELETE', null);
-      });
-    }
-    showToast('Habit deleted.', undefined, 'info');
-  }, [isOffline, showToast, addMutationToQueue]);
+      } else {
+        localApi.deleteHabitOnServer(habitId).catch(() => {
+          addMutationToQueue(`/habits/${habitId}`, 'DELETE', null);
+        });
+      }
+      showToast('Habit deleted.', undefined, 'info');
+    },
+    [habits, user, isOffline, showToast, addMutationToQueue]
+  );
 
   const updateUser = useCallback((updates: Partial<UserProfile>) => {
     setUser((prev) => ({ ...prev, ...updates }));

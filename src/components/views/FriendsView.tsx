@@ -62,6 +62,7 @@ export const FriendsView: React.FC = () => {
     nudgeFriend,
     toggleFriendHabitCompletion,
     removeFriend,
+    deleteHabit,
     setActiveTab,
     theme,
     showToast,
@@ -109,23 +110,16 @@ export const FriendsView: React.FC = () => {
     });
   }, [friends, user]);
 
-  // Robust helper to match a friend's habit with the current user's habit
+  // Match ONLY habits that were explicitly created/followed with this friend
   const findMatchingMyHabit = (fh: FriendPublicHabit, friendId: string): Habit | undefined => {
     const cleanName = fh.name.trim().toLowerCase();
-    return (
-      habits.find(
-        (h) =>
-          !h.deleted_at &&
-          !h.archived_at &&
-          h.buddy_id === friendId &&
-          h.name.trim().toLowerCase() === cleanName
-      ) ||
-      habits.find(
-        (h) =>
-          !h.deleted_at &&
-          !h.archived_at &&
-          h.name.trim().toLowerCase() === cleanName
-      )
+    return habits.find(
+      (h) =>
+        !h.deleted_at &&
+        !h.archived_at &&
+        h.is_shared &&
+        (h.buddy_id === friendId || (h.buddy_name && h.buddy_name.toLowerCase() === friendId.toLowerCase())) &&
+        h.name.trim().toLowerCase() === cleanName
     );
   };
 
@@ -657,6 +651,20 @@ export const FriendsView: React.FC = () => {
 
                       {/* Interactive Actions Footer */}
                       <View style={styles.mutualActionsRow}>
+                        {/* Unfollow button to selectively stop following this specific habit */}
+                        <TouchableOpacity
+                          style={[styles.unfollowBtn, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}
+                          onPress={() => {
+                            deleteHabit(myHabit.id);
+                            showToast(`Unfollowed "${friendHabit.name}". You can re-follow anytime below! 🤝`, undefined, 'info');
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.unfollowBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                            Unfollow
+                          </Text>
+                        </TouchableOpacity>
+
                         {/* 1. If Friend is pending, friendly Nudge button */}
                         {!friendDone && (
                           <TouchableOpacity
@@ -1591,6 +1599,15 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     fontSize: 11,
     fontWeight: '900',
+  },
+  unfollowBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  unfollowBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
   celebratedBadge: {
     flexDirection: 'row',
