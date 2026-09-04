@@ -547,13 +547,13 @@ export const SettingsView: React.FC = () => {
               ]}
             >
               <Text style={[styles.deleteWarningText, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
-                ⚠️ Deleting your account will anonymize your profile, delete all habits, streaks, and check-in history, and revoke all active sessions.
+                ⚠️ This will permanently delete your account and all habit data.
               </Text>
             </View>
 
             {/* Password input */}
             <Text style={[styles.passwordLabel, { color: isDark ? '#E2E8F0' : '#334155' }]}>
-              CONFIRM YOUR PASSWORD:
+              CONFIRM PASSWORD:
             </Text>
             <View
               style={[
@@ -577,7 +577,7 @@ export const SettingsView: React.FC = () => {
                       } as any)
                     : {},
                 ]}
-                placeholder="Enter your password to confirm..."
+                placeholder="Enter your password..."
                 placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                 secureTextEntry={!showPassword}
                 value={deletePassword}
