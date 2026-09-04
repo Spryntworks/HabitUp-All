@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
-import { getUserInviteCode, getWeekDays } from '../../utils/streakCalculator';
+import { getUserInviteCode, getWeekDays, formatDateKey, formatTo12Hour } from '../../utils/streakCalculator';
 import { FriendUser, FriendPublicHabit, Habit } from '../../types';
 import {
   Users,
@@ -75,7 +75,7 @@ export const FriendsView: React.FC = () => {
   } = useHabit();
 
   const isDark = theme === 'dark';
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
 
   // Input for adding friend
@@ -85,7 +85,9 @@ export const FriendsView: React.FC = () => {
   const [isTogetherModalOpen, setIsTogetherModalOpen] = useState<boolean>(false);
   const [selectedFriendForTogether, setSelectedFriendForTogether] = useState<FriendUser | null>(null);
   const [togetherHabitName, setTogetherHabitName] = useState<string>('');
-  const [togetherHabitTime, setTogetherHabitTime] = useState<string>('08:00');
+  const [togetherHour, setTogetherHour] = useState<string>('08');
+  const [togetherMinute, setTogetherMinute] = useState<string>('00');
+  const [togetherPeriod, setTogetherPeriod] = useState<'AM' | 'PM'>('AM');
   const [togetherIcon, setTogetherIcon] = useState<string>('Target');
   const [togetherColor, setTogetherColor] = useState<string>('#7C5CFF');
 
@@ -93,20 +95,29 @@ export const FriendsView: React.FC = () => {
     return getUserInviteCode(user);
   }, [user]);
 
-  // Map of active user habits by lowercase name
-  const myHabitsMap = useMemo(() => {
-    const map = new Map<string, Habit>();
-    habits
-      .filter((h) => !h.deleted_at && !h.archived_at)
-      .forEach((h) => {
-        map.set(h.name.trim().toLowerCase(), h);
-      });
-    return map;
-  }, [habits]);
-
   const connectedFriends = useMemo(() => {
     return friends.filter((f) => f.isFriend);
   }, [friends]);
+
+  // Robust helper to match a friend's habit with the current user's habit
+  const findMatchingMyHabit = (fh: FriendPublicHabit, friendId: string): Habit | undefined => {
+    const cleanName = fh.name.trim().toLowerCase();
+    return (
+      habits.find(
+        (h) =>
+          !h.deleted_at &&
+          !h.archived_at &&
+          h.buddy_id === friendId &&
+          h.name.trim().toLowerCase() === cleanName
+      ) ||
+      habits.find(
+        (h) =>
+          !h.deleted_at &&
+          !h.archived_at &&
+          h.name.trim().toLowerCase() === cleanName
+      )
+    );
+  };
 
   // Helper to check if current user completed a specific habit today
   const isMyHabitDoneToday = (habitId: string) => {
@@ -117,24 +128,11 @@ export const FriendsView: React.FC = () => {
 
   // Helper to get user's 7-day completion history for a specific habit
   const getMyHabitWeeklyHistory = (habitId: string): boolean[] => {
-    const history: boolean[] = [];
-    const today = new Date();
-    // Calculate Monday of current week
-    const currentDay = today.getDay(); // 0 is Sunday
-    const distanceToMonday = (currentDay + 6) % 7;
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - distanceToMonday);
-
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const dStr = d.toISOString().split('T')[0];
-      const isDone = completions.some(
-        (c) => c.habit_id === habitId && (c.completion_date || '').split('T')[0] === dStr
+    return currentWeekDays.map((col) => {
+      return completions.some(
+        (c) => c.habit_id === habitId && (c.completion_date || '').split('T')[0] === col.key
       );
-      history.push(isDone);
-    }
-    return history;
+    });
   };
 
   const handleAddFriend = () => {
@@ -158,6 +156,25 @@ export const FriendsView: React.FC = () => {
     showToast(`Invite code ${myInviteCode} copied! 📋`, undefined, 'success');
   };
 
+  const handleApplyPreset = (p: (typeof QUICK_HABIT_PRESETS)[0]) => {
+    setTogetherHabitName(p.name);
+    setTogetherIcon(p.icon);
+    setTogetherColor(p.color);
+    if (p.time) {
+      const match = p.time.match(/^(\d{1,2}):(\d{2})$/);
+      if (match) {
+        let h = parseInt(match[1], 10);
+        const m = match[2];
+        const period: 'AM' | 'PM' = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        if (h === 0) h = 12;
+        setTogetherHour(String(h).padStart(2, '0'));
+        setTogetherMinute(m);
+        setTogetherPeriod(period);
+      }
+    }
+  };
+
   const handleCreateTogether = () => {
     if (!togetherHabitName.trim()) {
       showToast('Please enter a habit name', undefined, 'info');
@@ -169,16 +186,26 @@ export const FriendsView: React.FC = () => {
       return;
     }
 
+    let h = parseInt(togetherHour || '8', 10);
+    if (isNaN(h) || h < 1 || h > 12) h = 8;
+    if (togetherPeriod === 'PM' && h < 12) h += 12;
+    if (togetherPeriod === 'AM' && h === 12) h = 0;
+    const m = (togetherMinute || '00').padStart(2, '0');
+    const standardTime = `${String(h).padStart(2, '0')}:${m}`;
+
     createSharedHabit(
       targetFriend.id,
       togetherHabitName.trim(),
       togetherIcon,
       togetherColor,
-      togetherHabitTime
+      standardTime
     );
 
     setIsTogetherModalOpen(false);
     setTogetherHabitName('');
+    setTogetherHour('08');
+    setTogetherMinute('00');
+    setTogetherPeriod('AM');
   };
 
   const openTogetherWithFriend = (friend: FriendUser) => {
@@ -318,7 +345,7 @@ export const FriendsView: React.FC = () => {
         const unadoptedHabits: FriendPublicHabit[] = [];
 
         friend.habits.forEach((fh) => {
-          const myMatch = myHabitsMap.get(fh.name.trim().toLowerCase());
+          const myMatch = findMatchingMyHabit(fh, friend.id);
           if (myMatch) {
             sharedHabits.push({ friendHabit: fh, myHabit: myMatch });
           } else {
@@ -430,7 +457,7 @@ export const FriendsView: React.FC = () => {
                                 { color: isDark ? '#94A3B8' : '#64748B' },
                               ]}
                             >
-                              Shared Routine • ⏰ {friendHabit.reminder_time || '08:00'}
+                              Shared Routine • ⏰ {formatTo12Hour(friendHabit.reminder_time || '08:00')}
                             </Text>
                           </View>
                         </View>
@@ -651,7 +678,7 @@ export const FriendsView: React.FC = () => {
                           {h.name}
                         </Text>
                         <Text style={[styles.habitItemMeta, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                          🔥 {h.currentStreak}d streak • ⏰ {h.reminder_time || 'Daily'} • {h.isCompletedToday ? 'Done today ✅' : 'Pending today ⏳'}
+                          🔥 {h.currentStreak}d streak • ⏰ {formatTo12Hour(h.reminder_time) || 'Daily'} • {h.isCompletedToday ? 'Done today ✅' : 'Pending today ⏳'}
                         </Text>
                       </View>
                     </View>
@@ -765,12 +792,7 @@ export const FriendsView: React.FC = () => {
                       borderColor: togetherHabitName === p.name ? '#7C5CFF' : 'transparent',
                     },
                   ]}
-                  onPress={() => {
-                    setTogetherHabitName(p.name);
-                    setTogetherIcon(p.icon);
-                    setTogetherColor(p.color);
-                    setTogetherHabitTime(p.time);
-                  }}
+                  onPress={() => handleApplyPreset(p)}
                 >
                   <Text
                     style={[
@@ -803,26 +825,150 @@ export const FriendsView: React.FC = () => {
               onChangeText={setTogetherHabitName}
             />
 
-            {/* Reminder Time */}
-            <View style={styles.timeRow}>
-              <Clock size={16} color="#7C5CFF" />
-              <Text style={[styles.timeLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                Daily Reminder Time:
-              </Text>
-              <TextInput
-                style={[
-                  styles.timeInput,
-                  {
-                    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-                    color: isDark ? '#FFFFFF' : '#0F172A',
-                    borderColor: isDark ? '#334155' : '#CBD5E1',
-                  },
-                ]}
-                value={togetherHabitTime}
-                onChangeText={setTogetherHabitTime}
-                placeholder="08:00"
-                placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              />
+            {/* Reminder Time (12-Hour AM/PM Selector) */}
+            <View
+              style={[
+                styles.togetherTimeBox,
+                {
+                  backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                  borderColor: isDark ? '#334155' : '#E2E8F0',
+                },
+              ]}
+            >
+              <View style={styles.togetherTimeHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Clock size={16} color="#7C5CFF" />
+                  <Text style={[styles.togetherTimeTitle, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                    Daily Reminder Time
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.timeBadge,
+                    { backgroundColor: isDark ? '#0F172A' : '#EDE9FE' },
+                  ]}
+                >
+                  <Text style={[styles.timeBadgeText, { color: '#7C5CFF' }]}>
+                    {(togetherHour || '08').padStart(2, '0')}:{(togetherMinute || '00').padStart(2, '0')} {togetherPeriod}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.togetherTimePickerRow}>
+                {/* Hour Input */}
+                <View style={styles.timeUnitBox}>
+                  <Text style={[styles.timeUnitLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Hour
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.timeUnitInput,
+                      {
+                        backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                        borderColor: isDark ? '#4B5563' : '#CBD5E1',
+                        color: isDark ? '#FFFFFF' : '#0F172A',
+                      },
+                    ]}
+                    value={togetherHour}
+                    onChangeText={(val) => {
+                      const clean = val.replace(/[^0-9]/g, '');
+                      if (clean.length <= 2) {
+                        const n = parseInt(clean, 10);
+                        if (clean === '' || (n >= 1 && n <= 12)) setTogetherHour(clean);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!togetherHour || parseInt(togetherHour, 10) < 1) setTogetherHour('08');
+                      else setTogetherHour(togetherHour.padStart(2, '0'));
+                    }}
+                    placeholder="08"
+                    placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+
+                <Text style={[styles.timeColon, { color: isDark ? '#94A3B8' : '#64748B' }]}>:</Text>
+
+                {/* Minute Input */}
+                <View style={styles.timeUnitBox}>
+                  <Text style={[styles.timeUnitLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    Min
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.timeUnitInput,
+                      {
+                        backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                        borderColor: isDark ? '#4B5563' : '#CBD5E1',
+                        color: isDark ? '#FFFFFF' : '#0F172A',
+                      },
+                    ]}
+                    value={togetherMinute}
+                    onChangeText={(val) => {
+                      const clean = val.replace(/[^0-9]/g, '');
+                      if (clean.length <= 2) {
+                        const n = parseInt(clean, 10);
+                        if (clean === '' || (n >= 0 && n <= 59)) setTogetherMinute(clean);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!togetherMinute) setTogetherMinute('00');
+                      else setTogetherMinute(togetherMinute.padStart(2, '0'));
+                    }}
+                    placeholder="00"
+                    placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                    keyboardType="number-pad"
+                    maxLength={2}
+                  />
+                </View>
+
+                {/* AM / PM Toggle */}
+                <View style={styles.periodToggleBox}>
+                  <TouchableOpacity
+                    style={[
+                      styles.periodBtn,
+                      togetherPeriod === 'AM' && styles.periodBtnActive,
+                      {
+                        backgroundColor:
+                          togetherPeriod === 'AM' ? '#7C5CFF' : isDark ? '#0F172A' : '#F1F5F9',
+                        borderColor: togetherPeriod === 'AM' ? '#7C5CFF' : isDark ? '#334155' : '#CBD5E1',
+                      },
+                    ]}
+                    onPress={() => setTogetherPeriod('AM')}
+                  >
+                    <Text
+                      style={[
+                        styles.periodBtnText,
+                        { color: togetherPeriod === 'AM' ? '#FFFFFF' : isDark ? '#CBD5E1' : '#475569' },
+                      ]}
+                    >
+                      AM
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.periodBtn,
+                      togetherPeriod === 'PM' && styles.periodBtnActive,
+                      {
+                        backgroundColor:
+                          togetherPeriod === 'PM' ? '#7C5CFF' : isDark ? '#0F172A' : '#F1F5F9',
+                        borderColor: togetherPeriod === 'PM' ? '#7C5CFF' : isDark ? '#334155' : '#CBD5E1',
+                      },
+                    ]}
+                    onPress={() => setTogetherPeriod('PM')}
+                  >
+                    <Text
+                      style={[
+                        styles.periodBtnText,
+                        { color: togetherPeriod === 'PM' ? '#FFFFFF' : isDark ? '#CBD5E1' : '#475569' },
+                      ]}
+                    >
+                      PM
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
 
             {/* Create Button */}
@@ -1439,32 +1585,82 @@ const styles = StyleSheet.create({
         } as any)
       : {}),
   },
-  timeRow: {
+  togetherTimeBox: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  togetherTimeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 18,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  timeLabel: {
+  togetherTimeTitle: {
     fontSize: 12,
     fontWeight: '700',
   },
-  timeInput: {
+  timeBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 10,
+  },
+  timeBadgeText: {
     fontSize: 12,
     fontWeight: '800',
-    width: 65,
+  },
+  togetherTimePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timeUnitBox: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  timeUnitLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  timeUnitInput: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    width: 52,
     textAlign: 'center',
     ...(Platform.OS === 'web'
-      ? ({
-          outlineWidth: 0,
-          outlineStyle: 'none',
-          outlineColor: 'transparent',
-        } as any)
+      ? ({ outlineWidth: 0, outlineStyle: 'none', outlineColor: 'transparent' } as any)
       : {}),
+  },
+  timeColon: {
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 14,
+  },
+  periodToggleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 'auto',
+    marginTop: 14,
+  },
+  periodBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  periodBtnActive: {
+    borderColor: '#7C5CFF',
+  },
+  periodBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   modalCreateBtn: {
     backgroundColor: '#7C5CFF',
