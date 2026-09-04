@@ -37,6 +37,7 @@ import {
   calculatePlantStreak,
   isHabitScheduledOnDate,
   getWeekDays,
+  getUserInviteCode,
 } from '../utils/streakCalculator';
 
 interface ToastData {
@@ -1295,13 +1296,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!clean) return;
 
       const lower = clean.toLowerCase();
-      // Look for existing friend
+      // Look for existing friend matching username, email, name, or dynamic invite code
       const match = friends.find(
         (f) =>
           f.username.toLowerCase() === lower ||
           f.username.toLowerCase() === `@${lower.replace(/^@/, '')}` ||
           f.email.toLowerCase() === lower ||
-          `habit-${f.name.slice(0, 3).toLowerCase()}77` === lower ||
+          getUserInviteCode(f).toLowerCase() === lower ||
           f.name.toLowerCase().includes(lower)
       );
 

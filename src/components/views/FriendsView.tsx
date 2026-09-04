@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
+import { getUserInviteCode } from '../../utils/streakCalculator';
 import { FriendUser, FriendPublicHabit, Habit } from '../../types';
 import {
   Users,
@@ -73,8 +74,7 @@ export const FriendsView: React.FC = () => {
   const [togetherColor, setTogetherColor] = useState<string>('#7C5CFF');
 
   const myInviteCode = useMemo(() => {
-    const prefix = user?.name ? user.name.slice(0, 3).toUpperCase() : 'UP';
-    return `HABIT-${prefix}77`;
+    return getUserInviteCode(user);
   }, [user]);
 
   // Map of active user habits by lowercase name

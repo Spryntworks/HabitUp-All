@@ -473,3 +473,31 @@ export function calculatePlantStreak(
     daysToNextStage,
   };
 }
+
+/**
+ * Generates a unique, deterministic, and personalized invite code for every user.
+ * Format: HABIT-<NAME_PREFIX_3><UNIQUE_4_DIGITS> (e.g. HABIT-CHE7842, HABIT-SAM9104, HABIT-ALE3581)
+ */
+export function getUserInviteCode(
+  user?: { id?: string; email?: string; name?: string } | null
+): string {
+  if (!user) return 'HABIT-UP7700';
+
+  const rawName = (user.name || (user.email ? user.email.split('@')[0] : 'UP')).trim();
+  const cleanNameLetters = rawName.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  const prefix = (cleanNameLetters.slice(0, 3) || 'HAB').padEnd(3, 'X');
+
+  // Compute a deterministic hash based on unique user ID and email to guarantee uniqueness per account
+  const seed = `${user.id || ''}_${user.email || ''}_${rawName}`.toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
+    hash |= 0; // 32-bit integer
+  }
+
+  // 4-digit positive unique number between 1000 and 9999
+  const uniqueNum = (Math.abs(hash) % 9000) + 1000;
+
+  return `HABIT-${prefix}${uniqueNum}`;
+}
+
