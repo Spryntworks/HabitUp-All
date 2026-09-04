@@ -521,9 +521,6 @@ export const SettingsView: React.FC = () => {
                 <Text style={[styles.deleteModalTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                   Delete Account
                 </Text>
-                <Text style={[styles.deleteModalSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                  Permanent & Irreversible
-                </Text>
               </View>
               <TouchableOpacity
                 style={styles.closeBtn}
