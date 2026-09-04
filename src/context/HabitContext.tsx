@@ -256,21 +256,58 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           localApi.setCurrentUserId(currentUid);
         }
 
-        // Restore persistent Friends and Activity Feed
-        const savedFriendsStr = await AsyncStorage.getItem('habitup_social_friends_v1');
+        // Restore persistent Friends and Activity Feed per user
+        let loadedFriends: FriendUser[] = [];
+        const savedFriendsStr = await AsyncStorage.getItem(`habitup_social_friends_${currentUid}`);
         if (savedFriendsStr) {
           try {
             const parsed = JSON.parse(savedFriendsStr);
-            if (Array.isArray(parsed) && parsed.length > 0) setFriends(parsed);
+            if (Array.isArray(parsed)) loadedFriends = parsed;
           } catch {}
         }
-        const savedFeedStr = await AsyncStorage.getItem('habitup_social_feed_v1');
+        if (loadedFriends.length === 0 && currentUid !== 'usr_default') {
+          const globalFriendsStr = await AsyncStorage.getItem('habitup_social_friends_v1');
+          if (globalFriendsStr) {
+            try {
+              const parsed = JSON.parse(globalFriendsStr);
+              if (Array.isArray(parsed)) loadedFriends = parsed;
+            } catch {}
+          }
+        }
+        // Exclude any friend records that represent the current user
+        if (activeUser) {
+          loadedFriends = loadedFriends.filter((f) => {
+            if (f.id === activeUser.id) return false;
+            if (activeUser.email && f.email && f.email.toLowerCase() === activeUser.email.toLowerCase()) return false;
+            const myName = (activeUser.name || '').trim().toLowerCase();
+            const fName = (f.name || '').trim().toLowerCase();
+            const myHandle = myName.replace(/[^a-z0-9]/g, '');
+            const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
+            if (myHandle && fHandle && myHandle === fHandle) return false;
+            if (myName && fName && myName === fName) return false;
+            return true;
+          });
+        }
+        setFriends(loadedFriends);
+
+        let loadedFeed: SocialFeedActivity[] = [];
+        const savedFeedStr = await AsyncStorage.getItem(`habitup_social_feed_${currentUid}`);
         if (savedFeedStr) {
           try {
             const parsed = JSON.parse(savedFeedStr);
-            if (Array.isArray(parsed) && parsed.length > 0) setSocialFeed(parsed);
+            if (Array.isArray(parsed)) loadedFeed = parsed;
           } catch {}
         }
+        if (loadedFeed.length === 0 && currentUid !== 'usr_default') {
+          const globalFeedStr = await AsyncStorage.getItem('habitup_social_feed_v1');
+          if (globalFeedStr) {
+            try {
+              const parsed = JSON.parse(globalFeedStr);
+              if (Array.isArray(parsed)) loadedFeed = parsed;
+            } catch {}
+          }
+        }
+        setSocialFeed(loadedFeed);
 
         // 3. Restore habits, completions, sessions for this user
         let loadedHabits: Habit[] = [];
@@ -415,15 +452,33 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (isInitialDataLoaded.current) {
+      if (user?.id) {
+        AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(friends)).catch(() => {});
+        if (user.email) {
+          const emailUid = getUserIdFromEmail(user.email);
+          if (emailUid !== user.id) {
+            AsyncStorage.setItem(`habitup_social_friends_${emailUid}`, JSON.stringify(friends)).catch(() => {});
+          }
+        }
+      }
       AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(friends)).catch(() => {});
     }
-  }, [friends]);
+  }, [friends, user?.id, user?.email]);
 
   useEffect(() => {
     if (isInitialDataLoaded.current) {
+      if (user?.id) {
+        AsyncStorage.setItem(`habitup_social_feed_${user.id}`, JSON.stringify(socialFeed)).catch(() => {});
+        if (user.email) {
+          const emailUid = getUserIdFromEmail(user.email);
+          if (emailUid !== user.id) {
+            AsyncStorage.setItem(`habitup_social_feed_${emailUid}`, JSON.stringify(socialFeed)).catch(() => {});
+          }
+        }
+      }
       AsyncStorage.setItem('habitup_social_feed_v1', JSON.stringify(socialFeed)).catch(() => {});
     }
-  }, [socialFeed]);
+  }, [socialFeed, user?.id, user?.email]);
 
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {
@@ -490,12 +545,46 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       localApi.saveCompletions(loadedCompletions, emailUid);
     }
 
+    // Restore user-specific friends and feed
+    let userFriends: FriendUser[] = [];
+    try {
+      const savedFriendsStr = await AsyncStorage.getItem(`habitup_social_friends_${uid}`);
+      if (savedFriendsStr) {
+        const parsed = JSON.parse(savedFriendsStr);
+        if (Array.isArray(parsed)) userFriends = parsed;
+      }
+    } catch {}
+
+    // Filter out any self records
+    userFriends = userFriends.filter((f) => {
+      if (f.id === targetUser.id) return false;
+      if (targetUser.email && f.email && f.email.toLowerCase() === targetUser.email.toLowerCase()) return false;
+      const myName = (targetUser.name || '').trim().toLowerCase();
+      const fName = (f.name || '').trim().toLowerCase();
+      const myHandle = myName.replace(/[^a-z0-9]/g, '');
+      const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
+      if (myHandle && fHandle && myHandle === fHandle) return false;
+      if (myName && fName && myName === fName) return false;
+      return true;
+    });
+
+    let userFeed: SocialFeedActivity[] = [];
+    try {
+      const savedFeedStr = await AsyncStorage.getItem(`habitup_social_feed_${uid}`);
+      if (savedFeedStr) {
+        const parsed = JSON.parse(savedFeedStr);
+        if (Array.isArray(parsed)) userFeed = parsed;
+      }
+    } catch {}
+
     const loadedSessions = localApi.getSessions(uid);
     const loadedQueue = localApi.getSyncQueue(uid);
 
     setUser(targetUser);
     setHabits(loadedHabits);
     setCompletions(loadedCompletions);
+    setFriends(userFriends);
+    setSocialFeed(userFeed);
     setSessions(loadedSessions);
     setSyncQueue(loadedQueue);
     setIsAuthenticated(true);
@@ -1254,8 +1343,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const createSharedHabit = useCallback(
     (friendId: string, habitName: string, icon?: string, color?: string, time?: string) => {
       const friend = friends.find((f) => f.id === friendId);
-      const friendName = friend?.name || 'Friend';
+      const friendName = friend ? formatFriendDisplayName(friend).displayName : 'Friend';
       const friendAvatar = friend?.avatar || '🤝';
+      const myDisplayName = user?.name ? user.name.split(' ')[0] : 'You';
 
       // 1. Add to current user's habits
       createHabit({
@@ -1280,7 +1370,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const newFriendHabit: FriendPublicHabit = {
               id: `fh-shared-${Date.now()}`,
               name: habitName,
-              description: `Shared with ${user?.name || 'You'}`,
+              description: `Shared with ${myDisplayName}`,
               icon: icon || 'Target',
               color: color || '#7C5CFF',
               frequency_type: 'daily',
@@ -1293,7 +1383,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             };
             return {
               ...f,
-              habits: [newFriendHabit, ...f.habits],
+              habits: [newFriendHabit, ...f.habits.filter((h) => h.name.toLowerCase() !== habitName.toLowerCase())],
             };
           }
           return f;
@@ -1314,7 +1404,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const nudgeFriend = useCallback(
     (friendId: string, habitName: string) => {
       const friend = friends.find((f) => f.id === friendId);
-      const friendName = friend?.name || 'Your buddy';
+      const friendName = friend ? formatFriendDisplayName(friend).displayName : 'Your buddy';
 
       setFriends((prev) =>
         prev.map((f) => {
@@ -1383,15 +1473,60 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!clean) return;
 
       const lower = clean.toLowerCase();
-      // Look for existing friend matching username, email, name, or dynamic invite code
-      const match = friends.find(
-        (f) =>
+      const myCode = getUserInviteCode(user).toLowerCase();
+      const myCleanEmail = (user?.email || '').trim().toLowerCase();
+      const myName = (user?.name || '').trim().toLowerCase();
+      const myHandle = myName.replace(/[^a-z0-9]/g, '');
+
+      // 1. Prevent adding own profile / own invite code
+      if (
+        lower === myCode ||
+        (myCleanEmail && (lower === myCleanEmail || lower.includes(myCleanEmail))) ||
+        (myHandle && (lower === myHandle || lower === `@${myHandle}`)) ||
+        (myName && lower === myName)
+      ) {
+        showToast('This is your own invite code! Share it with a friend 🤝', undefined, 'info');
+        return;
+      }
+
+      // 2. Extract name & username tag from code or handle
+      let extractedHandle = clean.replace(/^@/, '');
+      let extractedName = '';
+
+      const habitCodeMatch = clean.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i);
+      if (habitCodeMatch) {
+        const codeTag = habitCodeMatch[1].toUpperCase();
+        if (codeTag === 'RAM') extractedName = 'Ram';
+        else if (codeTag === 'VIJ') extractedName = 'Vijay';
+        else if (codeTag === 'CHE') extractedName = 'Chetan';
+        else if (codeTag === 'SAM') extractedName = 'Sam';
+        else if (codeTag === 'ALE') extractedName = 'Alex';
+        else if (codeTag === 'SAR') extractedName = 'Sarah';
+        else if (codeTag === 'JOH') extractedName = 'John';
+        else extractedName = codeTag.charAt(0) + codeTag.slice(1).toLowerCase();
+
+        extractedHandle = codeTag.toLowerCase();
+      } else {
+        const parts = extractedHandle.split(/[._\s]/)[0];
+        extractedName = parts.charAt(0).toUpperCase() + parts.slice(1).toLowerCase();
+      }
+
+      const usernameClean = `@${extractedHandle.toLowerCase()}`;
+      const displayName = extractedName || 'Habit Buddy';
+
+      // 3. Check if matching friend already exists (excluding self)
+      const match = friends.find((f) => {
+        if (user?.id && f.id === user.id) return false;
+        if (user?.email && f.email && f.email.toLowerCase() === user.email.toLowerCase()) return false;
+        return (
           f.username.toLowerCase() === lower ||
-          f.username.toLowerCase() === `@${lower.replace(/^@/, '')}` ||
+          f.username.toLowerCase() === usernameClean.toLowerCase() ||
           f.email.toLowerCase() === lower ||
           getUserInviteCode(f).toLowerCase() === lower ||
-          f.name.toLowerCase().includes(lower)
-      );
+          f.name.toLowerCase() === lower ||
+          f.name.toLowerCase() === displayName.toLowerCase()
+        );
+      });
 
       if (match) {
         setFriends((prev) =>
@@ -1400,26 +1535,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           )
         );
         if (soundEnabled) soundService.playCompletionChime();
-        showToast(`Added ${match.name} (@${match.username.replace(/^@/, '')})! 🤝`, undefined, 'success');
+        showToast(`Added ${match.name} (${match.username})! 🤝`, undefined, 'success');
       } else {
-        let extractedHandle = clean.replace(/^@/, '');
-        let extractedName = '';
-
-        const habitCodeMatch = clean.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i);
-        if (habitCodeMatch) {
-          const codeTag = habitCodeMatch[1]; // e.g. "RAM", "CHE", "SAM"
-          extractedName = codeTag.charAt(0).toUpperCase() + codeTag.slice(1).toLowerCase();
-          extractedHandle = codeTag.toLowerCase();
-        } else {
-          const parts = extractedHandle.split(/[._\s]/)[0];
-          extractedName = parts.charAt(0).toUpperCase() + parts.slice(1).toLowerCase();
-        }
-
-        const usernameClean = `@${extractedHandle.toLowerCase()}`;
-        const displayName = extractedName || 'Habit Buddy';
-
         const newBuddy: FriendUser = {
-          id: `friend-${Date.now()}`,
+          id: `friend-${extractedHandle.toLowerCase()}-${Date.now()}`,
           name: displayName,
           username: usernameClean,
           email: `${extractedHandle.toLowerCase()}@gmail.com`,
@@ -1448,12 +1567,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           ],
         };
 
-        setFriends((prev) => [newBuddy, ...prev]);
+        setFriends((prev) => [newBuddy, ...prev.filter((f) => f.id !== newBuddy.id && f.id !== user?.id)]);
         if (soundEnabled) soundService.playCompletionChime();
         showToast(`Connected with ${newBuddy.name} (${usernameClean})! 🤝`, undefined, 'success');
       }
     },
-    [friends, soundEnabled, showToast]
+    [friends, user, soundEnabled, showToast]
   );
 
   const removeFriend = useCallback(

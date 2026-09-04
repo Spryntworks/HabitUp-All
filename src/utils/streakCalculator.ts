@@ -504,20 +504,38 @@ export function getUserInviteCode(
 /**
  * Formats a friend's display name and username tag cleanly
  */
-export function formatFriendDisplayName(friend?: { name?: string; username?: string } | null): { displayName: string; usernameTag: string } {
+export function formatFriendDisplayName(friend?: { name?: string; username?: string; email?: string } | null): { displayName: string; usernameTag: string } {
   if (!friend) return { displayName: 'Friend', usernameTag: '@friend' };
-  let name = friend.name || 'Friend';
-  let username = friend.username || `@${name.toLowerCase()}`;
+  let name = (friend.name || '').trim();
+  let username = (friend.username || '').trim();
+
+  if (!name && friend.email) {
+    name = friend.email.split('@')[0];
+  }
+  if (!name) name = 'Habit Buddy';
 
   // Check if name or username is in invite code format like HABIT-RAM77 or @HABIT-RAM77
   const habitCodeMatch = name.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i) || username.match(/^@?HABIT-([a-zA-Z]+)(\d+)?$/i);
   if (habitCodeMatch) {
-    const rawTag = habitCodeMatch[1];
-    name = rawTag.charAt(0).toUpperCase() + rawTag.slice(1).toLowerCase();
+    const rawTag = habitCodeMatch[1].toUpperCase();
+    if (rawTag === 'RAM') name = 'Ram';
+    else if (rawTag === 'VIJ') name = 'Vijay';
+    else if (rawTag === 'CHE') name = 'Chetan';
+    else if (rawTag === 'SAM') name = 'Sam';
+    else if (rawTag === 'ALE') name = 'Alex';
+    else if (rawTag === 'SAR') name = 'Sarah';
+    else if (rawTag === 'JOH') name = 'John';
+    else name = rawTag.charAt(0) + rawTag.slice(1).toLowerCase();
+
     username = `@${rawTag.toLowerCase()}`;
+  }
+
+  if (!username) {
+    username = `@${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
   }
 
   const cleanUsername = username.startsWith('@') ? username : `@${username}`;
   return { displayName: name, usernameTag: cleanUsername };
 }
+
 

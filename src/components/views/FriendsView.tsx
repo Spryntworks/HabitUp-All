@@ -94,8 +94,22 @@ export const FriendsView: React.FC = () => {
   }, [user]);
 
   const connectedFriends = useMemo(() => {
-    return friends.filter((f) => f.isFriend);
-  }, [friends]);
+    return friends.filter((f) => {
+      if (!f.isFriend) return false;
+      if (user?.id && f.id === user.id) return false;
+      if (user?.email && f.email && f.email.toLowerCase() === user.email.toLowerCase()) return false;
+      const myName = (user?.name || '').trim().toLowerCase();
+      const fName = (f.name || '').trim().toLowerCase();
+      const myHandle = myName.replace(/[^a-z0-9]/g, '');
+      const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
+      if (myHandle && fHandle && myHandle === fHandle) return false;
+      if (myName && fName && myName === fName) return false;
+      const myCode = getUserInviteCode(user).toLowerCase();
+      const fCode = getUserInviteCode(f).toLowerCase();
+      if (myCode && fCode && myCode === fCode) return false;
+      return true;
+    });
+  }, [friends, user]);
 
   // Robust helper to match a friend's habit with the current user's habit
   const findMatchingMyHabit = (fh: FriendPublicHabit, friendId: string): Habit | undefined => {
@@ -365,6 +379,7 @@ export const FriendsView: React.FC = () => {
       {/* 5. Friend Cards & Mutual Progress Trackers */}
       {connectedFriends.map((friend) => {
         const { displayName: friendDisplayName, usernameTag } = formatFriendDisplayName(friend);
+        const myDisplayName = user?.name ? user.name.split(' ')[0] : 'You';
 
         // Separate habits into Shared/Adopted vs Not Adopted
         const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
@@ -533,7 +548,7 @@ export const FriendsView: React.FC = () => {
                           <View style={styles.userStatusPill}>
                             <Text style={styles.miniAvatar}>{user?.avatar || '🌟'}</Text>
                             <Text style={styles.statusLabelText}>
-                              You: {myDone ? 'Done ✅' : 'Pending ⏳'}
+                              {myDisplayName} (You): {myDone ? 'Done ✅' : 'Pending ⏳'}
                             </Text>
                           </View>
 
@@ -613,7 +628,7 @@ export const FriendsView: React.FC = () => {
                             numberOfLines={1}
                             ellipsizeMode="tail"
                           >
-                            You
+                            You ({myDisplayName})
                           </Text>
                           <View style={styles.daysCols}>
                             {myWeekly.map((done, idx) => (
