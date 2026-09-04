@@ -181,6 +181,326 @@ function deduplicateCompletions(list: HabitCompletion[]): HabitCompletion[] {
   return result;
 }
 
+export interface MutualUserRef {
+  id: string;
+  name: string;
+  username: string;
+  email: string;
+  avatar: string;
+}
+
+export interface MutualConnectionRecord {
+  id: string;
+  userA: MutualUserRef;
+  userB: MutualUserRef;
+  createdAt: string;
+}
+
+export interface MutualSharedHabitRecord {
+  id: string;
+  habitName: string;
+  icon: string;
+  color: string;
+  time: string;
+  userA: MutualUserRef;
+  userB: MutualUserRef;
+  createdAt: string;
+}
+
+async function getMutualConnections(): Promise<MutualConnectionRecord[]> {
+  try {
+    const raw = await AsyncStorage.getItem('habitup_mutual_connections_v1');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveMutualConnection(userA: MutualUserRef, userB: MutualUserRef): Promise<void> {
+  try {
+    const connections = await getMutualConnections();
+    const keyA = (userA.id || userA.email || userA.name).toLowerCase();
+    const keyB = (userB.id || userB.email || userB.name).toLowerCase();
+    const connKey = [keyA, keyB].sort().join('___');
+
+    const existingIdx = connections.findIndex(
+      (c) =>
+        [(c.userA.id || c.userA.email || c.userA.name).toLowerCase(), (c.userB.id || c.userB.email || c.userB.name).toLowerCase()]
+          .sort()
+          .join('___') === connKey
+    );
+
+    const newRecord: MutualConnectionRecord = {
+      id: `conn_${connKey}`,
+      userA,
+      userB,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existingIdx >= 0) {
+      connections[existingIdx] = newRecord;
+    } else {
+      connections.push(newRecord);
+    }
+    await AsyncStorage.setItem('habitup_mutual_connections_v1', JSON.stringify(connections));
+  } catch (e) {
+    console.warn('saveMutualConnection error:', e);
+  }
+}
+
+async function getMutualSharedHabits(): Promise<MutualSharedHabitRecord[]> {
+  try {
+    const raw = await AsyncStorage.getItem('habitup_mutual_shared_habits_v1');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveMutualSharedHabit(
+  habitName: string,
+  icon: string,
+  color: string,
+  time: string,
+  userA: MutualUserRef,
+  userB: MutualUserRef
+): Promise<void> {
+  try {
+    const habitsList = await getMutualSharedHabits();
+    const cleanHabitName = habitName.trim().toLowerCase();
+    const keyA = (userA.id || userA.email || userA.name).toLowerCase();
+    const keyB = (userB.id || userB.email || userB.name).toLowerCase();
+    const connKey = [keyA, keyB].sort().join('___');
+    const recordKey = `${connKey}___${cleanHabitName}`;
+
+    const existingIdx = habitsList.findIndex((h) => {
+      const hKeyA = (h.userA.id || h.userA.email || h.userA.name).toLowerCase();
+      const hKeyB = (h.userB.id || h.userB.email || h.userB.name).toLowerCase();
+      const hConnKey = [hKeyA, hKeyB].sort().join('___');
+      return `${hConnKey}___${h.habitName.trim().toLowerCase()}` === recordKey;
+    });
+
+    const newRecord: MutualSharedHabitRecord = {
+      id: `shared_${recordKey}`,
+      habitName: habitName.trim(),
+      icon: icon || 'Target',
+      color: color || '#7C5CFF',
+      time: time || '08:00',
+      userA,
+      userB,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (existingIdx >= 0) {
+      habitsList[existingIdx] = newRecord;
+    } else {
+      habitsList.push(newRecord);
+    }
+
+    await AsyncStorage.setItem('habitup_mutual_shared_habits_v1', JSON.stringify(habitsList));
+  } catch (e) {
+    console.warn('saveMutualSharedHabit error:', e);
+  }
+}
+
+async function removeMutualRecords(userIdOrEmail: string, friendIdOrEmail: string): Promise<void> {
+  try {
+    const uKey = userIdOrEmail.toLowerCase();
+    const fKey = friendIdOrEmail.toLowerCase();
+
+    const connections = await getMutualConnections();
+    const filteredConns = connections.filter((c) => {
+      const aId = (c.userA.id || '').toLowerCase();
+      const aEmail = (c.userA.email || '').toLowerCase();
+      const bId = (c.userB.id || '').toLowerCase();
+      const bEmail = (c.userB.email || '').toLowerCase();
+      const match =
+        ((aId === uKey || aEmail === uKey) && (bId === fKey || bEmail === fKey)) ||
+        ((aId === fKey || aEmail === fKey) && (bId === uKey || bEmail === uKey));
+      return !match;
+    });
+    await AsyncStorage.setItem('habitup_mutual_connections_v1', JSON.stringify(filteredConns));
+
+    const habitsList = await getMutualSharedHabits();
+    const filteredHabits = habitsList.filter((h) => {
+      const aId = (h.userA.id || '').toLowerCase();
+      const aEmail = (h.userA.email || '').toLowerCase();
+      const bId = (h.userB.id || '').toLowerCase();
+      const bEmail = (h.userB.email || '').toLowerCase();
+      const match =
+        ((aId === uKey || aEmail === uKey) && (bId === fKey || bEmail === fKey)) ||
+        ((aId === fKey || aEmail === fKey) && (bId === uKey || bEmail === uKey));
+      return !match;
+    });
+    await AsyncStorage.setItem('habitup_mutual_shared_habits_v1', JSON.stringify(filteredHabits));
+  } catch {}
+}
+
+async function syncMutualDataForUser(
+  currentUser: UserProfile,
+  existingHabits: Habit[],
+  existingFriends: FriendUser[]
+): Promise<{ habits: Habit[]; friends: FriendUser[] }> {
+  if (!currentUser || !currentUser.id) {
+    return { habits: existingHabits, friends: existingFriends };
+  }
+
+  const myId = (currentUser.id || '').toLowerCase();
+  const myEmail = (currentUser.email || '').toLowerCase();
+  const myName = (currentUser.name || '').toLowerCase();
+
+  const isMe = (u: MutualUserRef) => {
+    if (!u) return false;
+    const uId = (u.id || '').toLowerCase();
+    const uEmail = (u.email || '').toLowerCase();
+    const uName = (u.name || '').toLowerCase();
+    return uId === myId || (myEmail && uEmail === myEmail) || (myName && uName === myName);
+  };
+
+  const connections = await getMutualConnections();
+  const mutualHabits = await getMutualSharedHabits();
+
+  let updatedFriends = [...existingFriends];
+  let updatedHabits = [...existingHabits];
+
+  // 1. Check connections where currentUser is involved
+  connections.forEach((conn) => {
+    let partner: MutualUserRef | null = null;
+    if (isMe(conn.userA) && !isMe(conn.userB)) {
+      partner = conn.userB;
+    } else if (isMe(conn.userB) && !isMe(conn.userA)) {
+      partner = conn.userA;
+    }
+
+    if (partner) {
+      const pId = partner.id;
+      const pEmail = (partner.email || '').toLowerCase();
+      const pName = partner.name;
+      const pUsername = partner.username.startsWith('@') ? partner.username : `@${partner.username}`;
+
+      const alreadyFriendIdx = updatedFriends.findIndex(
+        (f) =>
+          f.id === pId ||
+          (pEmail && f.email && f.email.toLowerCase() === pEmail) ||
+          (f.name && f.name.toLowerCase() === pName.toLowerCase()) ||
+          (f.username && f.username.toLowerCase() === pUsername.toLowerCase())
+      );
+
+      if (alreadyFriendIdx >= 0) {
+        updatedFriends[alreadyFriendIdx] = {
+          ...updatedFriends[alreadyFriendIdx],
+          isFriend: true,
+          requestStatus: 'accepted',
+        };
+      } else {
+        const newFriendObj: FriendUser = {
+          id: pId || `friend-${pName.toLowerCase()}-${Date.now()}`,
+          name: pName,
+          username: pUsername,
+          email: partner.email || `${pName.toLowerCase()}@gmail.com`,
+          avatar: partner.avatar || '🤝',
+          bio: 'Habit buddy on HabitUp! Building streaks together.',
+          plantStage: '🌱 Fresh Seedling (Lvl 1)',
+          currentStreak: 0,
+          totalCompletions: 0,
+          isFriend: true,
+          requestStatus: 'accepted',
+          habits: [],
+        };
+        updatedFriends.push(newFriendObj);
+      }
+    }
+  });
+
+  // 2. Check mutual habits where currentUser is involved
+  mutualHabits.forEach((mh) => {
+    let partner: MutualUserRef | null = null;
+    if (isMe(mh.userA) && !isMe(mh.userB)) {
+      partner = mh.userB;
+    } else if (isMe(mh.userB) && !isMe(mh.userA)) {
+      partner = mh.userA;
+    }
+
+    if (partner) {
+      const cleanHabitName = mh.habitName.trim().toLowerCase();
+      const partnerDisplayName = partner.name;
+      const partnerId = partner.id;
+
+      // Ensure currentUser has this shared habit in their habits
+      const hasMyHabit = updatedHabits.some(
+        (h) =>
+          !h.deleted_at &&
+          !h.archived_at &&
+          h.name.trim().toLowerCase() === cleanHabitName &&
+          (h.buddy_id === partnerId || (h.buddy_name && h.buddy_name.toLowerCase() === partnerDisplayName.toLowerCase()))
+      );
+
+      if (!hasMyHabit) {
+        const newHabit: Habit = {
+          id: `hab-shared-${mh.id}-${currentUser.id}`,
+          user_id: currentUser.id,
+          name: mh.habitName,
+          description: `Shared routine with ${partnerDisplayName} 🤝`,
+          icon: mh.icon || 'Target',
+          color: mh.color || '#7C5CFF',
+          frequency_type: 'daily',
+          scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+          reminder_time: mh.time || '08:00',
+          reminder_enabled: !!mh.time,
+          buddy_id: partnerId,
+          buddy_name: partnerDisplayName,
+          buddy_avatar: partner.avatar || '🤝',
+          is_shared: true,
+          created_at: mh.createdAt || new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        updatedHabits.push(newHabit);
+      }
+
+      // Ensure partner friend in updatedFriends has this public habit
+      updatedFriends = updatedFriends.map((f) => {
+        const isThisPartner =
+          f.id === partnerId ||
+          (partner?.email && f.email && f.email.toLowerCase() === partner.email.toLowerCase()) ||
+          (f.name && f.name.toLowerCase() === partnerDisplayName.toLowerCase());
+
+        if (isThisPartner) {
+          const hasFriendHabit = f.habits.some(
+            (fh) => fh.name.trim().toLowerCase() === cleanHabitName
+          );
+          if (!hasFriendHabit) {
+            const myNameShort = currentUser.name ? currentUser.name.split(' ')[0] : 'You';
+            const publicHabit: FriendPublicHabit = {
+              id: `fh-shared-${mh.id}`,
+              name: mh.habitName,
+              description: `Shared with ${myNameShort}`,
+              icon: mh.icon || 'Target',
+              color: mh.color || '#7C5CFF',
+              frequency_type: 'daily',
+              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+              reminder_time: mh.time || '08:00',
+              currentStreak: 0,
+              isCompletedToday: false,
+              adoptersCount: 2,
+              weeklyHistory: [false, false, false, false, false, false, false],
+            };
+            return {
+              ...f,
+              habits: [publicHabit, ...f.habits],
+            };
+          }
+        }
+        return f;
+      });
+    }
+  });
+
+  return {
+    habits: deduplicateHabits(updatedHabits),
+    friends: updatedFriends,
+  };
+}
+
 export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [habits, setHabits] = useState<Habit[]>(() => deduplicateHabits(localApi.getHabits()));
   const [completions, setCompletions] = useState<HabitCompletion[]>(() => deduplicateCompletions(localApi.getCompletions()));
@@ -405,6 +725,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             // offline fallback already loaded
           }
         }
+
+        // 5. Sync mutual cross-account friends and shared habits
+        if (activeUser) {
+          const synced = await syncMutualDataForUser(activeUser, cleanHabits, loadedFriends);
+          if (synced.habits.length > 0) {
+            setHabits(synced.habits);
+            localApi.saveHabits(synced.habits, activeUser.id);
+          }
+          if (synced.friends.length > 0) {
+            setFriends(synced.friends);
+          }
+        }
       } catch (err) {
         console.warn('Bootstrap error:', err);
       } finally {
@@ -576,6 +908,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (Array.isArray(parsed)) userFeed = parsed;
       }
     } catch {}
+
+    // Sync mutual cross-account friends and shared habits for targetUser
+    const synced = await syncMutualDataForUser(targetUser, loadedHabits, userFriends);
+    loadedHabits = synced.habits;
+    userFriends = synced.friends;
+    localApi.saveHabits(loadedHabits, uid);
+    if (targetUser.email) {
+      localApi.saveHabits(loadedHabits, getUserIdFromEmail(targetUser.email));
+    }
 
     const loadedSessions = localApi.getSessions(uid);
     const loadedQueue = localApi.getSyncQueue(uid);
@@ -1390,6 +1731,24 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         })
       );
 
+      // 3. Record cross-account mutual connection and mutual shared habit
+      const currentUserRef: MutualUserRef = {
+        id: user?.id || 'usr_default',
+        name: user?.name || 'User',
+        username: `@${(user?.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        email: user?.email || '',
+        avatar: user?.avatar || '🌟',
+      };
+      const buddyUserRef: MutualUserRef = {
+        id: friend?.id || friendId,
+        name: friendName,
+        username: friend?.username || `@${friendName.toLowerCase()}`,
+        email: friend?.email || '',
+        avatar: friendAvatar,
+      };
+      saveMutualConnection(currentUserRef, buddyUserRef);
+      saveMutualSharedHabit(habitName, icon || 'Target', color || '#7C5CFF', time || '08:00', currentUserRef, buddyUserRef);
+
       if (soundEnabled) soundService.playCompletionChime();
       if (hapticsEnabled) {
         try {
@@ -1528,12 +1887,29 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
       });
 
+      const currentUserRef: MutualUserRef = {
+        id: user?.id || 'usr_default',
+        name: user?.name || 'User',
+        username: `@${(user?.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        email: user?.email || '',
+        avatar: user?.avatar || '🌟',
+      };
+
       if (match) {
         setFriends((prev) =>
           prev.map((f) =>
             f.id === match.id ? { ...f, isFriend: true, requestStatus: 'accepted' } : f
           )
         );
+        const buddyUserRef: MutualUserRef = {
+          id: match.id,
+          name: match.name,
+          username: match.username,
+          email: match.email,
+          avatar: match.avatar || '🤝',
+        };
+        saveMutualConnection(currentUserRef, buddyUserRef);
+
         if (soundEnabled) soundService.playCompletionChime();
         showToast(`Added ${match.name} (${match.username})! 🤝`, undefined, 'success');
       } else {
@@ -1568,6 +1944,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
 
         setFriends((prev) => [newBuddy, ...prev.filter((f) => f.id !== newBuddy.id && f.id !== user?.id)]);
+        const buddyUserRef: MutualUserRef = {
+          id: newBuddy.id,
+          name: newBuddy.name,
+          username: newBuddy.username,
+          email: newBuddy.email,
+          avatar: newBuddy.avatar || '🤝',
+        };
+        saveMutualConnection(currentUserRef, buddyUserRef);
+
         if (soundEnabled) soundService.playCompletionChime();
         showToast(`Connected with ${newBuddy.name} (${usernameClean})! 🤝`, undefined, 'success');
       }
@@ -1588,6 +1973,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             : f
         )
       );
+
+      // 2. Remove mutual cross-account records
+      if (user) {
+        removeMutualRecords(user.id, friendId);
+        if (user.email && target?.email) {
+          removeMutualRecords(user.email, target.email);
+        }
+      }
 
       // 2. Remove all habits created with or adopted from this friend
       const removedHabitIds: string[] = [];
