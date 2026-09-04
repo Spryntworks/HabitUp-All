@@ -365,31 +365,41 @@ export const FriendsView: React.FC = () => {
                 <View style={styles.friendAvatarCircle}>
                   <Text style={styles.friendAvatarEmoji}>{friend.avatar}</Text>
                 </View>
-                <View>
-                  <Text style={[styles.friendName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                    {friendDisplayName}
-                  </Text>
-                  <Text style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                <View style={styles.friendNameContainer}>
+                  <View style={styles.friendNameStreakRow}>
+                    <Text
+                      style={[styles.friendName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {friendDisplayName}
+                    </Text>
+                    <View style={styles.streakFlameBadge}>
+                      <Flame size={11} color="#FF6B6B" fill="#FF6B6B" />
+                      <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
+                    </View>
+                  </View>
+                  <Text
+                    style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     {usernameTag} • {friend.plantStage}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.friendHeaderRight}>
-                <View style={styles.streakFlameBadge}>
-                  <Flame size={14} color="#FF6B6B" fill="#FF6B6B" />
-                  <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
-                </View>
-
                 <TouchableOpacity
                   style={[
                     styles.buddyTogetherBtn,
                     { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
                   ]}
                   onPress={() => openTogetherWithFriend(friend)}
+                  activeOpacity={0.7}
                 >
                   <Plus size={12} color="#7C5CFF" strokeWidth={3} />
-                  <Text style={styles.buddyTogetherBtnText}>Habit Together</Text>
+                  <Text style={styles.buddyTogetherBtnText}>Together</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -402,7 +412,7 @@ export const FriendsView: React.FC = () => {
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   accessibilityLabel={`Remove ${friendDisplayName}`}
                 >
-                  <UserMinus size={12} color="#EF4444" strokeWidth={2.5} />
+                  <UserMinus size={13} color="#EF4444" strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -530,7 +540,7 @@ export const FriendsView: React.FC = () => {
 
                         {/* Day Headers with Day Letter & Date Number */}
                         <View style={styles.daysHeaderRow}>
-                          <View style={{ width: 60 }} />
+                          <View style={styles.weeklyRowSpacer} />
                           <View style={styles.daysCols}>
                             {currentWeekDays.map((item, i) => (
                               <View key={i} style={styles.dayColHeaderWrapper}>
@@ -1068,7 +1078,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
     gap: 14,
   },
   header: {
@@ -1123,6 +1133,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   codeLabel: {
     fontSize: 10,
@@ -1130,9 +1142,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   codeValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     marginTop: 2,
   },
   codeActionsRow: {
@@ -1243,12 +1255,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   friendProfileLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     flex: 1,
+    minWidth: 0,
   },
   friendAvatarCircle: {
     width: 38,
@@ -1257,13 +1271,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(124, 92, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   friendAvatarEmoji: {
     fontSize: 18,
   },
+  friendNameContainer: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  friendNameStreakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'nowrap',
+  },
   friendName: {
     fontSize: 15,
     fontWeight: '800',
+    flexShrink: 1,
   },
   friendUserTag: {
     fontSize: 11,
@@ -1273,15 +1300,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexShrink: 0,
   },
   streakFlameBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 107, 107, 0.15)',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     borderRadius: 8,
     gap: 2,
+    flexShrink: 0,
   },
   streakFlameText: {
     color: '#FF6B6B',
@@ -1291,10 +1320,10 @@ const styles = StyleSheet.create({
   buddyTogetherBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 3,
   },
   buddyTogetherBtnText: {
     color: '#7C5CFF',
@@ -1302,9 +1331,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   removeFriendBtn: {
-    paddingHorizontal: 7,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1411,15 +1440,20 @@ const styles = StyleSheet.create({
   daysHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 2,
+    marginBottom: 4,
+  },
+  weeklyRowSpacer: {
+    width: 48,
+    flexShrink: 0,
   },
   daysCols: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   dayColHeaderWrapper: {
-    width: 22,
+    width: 24,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,
@@ -1436,16 +1470,18 @@ const styles = StyleSheet.create({
   weeklyRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginVertical: 2,
   },
   weeklyRowLabel: {
-    width: 60,
+    width: 48,
     fontSize: 11,
     fontWeight: '800',
+    flexShrink: 0,
   },
   progressDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1466,7 +1502,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: 8,
-    paddingTop: 2,
+    paddingTop: 4,
+    marginTop: 2,
   },
   markMyDoneBtn: {
     backgroundColor: '#10B981',
