@@ -336,6 +336,267 @@ async function removeMutualRecords(userIdOrEmail: string, friendIdOrEmail: strin
   } catch {}
 }
 
+export function getDefaultFriendStarterHabits(friendName: string): FriendPublicHabit[] {
+  const seed = (friendName || 'friend').toLowerCase();
+  if (seed.includes('ram')) {
+    return [
+      {
+        id: `fh-seed-1-${seed}`,
+        name: 'Morning 5km Run',
+        description: 'Morning cardio & endurance run 🏃',
+        icon: 'Activity',
+        color: '#FF6B6B',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '06:30',
+        currentStreak: 5,
+        isCompletedToday: false,
+        adoptersCount: 3,
+        weeklyHistory: [true, true, true, true, true, false, false],
+      },
+      {
+        id: `fh-seed-2-${seed}`,
+        name: 'Deep Meditation',
+        description: 'Mindfulness & breathwork 🧘',
+        icon: 'Sparkles',
+        color: '#7C5CFF',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '07:00',
+        currentStreak: 3,
+        isCompletedToday: true,
+        adoptersCount: 2,
+        weeklyHistory: [true, true, true, false, false, false, false],
+      },
+      {
+        id: `fh-seed-3-${seed}`,
+        name: 'Drink 3L Water',
+        description: 'Daily hydration goal 💧',
+        icon: 'Droplets',
+        color: '#38BDF8',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '09:00',
+        currentStreak: 7,
+        isCompletedToday: false,
+        adoptersCount: 4,
+        weeklyHistory: [true, true, true, true, true, true, false],
+      },
+    ];
+  } else if (seed.includes('vijay')) {
+    return [
+      {
+        id: `fh-seed-1-${seed}`,
+        name: 'Strength Workout',
+        description: 'Resistance and core training 🏋️',
+        icon: 'Dumbbell',
+        color: '#EF4444',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '18:00',
+        currentStreak: 4,
+        isCompletedToday: false,
+        adoptersCount: 2,
+        weeklyHistory: [true, true, true, true, false, false, false],
+      },
+      {
+        id: `fh-seed-2-${seed}`,
+        name: 'Read 20 Pages',
+        description: 'Daily book reading & learning 📚',
+        icon: 'BookOpen',
+        color: '#F59E0B',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '21:00',
+        currentStreak: 6,
+        isCompletedToday: true,
+        adoptersCount: 3,
+        weeklyHistory: [true, true, true, true, true, true, false],
+      },
+      {
+        id: `fh-seed-3-${seed}`,
+        name: 'LeetCode Daily',
+        description: 'Solve 1 algorithmic problem 💻',
+        icon: 'Cpu',
+        color: '#10B981',
+        frequency_type: 'daily',
+        scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+        reminder_time: '08:30',
+        currentStreak: 8,
+        isCompletedToday: false,
+        adoptersCount: 5,
+        weeklyHistory: [true, true, true, true, true, true, true],
+      },
+    ];
+  }
+  return [
+    {
+      id: `fh-seed-1-${seed}`,
+      name: 'Morning 5km Run',
+      description: 'Morning cardio & endurance run 🏃',
+      icon: 'Activity',
+      color: '#FF6B6B',
+      frequency_type: 'daily',
+      scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+      reminder_time: '06:30',
+      currentStreak: 4,
+      isCompletedToday: false,
+      adoptersCount: 2,
+      weeklyHistory: [true, true, true, true, false, false, false],
+    },
+    {
+      id: `fh-seed-2-${seed}`,
+      name: 'Read 20 Pages',
+      description: 'Daily book reading & learning 📚',
+      icon: 'BookOpen',
+      color: '#F59E0B',
+      frequency_type: 'daily',
+      scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+      reminder_time: '21:00',
+      currentStreak: 5,
+      isCompletedToday: true,
+      adoptersCount: 3,
+      weeklyHistory: [true, true, true, true, true, false, false],
+    },
+    {
+      id: `fh-seed-3-${seed}`,
+      name: 'Drink 3L Water',
+      description: 'Daily hydration goal 💧',
+      icon: 'Droplets',
+      color: '#38BDF8',
+      frequency_type: 'daily',
+      scheduled_days: [0, 1, 2, 3, 4, 5, 6],
+      reminder_time: '09:00',
+      currentStreak: 6,
+      isCompletedToday: false,
+      adoptersCount: 4,
+      weeklyHistory: [true, true, true, true, true, true, false],
+    },
+  ];
+}
+
+export async function publishUserHabits(
+  user: UserProfile | null,
+  habits: Habit[],
+  completions: HabitCompletion[]
+): Promise<void> {
+  if (!user || !user.id) return;
+  try {
+    const raw = await AsyncStorage.getItem('habitup_public_habits_catalog_v1');
+    const catalog: Record<string, { habits: Habit[]; completions: HabitCompletion[]; updatedAt: string }> = raw
+      ? JSON.parse(raw)
+      : {};
+
+    const cleanHabits = habits.filter((h) => !h.deleted_at && !h.archived_at);
+    const entry = {
+      habits: cleanHabits,
+      completions,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (user.id) catalog[user.id.toLowerCase()] = entry;
+    if (user.email) catalog[user.email.toLowerCase()] = entry;
+    const nameKey = (user.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (nameKey) catalog[nameKey] = entry;
+
+    await AsyncStorage.setItem('habitup_public_habits_catalog_v1', JSON.stringify(catalog));
+  } catch (e) {
+    console.warn('publishUserHabits error:', e);
+  }
+}
+
+export async function getFriendPublicHabits(
+  friendId: string,
+  friendEmail?: string,
+  friendName?: string,
+  existingHabits?: FriendPublicHabit[]
+): Promise<FriendPublicHabit[]> {
+  try {
+    const todayStr = formatDateKey(new Date());
+    const weekDays = getWeekDays(new Date());
+
+    // 1. Check catalog
+    const catalogRaw = await AsyncStorage.getItem('habitup_public_habits_catalog_v1');
+    const catalog: Record<string, { habits: Habit[]; completions: HabitCompletion[] }> = catalogRaw
+      ? JSON.parse(catalogRaw)
+      : {};
+
+    const friendKeyId = (friendId || '').toLowerCase();
+    const friendKeyEmail = (friendEmail || '').toLowerCase();
+    const friendKeyName = (friendName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    let matchedUserHabits: Habit[] = [];
+    let matchedUserCompletions: HabitCompletion[] = [];
+
+    for (const [key, val] of Object.entries(catalog)) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey === friendKeyId ||
+        (friendKeyEmail && lowerKey === friendKeyEmail) ||
+        (friendKeyName && (lowerKey.includes(friendKeyName) || friendKeyName.includes(lowerKey)))
+      ) {
+        if (Array.isArray(val.habits) && val.habits.length > 0) {
+          matchedUserHabits = val.habits;
+          matchedUserCompletions = val.completions || [];
+          break;
+        }
+      }
+    }
+
+    // 2. If not found in catalog, check localApi storage
+    if (matchedUserHabits.length === 0) {
+      const storageHabits = localApi.getHabits(friendId, friendEmail);
+      if (storageHabits && storageHabits.length > 0) {
+        matchedUserHabits = storageHabits;
+        matchedUserCompletions = localApi.getCompletions(friendId, friendEmail);
+      }
+    }
+
+    // Filter active habits
+    const activeHabits = matchedUserHabits.filter((h) => !h.deleted_at && !h.archived_at);
+
+    if (activeHabits.length > 0) {
+      return activeHabits.map((h) => {
+        const isDoneToday = matchedUserCompletions.some(
+          (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === todayStr
+        );
+        const weeklyHistory = weekDays.map((col) =>
+          matchedUserCompletions.some(
+            (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === col.key
+          )
+        );
+        const stats = calculateHabitStats(h, matchedUserCompletions);
+        const currentStreak = Math.max(stats.currentStreak, isDoneToday ? 1 : 0);
+
+        return {
+          id: `fh-${h.id}`,
+          name: h.name,
+          description: h.description,
+          icon: h.icon || 'Sparkles',
+          color: h.color || '#7C5CFF',
+          frequency_type: h.frequency_type || 'daily',
+          scheduled_days: h.scheduled_days || [0, 1, 2, 3, 4, 5, 6],
+          reminder_time: h.reminder_time || '08:00',
+          currentStreak,
+          isCompletedToday: isDoneToday,
+          adoptersCount: h.is_shared ? 2 : 1,
+          weeklyHistory,
+        };
+      });
+    }
+
+    // 3. Fallback to existing habits if any
+    if (existingHabits && existingHabits.length > 0) {
+      return existingHabits;
+    }
+
+    // 4. Default starter public habits
+    return getDefaultFriendStarterHabits(friendName || 'Buddy');
+  } catch {
+    return getDefaultFriendStarterHabits(friendName || 'Buddy');
+  }
+}
+
 async function syncMutualDataForUser(
   currentUser: UserProfile,
   existingHabits: Habit[],
@@ -363,8 +624,8 @@ async function syncMutualDataForUser(
   let updatedFriends = [...existingFriends];
   let updatedHabits = [...existingHabits];
 
-  // 1. Check connections where currentUser is involved
-  connections.forEach((conn) => {
+  // 1. Sync connections where currentUser is involved
+  for (const conn of connections) {
     let partner: MutualUserRef | null = null;
     if (isMe(conn.userA) && !isMe(conn.userB)) {
       partner = conn.userB;
@@ -386,11 +647,19 @@ async function syncMutualDataForUser(
           (f.username && f.username.toLowerCase() === pUsername.toLowerCase())
       );
 
+      const partnerPublicHabits = await getFriendPublicHabits(
+        pId,
+        pEmail,
+        pName,
+        alreadyFriendIdx >= 0 ? updatedFriends[alreadyFriendIdx].habits : undefined
+      );
+
       if (alreadyFriendIdx >= 0) {
         updatedFriends[alreadyFriendIdx] = {
           ...updatedFriends[alreadyFriendIdx],
           isFriend: true,
           requestStatus: 'accepted',
+          habits: partnerPublicHabits,
         };
       } else {
         const newFriendObj: FriendUser = {
@@ -405,12 +674,20 @@ async function syncMutualDataForUser(
           totalCompletions: 0,
           isFriend: true,
           requestStatus: 'accepted',
-          habits: [],
+          habits: partnerPublicHabits,
         };
         updatedFriends.push(newFriendObj);
       }
     }
-  });
+  }
+
+  // Also refresh public habits for all other friends in updatedFriends if empty
+  for (let i = 0; i < updatedFriends.length; i++) {
+    const f = updatedFriends[i];
+    if (!f.habits || f.habits.length === 0) {
+      f.habits = await getFriendPublicHabits(f.id, f.email, f.name, f.habits);
+    }
+  }
 
   // 2. Check mutual habits where currentUser is involved
   mutualHabits.forEach((mh) => {
@@ -761,14 +1038,24 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (isInitialDataLoaded.current && user?.id) {
       localApi.saveHabits(habits, user.id);
+      if (user.email) {
+        const emailUid = getUserIdFromEmail(user.email);
+        localApi.saveHabits(habits, emailUid);
+      }
+      publishUserHabits(user, habits, completions);
     }
-  }, [habits, user?.id]);
+  }, [habits, user?.id, user?.email]);
 
   useEffect(() => {
     if (isInitialDataLoaded.current && user?.id) {
       localApi.saveCompletions(completions, user.id);
+      if (user.email) {
+        const emailUid = getUserIdFromEmail(user.email);
+        localApi.saveCompletions(completions, emailUid);
+      }
+      publishUserHabits(user, habits, completions);
     }
-  }, [completions, user?.id]);
+  }, [completions, user?.id, user?.email]);
 
   useEffect(() => {
     if (isInitialDataLoaded.current && user?.id) {
@@ -811,6 +1098,22 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       AsyncStorage.setItem('habitup_social_feed_v1', JSON.stringify(socialFeed)).catch(() => {});
     }
   }, [socialFeed, user?.id, user?.email]);
+
+  // Live mutual sync whenever user enters or views the Friends tab
+  useEffect(() => {
+    if (activeTab === 'friends' && isInitialDataLoaded.current && user && user.id) {
+      syncMutualDataForUser(user, habits, friends)
+        .then((synced) => {
+          if (synced.friends.length > 0) {
+            setFriends(synced.friends);
+          }
+          if (synced.habits.length > 0) {
+            setHabits(synced.habits);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab]);
 
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {
@@ -1574,6 +1877,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Social & Community Actions
   const adoptFriendHabit = useCallback(
     async (friendHabit: FriendPublicHabit, friendId: string, friendName: string, friendAvatar?: string) => {
+      // 1. Create habit for current user
       createHabit({
         name: friendHabit.name,
         description: friendHabit.description || `Shared routine with ${friendName}`,
@@ -1588,6 +1892,32 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         buddy_avatar: friendAvatar || '🤝',
         is_shared: true,
       });
+
+      // 2. Save mutual connection & mutual shared habit record so partner account gets reciprocal habit
+      const currentUserRef: MutualUserRef = {
+        id: user?.id || 'usr_default',
+        name: user?.name || 'User',
+        username: `@${(user?.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        email: user?.email || '',
+        avatar: user?.avatar || '🌟',
+      };
+      const friendObj = friends.find((f) => f.id === friendId);
+      const buddyUserRef: MutualUserRef = {
+        id: friendObj?.id || friendId,
+        name: friendName,
+        username: friendObj?.username || `@${friendName.toLowerCase()}`,
+        email: friendObj?.email || '',
+        avatar: friendAvatar || friendObj?.avatar || '🤝',
+      };
+      saveMutualConnection(currentUserRef, buddyUserRef);
+      saveMutualSharedHabit(
+        friendHabit.name,
+        friendHabit.icon,
+        friendHabit.color,
+        friendHabit.reminder_time || '08:00',
+        currentUserRef,
+        buddyUserRef
+      );
 
       const newFeedItem: SocialFeedActivity = {
         id: `feed-adopt-${Date.now()}`,
@@ -1621,9 +1951,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         } catch {}
       }
-      showToast(`Adopted "${friendHabit.name}" with ${friendName}! Now tracking mutual progress 🎉`, undefined, 'success');
+      showToast(`Now following "${friendHabit.name}" with ${friendName}! Tracking mutual progress 🤝🎉`, undefined, 'success');
     },
-    [createHabit, user, soundEnabled, hapticsEnabled, showToast]
+    [createHabit, friends, user, soundEnabled, hapticsEnabled, showToast]
   );
 
   const sendKudos = useCallback(
@@ -1827,7 +2157,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const addFriendByCodeOrUsername = useCallback(
-    (input: string) => {
+    async (input: string) => {
       const clean = input.trim();
       if (!clean) return;
 
@@ -1896,9 +2226,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
 
       if (match) {
+        const partnerHabits = await getFriendPublicHabits(match.id, match.email, match.name, match.habits);
         setFriends((prev) =>
           prev.map((f) =>
-            f.id === match.id ? { ...f, isFriend: true, requestStatus: 'accepted' } : f
+            f.id === match.id ? { ...f, isFriend: true, requestStatus: 'accepted', habits: partnerHabits } : f
           )
         );
         const buddyUserRef: MutualUserRef = {
@@ -1911,8 +2242,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         saveMutualConnection(currentUserRef, buddyUserRef);
 
         if (soundEnabled) soundService.playCompletionChime();
-        showToast(`Added ${match.name} (${match.username})! 🤝`, undefined, 'success');
+        showToast(`Added ${match.name} (${match.username})! Check out their habits below 🤝`, undefined, 'success');
       } else {
+        const partnerHabits = await getFriendPublicHabits(
+          `friend-${extractedHandle.toLowerCase()}`,
+          `${extractedHandle.toLowerCase()}@gmail.com`,
+          displayName
+        );
+
         const newBuddy: FriendUser = {
           id: `friend-${extractedHandle.toLowerCase()}-${Date.now()}`,
           name: displayName,
@@ -1925,22 +2262,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           totalCompletions: 0,
           isFriend: true,
           requestStatus: 'accepted',
-          habits: [
-            {
-              id: `fh-custom-${Date.now()}`,
-              name: 'Daily 20m Focus',
-              description: 'Consistency is key!',
-              icon: 'Zap',
-              color: '#7C5CFF',
-              frequency_type: 'daily',
-              scheduled_days: [0, 1, 2, 3, 4, 5, 6],
-              reminder_time: '08:00',
-              currentStreak: 0,
-              isCompletedToday: false,
-              adoptersCount: 1,
-              weeklyHistory: [false, false, false, false, false, false, false],
-            },
-          ],
+          habits: partnerHabits,
         };
 
         setFriends((prev) => [newBuddy, ...prev.filter((f) => f.id !== newBuddy.id && f.id !== user?.id)]);
@@ -1954,7 +2276,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         saveMutualConnection(currentUserRef, buddyUserRef);
 
         if (soundEnabled) soundService.playCompletionChime();
-        showToast(`Connected with ${newBuddy.name} (${usernameClean})! 🤝`, undefined, 'success');
+        showToast(`Connected with ${newBuddy.name} (${usernameClean})! Check out their habits below 🤝`, undefined, 'success');
       }
     },
     [friends, user, soundEnabled, showToast]

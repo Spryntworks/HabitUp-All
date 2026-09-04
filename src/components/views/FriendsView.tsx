@@ -684,12 +684,17 @@ export const FriendsView: React.FC = () => {
               </View>
             )}
 
-            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT) */}
+            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT/FOLLOW) */}
             {unadoptedHabits.length > 0 && (
               <View style={styles.habitsWrapper}>
-                <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                  MORE HABITS FROM {friendDisplayName.toUpperCase()} ({unadoptedHabits.length})
-                </Text>
+                <View style={styles.habitsHeaderRow}>
+                  <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    MORE HABITS FROM {friendDisplayName.toUpperCase()} ({unadoptedHabits.length})
+                  </Text>
+                  <Text style={[styles.habitsSubExplainer, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                    Tap follow to join
+                  </Text>
+                </View>
 
                 {unadoptedHabits.map((h) => (
                   <View
@@ -727,11 +732,32 @@ export const FriendsView: React.FC = () => {
                       onPress={() => adoptFriendHabit(h, friend.id, friendDisplayName, friend.avatar)}
                       activeOpacity={0.8}
                     >
-                      <Plus size={12} color="#FFFFFF" strokeWidth={3} />
+                      <Plus size={13} color="#FFFFFF" strokeWidth={3} />
                       <Text style={styles.followHabitBtnText}>Follow Habit</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
+              </View>
+            )}
+
+            {sharedHabits.length === 0 && unadoptedHabits.length === 0 && (
+              <View
+                style={[
+                  styles.noHabitsPromptBox,
+                  { backgroundColor: isDark ? '#182438' : '#F8FAFC', borderColor: isDark ? '#334155' : '#E2E8F0' },
+                ]}
+              >
+                <Text style={[styles.noHabitsPromptText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  No active routines to follow yet.
+                </Text>
+                <TouchableOpacity
+                  style={styles.noHabitsTogetherBtn}
+                  onPress={() => openTogetherWithFriend(friend)}
+                  activeOpacity={0.8}
+                >
+                  <Plus size={13} color="#7C5CFF" strokeWidth={3} />
+                  <Text style={styles.noHabitsTogetherBtnText}>Start a Habit Together</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -1584,10 +1610,20 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 4,
   },
+  habitsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
   habitsSubHeading: {
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  habitsSubExplainer: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   habitItem: {
     flexDirection: 'row',
@@ -1629,6 +1665,33 @@ const styles = StyleSheet.create({
   },
   followHabitBtnText: {
     color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  noHabitsPromptBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 4,
+  },
+  noHabitsPromptText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  noHabitsTogetherBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: 'rgba(124, 92, 255, 0.12)',
+  },
+  noHabitsTogetherBtnText: {
+    color: '#7C5CFF',
     fontSize: 11,
     fontWeight: '800',
   },
