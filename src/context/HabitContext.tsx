@@ -768,6 +768,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const resetAllData = useCallback(() => {
     setHabits([]);
     setCompletions([]);
+    setFriends([]);
+    setSocialFeed([]);
+    AsyncStorage.removeItem('habitup_social_friends_v1').catch(() => {});
+    AsyncStorage.removeItem('habitup_social_feed_v1').catch(() => {});
     if (user?.id) {
       localApi.resetAllData(user.id);
     }
