@@ -467,6 +467,38 @@ class ApiClient {
     }
   }
 
+  async deleteAccount(password: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    const cleanPassword = (password || '').trim();
+    if (!cleanPassword) {
+      return { success: false, error: 'Password is required to delete your account.' };
+    }
+
+    try {
+      const res = await this.request<{ message?: string }>('/auth/account', {
+        method: 'DELETE',
+        body: JSON.stringify({ password: cleanPassword }),
+      });
+
+      if (res.ok) {
+        this.clearTokens();
+        return {
+          success: true,
+          message: res.data?.message || 'Account deleted successfully.',
+        };
+      }
+
+      return {
+        success: false,
+        error: res.error || (res.status === 401 ? 'Incorrect password. Please verify and try again.' : 'Failed to delete account. Please try again.'),
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Network connection error. Please check your internet connection.',
+      };
+    }
+  }
+
   // --- HABITS SERVER INTEGRATION ---
 
   mapBackendHabitToLocal(h: BackendHabit, fallbackTime?: string, fallbackEnabled?: boolean, fallbackDays?: number[]): Habit {

@@ -104,6 +104,7 @@ interface HabitContextType {
   login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password?: string, timezone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  deleteAccount: (password: string) => Promise<{ success: boolean; error?: string }>;
   biometricLogin: () => void;
   socialLogin: (provider: 'apple' | 'google') => void;
 
@@ -527,6 +528,46 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localApi.logoutUser().catch(() => {});
     showToast('You have been signed out.', undefined, 'info');
   }, [user, habits, completions, showToast]);
+
+  const deleteAccount = useCallback(
+    async (password: string): Promise<{ success: boolean; error?: string }> => {
+      if (!password) {
+        return { success: false, error: 'Password is required to delete your account.' };
+      }
+
+      const res = await localApi.deleteAccount(password);
+      if (!res.success) {
+        return { success: false, error: res.error || 'Failed to delete account.' };
+      }
+
+      // Clear local storage and reset all states
+      if (user?.id) {
+        localApi.resetAllData(user.id);
+      }
+      if (user?.email) {
+        const emailUid = getUserIdFromEmail(user.email);
+        localApi.resetAllData(emailUid);
+      }
+
+      setHabits([]);
+      setCompletions([]);
+      setFriends([]);
+      setSocialFeed([]);
+      setIsAuthenticated(false);
+      setUser(null);
+
+      AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
+      AsyncStorage.removeItem('habitup_current_user_v1').catch(() => {});
+      AsyncStorage.removeItem('habitup_social_friends_v1').catch(() => {});
+      AsyncStorage.removeItem('habitup_social_feed_v1').catch(() => {});
+      AsyncStorage.removeItem('habitup_access_token').catch(() => {});
+      AsyncStorage.removeItem('habitup_refresh_token').catch(() => {});
+
+      showToast('Your account has been deleted.', undefined, 'info');
+      return { success: true };
+    },
+    [user, showToast]
+  );
 
   const biometricLogin = useCallback(() => {
     setIsBiometricModalOpen(true);
@@ -1397,6 +1438,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         login,
         register,
         logout,
+        deleteAccount,
         biometricLogin,
         socialLogin,
         toggleCompletion,

@@ -9,6 +9,9 @@ import {
   Alert,
   Platform,
   Image,
+  TextInput,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -29,6 +32,12 @@ import {
   Camera,
   Globe,
   Crosshair,
+  Trash2,
+  AlertTriangle,
+  Lock,
+  Eye,
+  EyeOff,
+  X,
 } from 'lucide-react-native';
 
 export const SettingsView: React.FC = () => {
@@ -47,8 +56,15 @@ export const SettingsView: React.FC = () => {
     setActiveTab,
     setIsAuthSessionModalOpen,
     logout,
+    deleteAccount,
     showToast,
   } = useHabit();
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState<boolean>(false);
+  const [deletePassword, setDeletePassword] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string>('');
 
   const isDark = theme === 'dark';
 
@@ -171,6 +187,30 @@ export const SettingsView: React.FC = () => {
       showToast(`Detected timezone: ${tz}`, undefined, 'success');
     } catch {
       showToast('Could not detect timezone', undefined, 'warning');
+    }
+  };
+
+  const handleConfirmDeleteAccount = async () => {
+    if (!deletePassword.trim()) {
+      setDeleteError('Please enter your password to confirm.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError('');
+
+    try {
+      const result = await deleteAccount(deletePassword);
+      if (result.success) {
+        setIsDeleteModalOpen(false);
+        setDeletePassword('');
+      } else {
+        setDeleteError(result.error || 'Failed to delete account.');
+      }
+    } catch (err: any) {
+      setDeleteError(err?.message || 'Failed to delete account. Please try again.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -421,6 +461,25 @@ export const SettingsView: React.FC = () => {
         <Text style={styles.signOutBtnText}>Sign Out</Text>
       </TouchableOpacity>
 
+      {/* Delete Account Button */}
+      <TouchableOpacity
+        style={[
+          styles.deleteAccountBtn,
+          {
+            backgroundColor: isDark ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.06)',
+            borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.25)',
+          },
+        ]}
+        onPress={() => {
+          setDeletePassword('');
+          setDeleteError('');
+          setIsDeleteModalOpen(true);
+        }}
+      >
+        <Trash2 size={18} color="#EF4444" />
+        <Text style={styles.deleteAccountBtnText}>Delete Account</Text>
+      </TouchableOpacity>
+
       {/* Footer User Email */}
       <Text style={[styles.footerEmail, { color: isDark ? '#64748B' : '#94A3B8' }]}>
         Signed in as <Text style={{ fontWeight: '700' }}>{user?.email || 'user@gmail.com'}</Text>
@@ -433,6 +492,160 @@ export const SettingsView: React.FC = () => {
           Version 1.0 • Build 2026.8
         </Text>
       </View>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={isDeleteModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isDeleting) setIsDeleteModalOpen(false);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[
+              styles.deleteModalContainer,
+              {
+                backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              },
+            ]}
+          >
+            {/* Modal Header */}
+            <View style={styles.deleteModalHeader}>
+              <View style={styles.deleteIconBadge}>
+                <AlertTriangle size={22} color="#EF4444" strokeWidth={2.5} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.deleteModalTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  Delete Account
+                </Text>
+                <Text style={[styles.deleteModalSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  Permanent & Irreversible
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => {
+                  if (!isDeleting) setIsDeleteModalOpen(false);
+                }}
+                disabled={isDeleting}
+              >
+                <X size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Warning Box */}
+            <View
+              style={[
+                styles.deleteWarningBox,
+                {
+                  backgroundColor: isDark ? 'rgba(239, 68, 68, 0.1)' : '#FEF2F2',
+                  borderColor: isDark ? 'rgba(239, 68, 68, 0.3)' : '#FCA5A5',
+                },
+              ]}
+            >
+              <Text style={[styles.deleteWarningText, { color: isDark ? '#FCA5A5' : '#B91C1C' }]}>
+                ⚠️ Deleting your account will anonymize your profile, delete all habits, streaks, and check-in history, and revoke all active sessions.
+              </Text>
+            </View>
+
+            {/* Password input */}
+            <Text style={[styles.passwordLabel, { color: isDark ? '#E2E8F0' : '#334155' }]}>
+              CONFIRM YOUR PASSWORD:
+            </Text>
+            <View
+              style={[
+                styles.passwordInputContainer,
+                {
+                  backgroundColor: isDark ? '#080E1A' : '#F8FAFC',
+                  borderColor: deleteError ? '#EF4444' : isDark ? '#334155' : '#CBD5E1',
+                },
+              ]}
+            >
+              <Lock size={16} color={isDark ? '#64748B' : '#94A3B8'} style={{ marginRight: 8 }} />
+              <TextInput
+                style={[
+                  styles.passwordTextInput,
+                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                  Platform.OS === 'web'
+                    ? ({
+                        outlineWidth: 0,
+                        outlineStyle: 'none',
+                        outlineColor: 'transparent',
+                      } as any)
+                    : {},
+                ]}
+                placeholder="Enter your password to confirm..."
+                placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                secureTextEntry={!showPassword}
+                value={deletePassword}
+                onChangeText={(text) => {
+                  setDeletePassword(text);
+                  if (deleteError) setDeleteError('');
+                }}
+                editable={!isDeleting}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={{ padding: 4 }}
+              >
+                {showPassword ? (
+                  <EyeOff size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+                ) : (
+                  <Eye size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+                )}
+              </TouchableOpacity>
+            </View>
+
+            {/* Error Message */}
+            {!!deleteError && (
+              <Text style={styles.errorText}>{deleteError}</Text>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.deleteModalActions}>
+              <TouchableOpacity
+                style={[
+                  styles.cancelBtn,
+                  {
+                    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                  },
+                ]}
+                onPress={() => {
+                  if (!isDeleting) setIsDeleteModalOpen(false);
+                }}
+                disabled={isDeleting}
+              >
+                <Text style={[styles.cancelBtnText, { color: isDark ? '#E2E8F0' : '#475569' }]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.confirmDeleteBtn,
+                  { opacity: isDeleting || !deletePassword.trim() ? 0.6 : 1 },
+                ]}
+                onPress={handleConfirmDeleteAccount}
+                disabled={isDeleting || !deletePassword.trim()}
+              >
+                {isDeleting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Trash2 size={16} color="#FFFFFF" strokeWidth={2.5} />
+                    <Text style={styles.confirmDeleteBtnText}>Delete Forever</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -635,7 +848,7 @@ const styles = StyleSheet.create({
   signOutBtn: {
     marginHorizontal: 20,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 10,
     backgroundColor: 'rgba(255, 77, 109, 0.08)',
     borderColor: 'rgba(255, 77, 109, 0.35)',
     borderWidth: 1,
@@ -648,6 +861,22 @@ const styles = StyleSheet.create({
   },
   signOutBtnText: {
     color: '#FF4D6D',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  deleteAccountBtn: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    paddingVertical: 14,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  deleteAccountBtnText: {
+    color: '#EF4444',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -665,5 +894,124 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 10,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  deleteModalContainer: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  deleteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  deleteIconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  deleteModalSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  closeBtn: {
+    padding: 6,
+  },
+  deleteWarningBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  deleteWarningText: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  passwordLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    marginBottom: 8,
+  },
+  passwordTextInput: {
+    flex: 1,
+    fontSize: 13,
+    paddingVertical: 8,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  deleteModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  confirmDeleteBtn: {
+    flex: 1.2,
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  confirmDeleteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
   },
 });
