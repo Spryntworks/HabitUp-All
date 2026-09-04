@@ -1535,11 +1535,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } else {
         localApi.createHabitOnServer(newHabit).then((serverHabit) => {
           if (serverHabit) {
+            const mergedHabit: Habit = {
+              ...serverHabit,
+              buddy_id: newHabit.buddy_id,
+              buddy_name: newHabit.buddy_name,
+              buddy_avatar: newHabit.buddy_avatar,
+              is_shared: newHabit.is_shared,
+            };
             setHabits((prev) =>
               deduplicateHabits(
                 prev.map((h) =>
-                  h.id === tempId || (h.name && h.name.toLowerCase() === serverHabit.name.toLowerCase())
-                    ? serverHabit
+                  h.id === tempId || (h.name && h.name.toLowerCase() === serverHabit.name.toLowerCase() && h.buddy_id === newHabit.buddy_id)
+                    ? mergedHabit
                     : h
                 )
               )

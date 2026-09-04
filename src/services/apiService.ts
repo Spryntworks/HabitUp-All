@@ -563,6 +563,10 @@ class ApiClient {
       scheduled_days: freq === 'daily' ? [0, 1, 2, 3, 4, 5, 6] : scheduled_days,
       reminder_enabled,
       reminder_time,
+      buddy_id: existing?.buddy_id,
+      buddy_name: existing?.buddy_name,
+      buddy_avatar: existing?.buddy_avatar,
+      is_shared: existing?.is_shared,
       paused_at: h.paused_at,
       archived_at: h.archived_at,
       deleted_at: h.deleted_at,
@@ -607,12 +611,19 @@ class ApiClient {
       });
 
       if (res.ok && res.data?.habit) {
-        return this.mapBackendHabitToLocal(
+        const local = this.mapBackendHabitToLocal(
           res.data.habit,
           habitData.reminder_time,
           habitData.reminder_enabled,
           habitData.scheduled_days
         );
+        return {
+          ...local,
+          buddy_id: habitData.buddy_id,
+          buddy_name: habitData.buddy_name,
+          buddy_avatar: habitData.buddy_avatar,
+          is_shared: habitData.is_shared,
+        };
       }
     } catch (err) {
       console.warn('Server habit creation error:', err);

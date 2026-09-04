@@ -111,15 +111,20 @@ export const FriendsView: React.FC = () => {
   }, [friends, user]);
 
   // Match ONLY habits that were explicitly created/followed with this friend
-  const findMatchingMyHabit = (fh: FriendPublicHabit, friendId: string): Habit | undefined => {
+  const findMatchingMyHabit = (fh: FriendPublicHabit, friend: FriendUser): Habit | undefined => {
     const cleanName = fh.name.trim().toLowerCase();
+    const fId = (friend.id || '').toLowerCase();
+    const fName = (friend.name || '').trim().toLowerCase();
+    const fEmail = (friend.email || '').trim().toLowerCase();
     return habits.find(
       (h) =>
         !h.deleted_at &&
         !h.archived_at &&
         h.is_shared &&
-        (h.buddy_id === friendId || (h.buddy_name && h.buddy_name.toLowerCase() === friendId.toLowerCase())) &&
-        h.name.trim().toLowerCase() === cleanName
+        h.name.trim().toLowerCase() === cleanName &&
+        ((h.buddy_id && h.buddy_id.toLowerCase() === fId) ||
+          (h.buddy_name && (h.buddy_name.toLowerCase() === fName || fName.includes(h.buddy_name.toLowerCase()) || h.buddy_name.toLowerCase().includes(fName))) ||
+          (fEmail && h.buddy_id && h.buddy_id.toLowerCase() === fEmail))
     );
   };
 
@@ -354,7 +359,7 @@ export const FriendsView: React.FC = () => {
         const unadoptedHabits: FriendPublicHabit[] = [];
 
         friend.habits.forEach((fh) => {
-          const myMatch = findMatchingMyHabit(fh, friend.id);
+          const myMatch = findMatchingMyHabit(fh, friend);
           if (myMatch) {
             sharedHabits.push({ friendHabit: fh, myHabit: myMatch });
           } else {
