@@ -8,6 +8,7 @@ import {
   Modal,
   StyleSheet,
   Share,
+  Platform,
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
@@ -231,24 +232,21 @@ export const FriendsView: React.FC = () => {
         </Text>
 
         <View style={styles.addInputRow}>
-          <View
+          <TextInput
             style={[
-              styles.inputBox,
+              styles.input,
               {
                 backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
                 borderColor: isDark ? '#334155' : '#CBD5E1',
+                color: isDark ? '#FFFFFF' : '#0F172A',
               },
             ]}
-          >
-            <TextInput
-              style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
-              placeholder="Enter @username or invite code..."
-              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              value={friendCodeInput}
-              onChangeText={setFriendCodeInput}
-              autoCapitalize="none"
-            />
-          </View>
+            placeholder="Enter @username or invite code..."
+            placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+            value={friendCodeInput}
+            onChangeText={setFriendCodeInput}
+            autoCapitalize="none"
+          />
 
           <TouchableOpacity style={styles.addFriendBtn} onPress={handleAddFriend}>
             <UserPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
@@ -744,23 +742,20 @@ export const FriendsView: React.FC = () => {
             <Text style={[styles.fieldLabel, { color: isDark ? '#E2E8F0' : '#334155', marginTop: 12 }]}>
               HABIT NAME:
             </Text>
-            <View
+            <TextInput
               style={[
-                styles.modalInputWrapper,
+                styles.modalInput,
                 {
                   backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
                   borderColor: isDark ? '#334155' : '#CBD5E1',
+                  color: isDark ? '#FFFFFF' : '#0F172A',
                 },
               ]}
-            >
-              <TextInput
-                style={[styles.modalInput, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
-                placeholder="e.g. Read 20 Pages, Morning Run..."
-                placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-                value={togetherHabitName}
-                onChangeText={setTogetherHabitName}
-              />
-            </View>
+              placeholder="e.g. Read 20 Pages, Morning Run..."
+              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+              value={togetherHabitName}
+              onChangeText={setTogetherHabitName}
+            />
 
             {/* Reminder Time */}
             <View style={styles.timeRow}>
@@ -894,16 +889,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  inputBox: {
+  input: {
     flex: 1,
+    fontSize: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  input: {
-    fontSize: 13,
-    paddingVertical: 0,
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineWidth: 0,
+          outlineStyle: 'none',
+          outlineColor: 'transparent',
+        } as any)
+      : {}),
   },
   addFriendBtn: {
     backgroundColor: '#7C5CFF',
@@ -1349,15 +1348,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
-  modalInputWrapper: {
-    borderRadius: 14,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
   modalInput: {
     fontSize: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineWidth: 0,
+          outlineStyle: 'none',
+          outlineColor: 'transparent',
+        } as any)
+      : {}),
   },
   timeRow: {
     flexDirection: 'row',
@@ -1378,6 +1382,13 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     width: 65,
     textAlign: 'center',
+    ...(Platform.OS === 'web'
+      ? ({
+          outlineWidth: 0,
+          outlineStyle: 'none',
+          outlineColor: 'transparent',
+        } as any)
+      : {}),
   },
   modalCreateBtn: {
     backgroundColor: '#7C5CFF',
