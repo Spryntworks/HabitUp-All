@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
-import { getUserInviteCode } from '../../utils/streakCalculator';
+import { getUserInviteCode, getWeekDays } from '../../utils/streakCalculator';
 import { FriendUser, FriendPublicHabit, Habit } from '../../types';
 import {
   Users,
@@ -40,8 +40,6 @@ const QUICK_HABIT_PRESETS = [
   { name: 'Strength Workout', icon: 'Dumbbell', color: '#EF4444', time: '18:00' },
 ];
 
-const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
 export const FriendsView: React.FC = () => {
   const {
     user,
@@ -61,6 +59,7 @@ export const FriendsView: React.FC = () => {
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
 
   // Input for adding friend
   const [friendCodeInput, setFriendCodeInput] = useState<string>('');
@@ -457,20 +456,36 @@ export const FriendsView: React.FC = () => {
                           WEEKLY PROGRESS COMPARISON
                         </Text>
 
-                        {/* Day Headers: M T W T F S S */}
+                        {/* Day Headers with Day Letter & Date Number */}
                         <View style={styles.daysHeaderRow}>
                           <View style={{ width: 60 }} />
                           <View style={styles.daysCols}>
-                            {WEEK_DAYS.map((d, i) => (
-                              <Text
-                                key={i}
-                                style={[
-                                  styles.dayColHeader,
-                                  { color: isDark ? '#64748B' : '#94A3B8' },
-                                ]}
-                              >
-                                {d}
-                              </Text>
+                            {currentWeekDays.map((item, i) => (
+                              <View key={i} style={styles.dayColHeaderWrapper}>
+                                <Text
+                                  style={[
+                                    styles.dayColHeader,
+                                    { color: item.isToday ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
+                                  ]}
+                                >
+                                  {item.dayName[0]}
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.dayDateHeader,
+                                    {
+                                      color: item.isToday
+                                        ? '#7C5CFF'
+                                        : isDark
+                                        ? '#94A3B8'
+                                        : '#475569',
+                                      fontWeight: item.isToday ? '900' : '700',
+                                    },
+                                  ]}
+                                >
+                                  {item.dayNumber}
+                                </Text>
+                              </View>
                             ))}
                           </View>
                         </View>
@@ -1117,17 +1132,27 @@ const styles = StyleSheet.create({
   daysHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 2,
   },
   daysCols: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  dayColHeader: {
+  dayColHeaderWrapper: {
     width: 22,
-    textAlign: 'center',
-    fontSize: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  dayColHeader: {
+    fontSize: 9,
     fontWeight: '800',
+    textAlign: 'center',
+  },
+  dayDateHeader: {
+    fontSize: 10,
+    textAlign: 'center',
   },
   weeklyRow: {
     flexDirection: 'row',
