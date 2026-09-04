@@ -29,6 +29,7 @@ import {
   Sparkles,
   AlertCircle,
   ChevronLeft,
+  UserMinus,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -69,6 +70,7 @@ export const FriendsView: React.FC = () => {
     addFriendByCodeOrUsername,
     nudgeFriend,
     toggleFriendHabitCompletion,
+    removeFriend,
     setActiveTab,
     theme,
     showToast,
@@ -80,6 +82,9 @@ export const FriendsView: React.FC = () => {
 
   // Input for adding friend
   const [friendCodeInput, setFriendCodeInput] = useState<string>('');
+
+  // Remove friend confirmation state
+  const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
 
   // Modal for creating a habit together
   const [isTogetherModalOpen, setIsTogetherModalOpen] = useState<boolean>(false);
@@ -395,6 +400,19 @@ export const FriendsView: React.FC = () => {
                 >
                   <Plus size={12} color="#7C5CFF" strokeWidth={3} />
                   <Text style={styles.buddyTogetherBtnText}>Habit Together</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.removeFriendBtn,
+                    { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2' },
+                  ]}
+                  onPress={() => setFriendToRemove(friend)}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={`Remove ${friendDisplayName}`}
+                >
+                  <UserMinus size={12} color="#EF4444" strokeWidth={2.5} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -983,6 +1001,73 @@ export const FriendsView: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* 7. REMOVE FRIEND CONFIRMATION MODAL */}
+      <Modal
+        visible={!!friendToRemove}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFriendToRemove(null)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View
+            style={[
+              styles.confirmModalBox,
+              { backgroundColor: isDark ? '#1E293B' : '#FFFFFF' },
+            ]}
+          >
+            <View style={styles.confirmIconCircle}>
+              <UserMinus size={26} color="#EF4444" strokeWidth={2.5} />
+            </View>
+
+            <Text style={[styles.confirmTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              Remove Habit Buddy?
+            </Text>
+
+            <Text style={[styles.confirmMessage, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Are you sure you want to remove{' '}
+              <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>
+                {friendToRemove ? formatFriendDisplayName(friendToRemove).displayName : 'this friend'}
+              </Text>
+              {friendToRemove ? ` (${formatFriendDisplayName(friendToRemove).usernameTag})` : ''}? You will no longer track mutual streaks together.
+            </Text>
+
+            <View style={styles.confirmBtnRow}>
+              <TouchableOpacity
+                style={[
+                  styles.confirmCancelBtn,
+                  { backgroundColor: isDark ? '#334155' : '#E2E8F0' },
+                ]}
+                onPress={() => setFriendToRemove(null)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.confirmCancelBtnText,
+                    { color: isDark ? '#F1F5F9' : '#334155' },
+                  ]}
+                >
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.confirmDeleteBtn}
+                onPress={() => {
+                  if (friendToRemove) {
+                    removeFriend(friendToRemove.id);
+                    setFriendToRemove(null);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <UserMinus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.confirmDeleteBtnText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -1225,6 +1310,13 @@ const styles = StyleSheet.create({
     color: '#7C5CFF',
     fontSize: 11,
     fontWeight: '800',
+  },
+  removeFriendBtn: {
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sharedSection: {
     gap: 10,
@@ -1679,6 +1771,83 @@ const styles = StyleSheet.create({
   modalCreateBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '900',
+  },
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  confirmModalBox: {
+    width: '100%',
+    maxWidth: 380,
+    borderRadius: 24,
+    padding: 22,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  confirmIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  confirmTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  confirmMessage: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  confirmBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  confirmCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  confirmDeleteBtn: {
+    flex: 1.2,
+    backgroundColor: '#EF4444',
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  confirmDeleteBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
     fontWeight: '900',
   },
 });

@@ -1457,6 +1457,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const removeFriend = useCallback(
     (friendId: string) => {
+      const target = friends.find((f) => f.id === friendId);
+      const name = target?.name || 'Friend';
       setFriends((prev) =>
         prev.map((f) =>
           f.id === friendId
@@ -1464,9 +1466,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             : f
         )
       );
-      showToast('Friend removed.', undefined, 'info');
+      if (soundEnabled) soundService.playClickSound();
+      showToast(`Removed ${name} from habit buddies.`, undefined, 'info');
     },
-    [showToast]
+    [friends, soundEnabled, showToast]
   );
 
   return (
