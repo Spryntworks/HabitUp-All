@@ -28,6 +28,7 @@ import {
   Bell,
   Sparkles,
   AlertCircle,
+  ChevronLeft,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -68,6 +69,7 @@ export const FriendsView: React.FC = () => {
     addFriendByCodeOrUsername,
     nudgeFriend,
     toggleFriendHabitCompletion,
+    setActiveTab,
     theme,
     showToast,
   } = useHabit();
@@ -193,17 +195,35 @@ export const FriendsView: React.FC = () => {
     >
       {/* 1. Header */}
       <View style={styles.header}>
-        <View style={styles.headerIconCircle}>
-          <Users size={20} color="#7C5CFF" />
+        <View style={styles.headerLeft}>
+          <View style={styles.headerIconCircle}>
+            <Users size={20} color="#7C5CFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+              Friends & Mutual Progress
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Adopt habits & track real-time accountability together
+            </Text>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-            Friends & Mutual Progress
+
+        <TouchableOpacity
+          style={[
+            styles.backPill,
+            {
+              backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+              borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            },
+          ]}
+          onPress={() => setActiveTab('home')}
+        >
+          <ChevronLeft size={16} color={isDark ? '#E2E8F0' : '#0F172A'} />
+          <Text style={[styles.backPillText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+            Back
           </Text>
-          <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Adopt habits & track real-time accountability together
-          </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 2. My Invite Code & Add Friend Card */}
@@ -833,9 +853,29 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
     paddingTop: 4,
     paddingBottom: 4,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  backPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 4,
+    marginLeft: 8,
+  },
+  backPillText: {
+    fontSize: 12,
+    fontWeight: '800',
   },
   headerIconCircle: {
     width: 42,
