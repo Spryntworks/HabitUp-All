@@ -207,6 +207,42 @@ export interface MutualSharedHabitRecord {
   createdAt: string;
 }
 
+export interface FriendNudgeRecord {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderUsername?: string;
+  senderAvatar?: string;
+  recipientId: string;
+  recipientName?: string;
+  recipientEmail?: string;
+  habitName: string;
+  habitIcon?: string;
+  habitColor?: string;
+  timestamp: string;
+  delivered: boolean;
+  deliveredAt?: string;
+}
+
+export async function getPendingNudges(): Promise<FriendNudgeRecord[]> {
+  try {
+    const raw = await AsyncStorage.getItem('habitup_pending_nudges_v1');
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function savePendingNudge(nudge: FriendNudgeRecord): Promise<void> {
+  try {
+    const list = await getPendingNudges();
+    list.push(nudge);
+    await AsyncStorage.setItem('habitup_pending_nudges_v1', JSON.stringify(list));
+  } catch (e) {
+    console.warn('savePendingNudge error:', e);
+  }
+}
+
 async function getMutualConnections(): Promise<MutualConnectionRecord[]> {
   try {
     const raw = await AsyncStorage.getItem('habitup_mutual_connections_v1');
@@ -1036,6 +1072,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (synced.friends.length > 0) {
             setFriends(synced.friends);
           }
+          checkAndDeliverPendingNudges(activeUser);
         }
       } catch (err) {
         console.warn('Bootstrap error:', err);
@@ -1153,6 +1190,102 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToast(null);
   }, []);
 
+  const checkAndDeliverPendingNudges = useCallback(
+    async (currentUser: UserProfile | null) => {
+      if (!currentUser || !currentUser.id) return;
+      try {
+        const nudges = await getPendingNudges();
+        if (!nudges || nudges.length === 0) return;
+
+        const myId = (currentUser.id || '').toLowerCase();
+        const myEmail = (currentUser.email || '').toLowerCase();
+        const myName = (currentUser.name || '').trim().toLowerCase();
+        const myNameFirst = myName.split(' ')[0] || '';
+        const myCleanHandle = myName.replace(/[^a-z0-9]/g, '');
+
+        let hasUpdates = false;
+        const updatedNudges: FriendNudgeRecord[] = [];
+
+        for (const nudge of nudges) {
+          if (nudge.delivered) {
+            updatedNudges.push(nudge);
+            continue;
+          }
+
+          const sendId = (nudge.senderId || '').toLowerCase();
+          const sendName = (nudge.senderName || '').trim().toLowerCase();
+          const isSender =
+            (sendId && myId && sendId === myId) ||
+            (sendName && myName && (sendName === myName || sendName === myNameFirst));
+
+          // The sender shouldn't deliver to themselves
+          if (isSender) {
+            updatedNudges.push(nudge);
+            continue;
+          }
+
+          const recId = (nudge.recipientId || '').toLowerCase();
+          const recEmail = (nudge.recipientEmail || '').toLowerCase();
+          const recName = (nudge.recipientName || '').trim().toLowerCase();
+          const recNameFirst = recName.split(' ')[0] || '';
+          const recCleanHandle = recName.replace(/[^a-z0-9]/g, '');
+
+          // Check if current user is the recipient
+          const isRecipient =
+            (recId && myId && (recId === myId || recId.includes(myId) || myId.includes(recId))) ||
+            (recEmail && myEmail && (recEmail === myEmail || recEmail.includes(myEmail) || myEmail.includes(recEmail))) ||
+            (recName && myName && (recName === myName || recName.includes(myName) || myName.includes(recName) || (recNameFirst && recNameFirst === myNameFirst) || (myCleanHandle && recCleanHandle && (myCleanHandle === recCleanHandle || myCleanHandle.includes(recCleanHandle) || recCleanHandle.includes(myCleanHandle))))) ||
+            (recId && myNameFirst && (recId.includes(myNameFirst) || (myCleanHandle && recId.includes(myCleanHandle))));
+
+          if (isRecipient) {
+            nudge.delivered = true;
+            nudge.deliveredAt = new Date().toISOString();
+            hasUpdates = true;
+
+            // Find matching habit if user has it
+            const matchedHabit = habits.find(
+              (h) => !h.deleted_at && !h.archived_at && h.name.trim().toLowerCase() === nudge.habitName.trim().toLowerCase()
+            );
+
+            // Trigger real-time In-App Banner, Web Audio Chime, Browser Notification, and Mobile Push Notification!
+            notificationService.triggerNudge({
+              senderName: nudge.senderName || 'Your buddy',
+              habitName: nudge.habitName,
+              habitId: matchedHabit?.id,
+              senderAvatar: nudge.senderAvatar || '👋',
+              icon: nudge.habitIcon || 'Bell',
+              color: nudge.habitColor || '#F59E0B',
+            });
+
+            showToast(
+              `👋 ${nudge.senderName} sent you a nudge for "${nudge.habitName}"! ⚡`,
+              undefined,
+              'info'
+            );
+          }
+          updatedNudges.push(nudge);
+        }
+
+        if (hasUpdates) {
+          await AsyncStorage.setItem('habitup_pending_nudges_v1', JSON.stringify(updatedNudges));
+        }
+      } catch (err) {
+        console.warn('checkAndDeliverPendingNudges error:', err);
+      }
+    },
+    [habits, showToast]
+  );
+
+  // Periodic polling for pending nudges across active sessions / switches
+  useEffect(() => {
+    if (!user || !user.id) return;
+    checkAndDeliverPendingNudges(user);
+    const interval = setInterval(() => {
+      checkAndDeliverPendingNudges(user);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [user, checkAndDeliverPendingNudges]);
+
   const triggerCelebration = useCallback(() => {
     if (soundEnabled) {
       try {
@@ -1257,7 +1390,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsAuthenticated(true);
     AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(true)).catch(() => {});
     setActiveTab('home');
-  }, []);
+
+    // Deliver any queued nudges targeting this newly logged-in account
+    checkAndDeliverPendingNudges(targetUser);
+  }, [checkAndDeliverPendingNudges]);
 
   const login = useCallback(
     async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
@@ -2134,6 +2270,33 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     (friendId: string, habitName: string) => {
       const friend = friends.find((f) => f.id === friendId);
       const friendName = friend ? formatFriendDisplayName(friend).displayName : 'Your buddy';
+      const mySenderName = user?.name ? user.name.split(' ')[0] : 'Your buddy';
+      const mySenderUsername = `@${(user?.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+      const mySenderAvatar = user?.avatar || '🌟';
+
+      // Find habit icon & color if available
+      const friendHabit = friend?.habits.find((h) => h.name.toLowerCase() === habitName.toLowerCase());
+      const habitIcon = friendHabit?.icon || 'Target';
+      const habitColor = friendHabit?.color || '#F59E0B';
+
+      // Create persistent cross-account nudge record
+      const newNudge: FriendNudgeRecord = {
+        id: `nudge-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        senderId: user?.id || 'usr_me',
+        senderName: user?.name || mySenderName,
+        senderUsername: mySenderUsername,
+        senderAvatar: mySenderAvatar,
+        recipientId: friend?.id || friendId,
+        recipientName: friend?.name || friendName,
+        recipientEmail: friend?.email || '',
+        habitName,
+        habitIcon,
+        habitColor,
+        timestamp: new Date().toISOString(),
+        delivered: false,
+      };
+
+      savePendingNudge(newNudge);
 
       setFriends((prev) =>
         prev.map((f) => {
@@ -2159,7 +2322,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       showToast(`Sent a friendly reminder to ${friendName} for "${habitName}"! ⚡👋`, undefined, 'success');
     },
-    [friends, soundEnabled, hapticsEnabled, showToast]
+    [friends, user, soundEnabled, hapticsEnabled, showToast]
   );
 
   const toggleFriendHabitCompletion = useCallback(

@@ -256,6 +256,83 @@ export async function triggerTestNotification(
   });
 }
 
+export async function triggerNudgeNotification(params: {
+  senderName: string;
+  habitName: string;
+  habitId?: string;
+  senderAvatar?: string;
+  icon?: string;
+  color?: string;
+}) {
+  const title = `👋 ${params.senderName} nudged you!`;
+  const body = `Friendly reminder to check off "${params.habitName}" today and maintain your shared streak! 🔥`;
+
+  const currentTime = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date());
+
+  // 1. Play Audio Chime
+  playWebAudioChime();
+
+  // 2. Web browser notification
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/3233/3233497.png',
+        });
+      } catch (e) {
+        console.log('Browser notification fallback error:', e);
+      }
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((p) => {
+        if (p === 'granted') {
+          try {
+            new Notification(title, {
+              body,
+              icon: 'https://cdn-icons-png.flaticon.com/512/3233/3233497.png',
+            });
+          } catch {}
+        }
+      });
+    }
+  }
+
+  // 3. Native Expo OS notification on mobile
+  if (Platform.OS !== 'web') {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title,
+          body,
+          sound: true,
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          data: params.habitId ? { habitId: params.habitId } : undefined,
+        },
+        trigger: null, // deliver immediately
+      });
+    } catch (err) {
+      console.warn('Native notification trigger error:', err);
+    }
+  }
+
+  // 4. In-App Animated Floating Banner Card (Visible on ALL devices)
+  notifyInAppListeners({
+    id: `nudge-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    habitId: params.habitId,
+    title,
+    body,
+    icon: params.icon || 'Bell',
+    color: params.color || '#F59E0B',
+    reminderTime: currentTime,
+    timestamp: new Date().toISOString(),
+    type: 'reminder',
+  });
+}
+
 export const notificationService = {
   checkPermission: checkNotificationPermission,
   requestPermission: requestNotificationPermission,
@@ -263,6 +340,7 @@ export const notificationService = {
   cancelReminder: cancelHabitReminder,
   cancelAll: cancelAllReminders,
   triggerTest: triggerTestNotification,
+  triggerNudge: triggerNudgeNotification,
   playChime: playWebAudioChime,
   addListener: addInAppNotificationListener,
 };
