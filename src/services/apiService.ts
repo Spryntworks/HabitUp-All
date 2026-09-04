@@ -60,6 +60,18 @@ export interface BackendStats {
 // In-Memory Synchronous Cache layer backing AsyncStorage
 const memoryStore: Record<string, string> = {};
 
+if (typeof window !== 'undefined' && window.localStorage) {
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && (key.startsWith('habitup') || key.startsWith('@habitup'))) {
+        const val = window.localStorage.getItem(key);
+        if (val !== null) memoryStore[key] = val;
+      }
+    }
+  } catch {}
+}
+
 class ApiClient {
   private currentUserId: string = 'usr_default';
   private accessToken: string | null = null;
@@ -67,6 +79,9 @@ class ApiClient {
   public readonly baseUrl: string = BACKEND_BASE_URL;
 
   constructor() {
+    this.currentUserId = this.getStorage<string>('habitup_current_user_id', 'usr_default');
+    this.accessToken = this.getStorage<string | null>('habitup_access_token', null);
+    this.refreshToken = this.getStorage<string | null>('habitup_refresh_token', null);
     this.initAsync();
   }
 
@@ -118,13 +133,26 @@ class ApiClient {
     this.refreshToken = null;
     delete memoryStore['habitup_access_token'];
     delete memoryStore['habitup_refresh_token'];
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem('habitup_access_token');
+        window.localStorage.removeItem('habitup_refresh_token');
+      } catch {}
+    }
     AsyncStorage.removeItem('habitup_access_token').catch(() => {});
     AsyncStorage.removeItem('habitup_refresh_token').catch(() => {});
   }
 
   private getStorage<T>(key: string, fallback: T): T {
     try {
-      const data = memoryStore[key];
+      let data = memoryStore[key];
+      if (!data && typeof window !== 'undefined' && window.localStorage) {
+        const localVal = window.localStorage.getItem(key);
+        if (localVal) {
+          data = localVal;
+          memoryStore[key] = localVal;
+        }
+      }
       return data ? JSON.parse(data) : fallback;
     } catch {
       return fallback;
@@ -135,6 +163,11 @@ class ApiClient {
     try {
       const str = JSON.stringify(value);
       memoryStore[key] = str;
+      if (typeof window !== 'undefined' && window.localStorage) {
+        try {
+          window.localStorage.setItem(key, str);
+        } catch {}
+      }
       AsyncStorage.setItem(key, str).catch(() => {});
     } catch (e) {
       console.warn('Storage write warning:', e);

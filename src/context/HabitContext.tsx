@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -210,6 +211,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [friends, setFriends] = useState<FriendUser[]>(INITIAL_FRIENDS);
   const [socialFeed, setSocialFeed] = useState<SocialFeedActivity[]>(INITIAL_FEED);
 
+  const isInitialDataLoaded = useRef(false);
+
   // Load initial settings & restore previous data from backend on startup
   useEffect(() => {
     const bootstrap = async () => {
@@ -248,7 +251,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (activeUser && activeUser.id) {
           setUser(activeUser);
-          setIsAuthenticated(true);
+          currentUid = activeUser.id;
+          localApi.setCurrentUserId(currentUid);
         }
 
         // Restore persistent Friends and Activity Feed
@@ -268,10 +272,73 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         // 3. Restore habits, completions, sessions for this user
-        const savedHabits = deduplicateHabits(localApi.getHabits(currentUid));
-        const savedCompletions = deduplicateCompletions(localApi.getCompletions(currentUid));
-        if (savedHabits.length > 0) setHabits(savedHabits);
-        if (savedCompletions.length > 0) setCompletions(savedCompletions);
+        let loadedHabits: Habit[] = [];
+        const savedHabitsStr = await AsyncStorage.getItem(`habitup_habits_${currentUid}`);
+        if (savedHabitsStr) {
+          try {
+            const parsed = JSON.parse(savedHabitsStr);
+            if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+          } catch {}
+        }
+        if (currentUid !== 'usr_default') {
+          const defaultHabitsStr = await AsyncStorage.getItem('habitup_habits_usr_default');
+          if (defaultHabitsStr) {
+            try {
+              const parsed = JSON.parse(defaultHabitsStr);
+              if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+            } catch {}
+          }
+        }
+        if (activeUser?.email) {
+          const emailUid = getUserIdFromEmail(activeUser.email);
+          if (emailUid !== currentUid && emailUid !== 'usr_default') {
+            const emailHabitsStr = await AsyncStorage.getItem(`habitup_habits_${emailUid}`);
+            if (emailHabitsStr) {
+              try {
+                const parsed = JSON.parse(emailHabitsStr);
+                if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+              } catch {}
+            }
+          }
+        }
+
+        if (loadedHabits.length === 0) {
+          const memHabits = localApi.getHabits(currentUid, activeUser?.email);
+          if (memHabits.length > 0) loadedHabits.push(...memHabits);
+        }
+
+        const cleanHabits = deduplicateHabits(loadedHabits);
+        if (cleanHabits.length > 0) {
+          setHabits(cleanHabits);
+        }
+
+        // Restore completions
+        let loadedCompletions: HabitCompletion[] = [];
+        const savedCompStr = await AsyncStorage.getItem(`habitup_completions_${currentUid}`);
+        if (savedCompStr) {
+          try {
+            const parsed = JSON.parse(savedCompStr);
+            if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
+          } catch {}
+        }
+        if (currentUid !== 'usr_default') {
+          const defaultCompStr = await AsyncStorage.getItem('habitup_completions_usr_default');
+          if (defaultCompStr) {
+            try {
+              const parsed = JSON.parse(defaultCompStr);
+              if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
+            } catch {}
+          }
+        }
+        if (loadedCompletions.length === 0) {
+          const memCompletions = localApi.getCompletions(currentUid, activeUser?.email);
+          if (memCompletions.length > 0) loadedCompletions.push(...memCompletions);
+        }
+        const cleanCompletions = deduplicateCompletions(loadedCompletions);
+        if (cleanCompletions.length > 0) {
+          setCompletions(cleanCompletions);
+        }
+
         setSessions(localApi.getSessions(currentUid));
         setSyncQueue(localApi.getSyncQueue(currentUid));
 
@@ -303,6 +370,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch (err) {
         console.warn('Bootstrap error:', err);
       } finally {
+        isInitialDataLoaded.current = true;
         setIsAuthLoading(false);
       }
     };
@@ -319,30 +387,42 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'archived'>('all');
 
-  // Persistence side-effects
+  // Persistence side-effects (only persist once initial bootstrap data is loaded)
   useEffect(() => {
-    if (user?.id) {
+    if (isInitialDataLoaded.current && user?.id) {
       localApi.saveHabits(habits, user.id);
     }
   }, [habits, user?.id]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (isInitialDataLoaded.current && user?.id) {
       localApi.saveCompletions(completions, user.id);
     }
   }, [completions, user?.id]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (isInitialDataLoaded.current && user?.id) {
       localApi.saveUser(user, user.id);
     }
   }, [user]);
 
   useEffect(() => {
-    if (user?.id) {
+    if (isInitialDataLoaded.current && user?.id) {
       localApi.saveSessions(sessions, user.id);
     }
   }, [sessions, user?.id]);
+
+  useEffect(() => {
+    if (isInitialDataLoaded.current) {
+      AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(friends)).catch(() => {});
+    }
+  }, [friends]);
+
+  useEffect(() => {
+    if (isInitialDataLoaded.current) {
+      AsyncStorage.setItem('habitup_social_feed_v1', JSON.stringify(socialFeed)).catch(() => {});
+    }
+  }, [socialFeed]);
 
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {

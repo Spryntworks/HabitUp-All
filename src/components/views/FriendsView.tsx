@@ -27,7 +27,6 @@ import {
   Zap,
   Bell,
   Sparkles,
-  CheckCircle2,
   AlertCircle,
 } from 'lucide-react-native';
 
@@ -573,18 +572,7 @@ export const FriendsView: React.FC = () => {
 
                       {/* Interactive Actions Footer */}
                       <View style={styles.mutualActionsRow}>
-                        {/* 1. If You are pending, 1-tap check-in button */}
-                        {!myDone && (
-                          <TouchableOpacity
-                            style={styles.markMyDoneBtn}
-                            onPress={() => toggleCompletion(myHabit.id, todayStr)}
-                          >
-                            <CheckCircle2 size={13} color="#FFFFFF" />
-                            <Text style={styles.markMyDoneBtnText}>Mark My Routine Done</Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {/* 2. If Friend is pending, friendly Nudge button */}
+                        {/* 1. If Friend is pending, friendly Nudge button */}
                         {!friendDone && (
                           <TouchableOpacity
                             style={styles.nudgeBtn}
