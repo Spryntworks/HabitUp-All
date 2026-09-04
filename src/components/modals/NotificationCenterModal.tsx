@@ -228,14 +228,6 @@ export const NotificationCenterModal: React.FC = () => {
                 </View>
               )}
             </View>
-
-            {/* Bottom Done Button */}
-            <TouchableOpacity
-              style={styles.bottomDoneBtn}
-              onPress={() => setIsNotificationModalOpen(false)}
-            >
-              <Text style={styles.bottomDoneBtnText}>Done</Text>
-            </TouchableOpacity>
           </ScrollView>
         </View>
       </View>
