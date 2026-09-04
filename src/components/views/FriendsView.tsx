@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
-import { getUserInviteCode, getWeekDays, formatDateKey, formatTo12Hour } from '../../utils/streakCalculator';
+import {
+  getUserInviteCode,
+  getWeekDays,
+  formatDateKey,
+  formatTo12Hour,
+  formatFriendDisplayName,
+} from '../../utils/streakCalculator';
 import { FriendUser, FriendPublicHabit, Habit } from '../../types';
 import {
   Users,
@@ -40,22 +46,6 @@ const QUICK_HABIT_PRESETS = [
   { name: 'LeetCode Daily', icon: 'Cpu', color: '#10B981', time: '08:30' },
   { name: 'Strength Workout', icon: 'Dumbbell', color: '#EF4444', time: '18:00' },
 ];
-
-export const formatFriendDisplayName = (friend: FriendUser): { displayName: string; usernameTag: string } => {
-  let name = friend.name || 'Friend';
-  let username = friend.username || `@${name.toLowerCase()}`;
-
-  // Check if name or username is in invite code format like HABIT-RAM77 or @HABIT-RAM77
-  const habitCodeMatch = name.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i) || username.match(/^@?HABIT-([a-zA-Z]+)(\d+)?$/i);
-  if (habitCodeMatch) {
-    const rawTag = habitCodeMatch[1];
-    name = rawTag.charAt(0).toUpperCase() + rawTag.slice(1).toLowerCase();
-    username = `@${rawTag.toLowerCase()}`;
-  }
-
-  const cleanUsername = username.startsWith('@') ? username : `@${username}`;
-  return { displayName: name, usernameTag: cleanUsername };
-};
 
 export const FriendsView: React.FC = () => {
   const {

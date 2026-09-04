@@ -39,6 +39,7 @@ import {
   isHabitScheduledOnDate,
   getWeekDays,
   getUserInviteCode,
+  formatFriendDisplayName,
 } from '../utils/streakCalculator';
 
 interface ToastData {
@@ -1458,7 +1459,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const removeFriend = useCallback(
     (friendId: string) => {
       const target = friends.find((f) => f.id === friendId);
-      const name = target?.name || 'Friend';
+      const name = target ? formatFriendDisplayName(target).displayName : 'Friend';
+
+      // 1. Remove friend from active friends
       setFriends((prev) =>
         prev.map((f) =>
           f.id === friendId
@@ -1466,10 +1469,48 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             : f
         )
       );
+
+      // 2. Remove all habits created with or adopted from this friend
+      const removedHabitIds: string[] = [];
+      setHabits((prev) => {
+        const remaining: Habit[] = [];
+        for (const h of prev) {
+          if (h.buddy_id === friendId) {
+            removedHabitIds.push(h.id);
+          } else {
+            remaining.push(h);
+          }
+        }
+        return remaining;
+      });
+
+      // 3. Remove completions for those removed habits
+      if (removedHabitIds.length > 0) {
+        const removedSet = new Set(removedHabitIds);
+        setCompletions((prev) => prev.filter((c) => !removedSet.has(c.habit_id)));
+
+        // Sync deletions to backend if needed
+        removedHabitIds.forEach((hId) => {
+          if (isOffline) {
+            addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
+          } else {
+            localApi.deleteHabitOnServer(hId).catch(() => {
+              addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
+            });
+          }
+        });
+      }
+
       if (soundEnabled) soundService.playClickSound();
-      showToast(`Removed ${name} from habit buddies.`, undefined, 'info');
+      showToast(
+        removedHabitIds.length > 0
+          ? `Removed ${name} and ${removedHabitIds.length} shared habit${removedHabitIds.length === 1 ? '' : 's'}.`
+          : `Removed ${name} from habit buddies.`,
+        undefined,
+        'info'
+      );
     },
-    [friends, soundEnabled, showToast]
+    [friends, soundEnabled, isOffline, addMutationToQueue, showToast]
   );
 
   return (

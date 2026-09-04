@@ -501,3 +501,23 @@ export function getUserInviteCode(
   return `HABIT-${prefix}${uniqueNum}`;
 }
 
+/**
+ * Formats a friend's display name and username tag cleanly
+ */
+export function formatFriendDisplayName(friend?: { name?: string; username?: string } | null): { displayName: string; usernameTag: string } {
+  if (!friend) return { displayName: 'Friend', usernameTag: '@friend' };
+  let name = friend.name || 'Friend';
+  let username = friend.username || `@${name.toLowerCase()}`;
+
+  // Check if name or username is in invite code format like HABIT-RAM77 or @HABIT-RAM77
+  const habitCodeMatch = name.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i) || username.match(/^@?HABIT-([a-zA-Z]+)(\d+)?$/i);
+  if (habitCodeMatch) {
+    const rawTag = habitCodeMatch[1];
+    name = rawTag.charAt(0).toUpperCase() + rawTag.slice(1).toLowerCase();
+    username = `@${rawTag.toLowerCase()}`;
+  }
+
+  const cleanUsername = username.startsWith('@') ? username : `@${username}`;
+  return { displayName: name, usernameTag: cleanUsername };
+}
+
