@@ -10,6 +10,7 @@ import {
   Share,
   Platform,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
 import {
@@ -36,6 +37,8 @@ import {
   AlertCircle,
   ChevronLeft,
   UserMinus,
+  Clipboard as ClipboardIcon,
+  ClipboardCheck,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -147,8 +150,30 @@ export const FriendsView: React.FC = () => {
     } catch {}
   };
 
-  const handleCopyCode = () => {
-    showToast(`Invite code ${myInviteCode} copied! 📋`, undefined, 'success');
+  const handleCopyCode = async () => {
+    try {
+      await Clipboard.setStringAsync(myInviteCode);
+      showToast(`Invite code ${myInviteCode} copied to clipboard! 📋`, undefined, 'success');
+    } catch {
+      if (typeof navigator !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(myInviteCode).catch(() => {});
+      }
+      showToast(`Invite code ${myInviteCode} copied! 📋`, undefined, 'success');
+    }
+  };
+
+  const handlePasteCode = async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text && text.trim()) {
+        setFriendCodeInput(text.trim());
+        showToast('Pasted from clipboard! 📋', undefined, 'info');
+      } else {
+        showToast('Clipboard is empty', undefined, 'info');
+      }
+    } catch {
+      showToast('Could not access clipboard', undefined, 'warning');
+    }
   };
 
   const handleApplyPreset = (p: (typeof QUICK_HABIT_PRESETS)[0]) => {
@@ -285,21 +310,43 @@ export const FriendsView: React.FC = () => {
         </Text>
 
         <View style={styles.addInputRow}>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-                borderColor: isDark ? '#334155' : '#CBD5E1',
-                color: isDark ? '#FFFFFF' : '#0F172A',
-              },
-            ]}
-            placeholder="Enter @username or invite code..."
-            placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-            value={friendCodeInput}
-            onChangeText={setFriendCodeInput}
-            autoCapitalize="none"
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                  borderColor: isDark ? '#334155' : '#CBD5E1',
+                  color: isDark ? '#FFFFFF' : '#0F172A',
+                },
+              ]}
+              placeholder="Enter @username or invite code..."
+              placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+              value={friendCodeInput}
+              onChangeText={setFriendCodeInput}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {friendCodeInput.length > 0 ? (
+              <TouchableOpacity
+                style={styles.inputActionBtn}
+                onPress={() => setFriendCodeInput('')}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <X size={14} color={isDark ? '#94A3B8' : '#64748B'} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.inputPastePill}
+                onPress={handlePasteCode}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                activeOpacity={0.7}
+              >
+                <ClipboardCheck size={12} color="#7C5CFF" />
+                <Text style={styles.inputPasteText}>Paste</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <TouchableOpacity style={styles.addFriendBtn} onPress={handleAddFriend}>
             <UserPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
@@ -1172,10 +1219,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  input: {
+  inputWrapper: {
     flex: 1,
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  input: {
+    width: '100%',
     fontSize: 13,
-    paddingHorizontal: 14,
+    paddingLeft: 14,
+    paddingRight: 64,
     paddingVertical: 10,
     borderRadius: 14,
     borderWidth: 1,
@@ -1186,6 +1239,27 @@ const styles = StyleSheet.create({
           outlineColor: 'transparent',
         } as any)
       : {}),
+  },
+  inputPastePill: {
+    position: 'absolute',
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(124, 92, 255, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 3,
+  },
+  inputPasteText: {
+    color: '#7C5CFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  inputActionBtn: {
+    position: 'absolute',
+    right: 12,
+    padding: 4,
   },
   addFriendBtn: {
     backgroundColor: '#7C5CFF',
