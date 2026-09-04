@@ -1321,15 +1321,27 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (soundEnabled) soundService.playCompletionChime();
         showToast(`Added ${match.name} (@${match.username.replace(/^@/, '')})! 🤝`, undefined, 'success');
       } else {
-        const usernameClean = clean.startsWith('@') ? clean : `@${clean}`;
-        const displayName = clean.replace(/^@/, '').split(/[._\s]/)[0];
-        const capitalized = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        let extractedHandle = clean.replace(/^@/, '');
+        let extractedName = '';
+
+        const habitCodeMatch = clean.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i);
+        if (habitCodeMatch) {
+          const codeTag = habitCodeMatch[1]; // e.g. "RAM", "CHE", "SAM"
+          extractedName = codeTag.charAt(0).toUpperCase() + codeTag.slice(1).toLowerCase();
+          extractedHandle = codeTag.toLowerCase();
+        } else {
+          const parts = extractedHandle.split(/[._\s]/)[0];
+          extractedName = parts.charAt(0).toUpperCase() + parts.slice(1).toLowerCase();
+        }
+
+        const usernameClean = `@${extractedHandle.toLowerCase()}`;
+        const displayName = extractedName || 'Habit Buddy';
 
         const newBuddy: FriendUser = {
           id: `friend-${Date.now()}`,
-          name: capitalized || 'Habit Buddy',
+          name: displayName,
           username: usernameClean,
-          email: `${clean.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'buddy'}@gmail.com`,
+          email: `${extractedHandle.toLowerCase()}@gmail.com`,
           avatar: '🤝',
           bio: 'Habit buddy on HabitUp! Building streaks together.',
           plantStage: '🌱 Fresh Seedling (Lvl 1)',

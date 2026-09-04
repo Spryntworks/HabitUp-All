@@ -40,6 +40,22 @@ const QUICK_HABIT_PRESETS = [
   { name: 'Strength Workout', icon: 'Dumbbell', color: '#EF4444', time: '18:00' },
 ];
 
+export const formatFriendDisplayName = (friend: FriendUser): { displayName: string; usernameTag: string } => {
+  let name = friend.name || 'Friend';
+  let username = friend.username || `@${name.toLowerCase()}`;
+
+  // Check if name or username is in invite code format like HABIT-RAM77 or @HABIT-RAM77
+  const habitCodeMatch = name.match(/^HABIT-([a-zA-Z]+)(\d+)?$/i) || username.match(/^@?HABIT-([a-zA-Z]+)(\d+)?$/i);
+  if (habitCodeMatch) {
+    const rawTag = habitCodeMatch[1];
+    name = rawTag.charAt(0).toUpperCase() + rawTag.slice(1).toLowerCase();
+    username = `@${rawTag.toLowerCase()}`;
+  }
+
+  const cleanUsername = username.startsWith('@') ? username : `@${username}`;
+  return { displayName: name, usernameTag: cleanUsername };
+};
+
 export const FriendsView: React.FC = () => {
   const {
     user,
@@ -276,6 +292,8 @@ export const FriendsView: React.FC = () => {
 
       {/* 5. Friend Cards & Mutual Progress Trackers */}
       {connectedFriends.map((friend) => {
+        const { displayName: friendDisplayName, usernameTag } = formatFriendDisplayName(friend);
+
         // Separate habits into Shared/Adopted vs Not Adopted
         const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
         const unadoptedHabits: FriendPublicHabit[] = [];
@@ -308,10 +326,10 @@ export const FriendsView: React.FC = () => {
                 </View>
                 <View>
                   <Text style={[styles.friendName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                    {friend.name}
+                    {friendDisplayName}
                   </Text>
                   <Text style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    {friend.username} • {friend.plantStage}
+                    {usernameTag} • {friend.plantStage}
                   </Text>
                 </View>
               </View>
@@ -428,7 +446,7 @@ export const FriendsView: React.FC = () => {
                           <View style={styles.userStatusPill}>
                             <Text style={styles.miniAvatar}>{friend.avatar}</Text>
                             <Text style={styles.statusLabelText}>
-                              {friend.name.split(' ')[0]}: {friendDone ? 'Done ✅' : 'Pending ⏳'}
+                              {friendDisplayName}: {friendDone ? 'Done ✅' : 'Pending ⏳'}
                             </Text>
                           </View>
                         </View>
@@ -443,9 +461,9 @@ export const FriendsView: React.FC = () => {
                           {bothDone
                             ? '🎉 Both completed today! Mutual streak maintained!'
                             : myDone && !friendDone
-                            ? `⚡ You're done! ${friend.name.split(' ')[0]} is still working on it.`
+                            ? `⚡ You're done! ${friendDisplayName} is still working on it.`
                             : !myDone && friendDone
-                            ? `⏳ ${friend.name.split(' ')[0]} completed today! Your turn to check in.`
+                            ? `⏳ ${friendDisplayName} completed today! Your turn to check in.`
                             : '⏳ Both pending today. Keep each other accountable!'}
                         </Text>
                       </View>
@@ -497,6 +515,8 @@ export const FriendsView: React.FC = () => {
                               styles.weeklyRowLabel,
                               { color: isDark ? '#E2E8F0' : '#334155' },
                             ]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
                           >
                             You
                           </Text>
@@ -526,8 +546,10 @@ export const FriendsView: React.FC = () => {
                               styles.weeklyRowLabel,
                               { color: isDark ? '#E2E8F0' : '#334155' },
                             ]}
+                            numberOfLines={1}
+                            ellipsizeMode="tail"
                           >
-                            {friend.name.split(' ')[0]}
+                            {friendDisplayName}
                           </Text>
                           <View style={styles.daysCols}>
                             {friendWeekly.map((done, idx) => (
@@ -570,7 +592,7 @@ export const FriendsView: React.FC = () => {
                           >
                             <Bell size={13} color="#F59E0B" />
                             <Text style={styles.nudgeBtnText}>
-                              👋 Nudge {friend.name.split(' ')[0]}
+                              👋 Nudge {friendDisplayName}
                             </Text>
                           </TouchableOpacity>
                         )}
@@ -593,7 +615,7 @@ export const FriendsView: React.FC = () => {
             {unadoptedHabits.length > 0 && (
               <View style={styles.habitsWrapper}>
                 <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                  MORE HABITS FROM {friend.name.toUpperCase()} ({unadoptedHabits.length})
+                  MORE HABITS FROM {friendDisplayName.toUpperCase()} ({unadoptedHabits.length})
                 </Text>
 
                 {unadoptedHabits.map((h) => (
@@ -629,7 +651,7 @@ export const FriendsView: React.FC = () => {
                     {/* 1-Tap Adopt / Follow Habit */}
                     <TouchableOpacity
                       style={styles.followHabitBtn}
-                      onPress={() => adoptFriendHabit(h, friend.id, friend.name, friend.avatar)}
+                      onPress={() => adoptFriendHabit(h, friend.id, friendDisplayName, friend.avatar)}
                       activeOpacity={0.8}
                     >
                       <Plus size={12} color="#FFFFFF" strokeWidth={3} />
@@ -683,6 +705,7 @@ export const FriendsView: React.FC = () => {
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.friendPillsRow}>
               {connectedFriends.map((f) => {
+                const { displayName: fDisplayName } = formatFriendDisplayName(f);
                 const isSelected = (selectedFriendForTogether?.id || connectedFriends[0]?.id) === f.id;
                 return (
                   <TouchableOpacity
@@ -707,7 +730,7 @@ export const FriendsView: React.FC = () => {
                         { color: isSelected ? '#FFFFFF' : isDark ? '#E2E8F0' : '#0F172A' },
                       ]}
                     >
-                      {f.name}
+                      {fDisplayName}
                     </Text>
                   </TouchableOpacity>
                 );
