@@ -28,6 +28,8 @@ import {
   Flame,
   Trophy,
   CheckCircle2,
+  Bell,
+  Zap,
 } from 'lucide-react-native';
 
 const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -44,6 +46,7 @@ export const HabitDetailModal: React.FC = () => {
     archiveHabit,
     deleteHabit,
     updateHabit,
+    nudgeFriend,
     theme,
   } = useHabit();
 
@@ -192,6 +195,61 @@ export const HabitDetailModal: React.FC = () => {
                 </Text>
               </View>
             </View>
+
+            {/* Habit Buddy Progress Banner (If Shared Habit) */}
+            {habit.is_shared && (
+              <View
+                style={[
+                  styles.buddyDetailCard,
+                  {
+                    backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                    borderColor: isDark ? '#334155' : '#E2E8F0',
+                  },
+                ]}
+              >
+                <View style={styles.buddyDetailHeader}>
+                  <View style={styles.buddyDetailLeft}>
+                    <Text style={styles.buddyDetailAvatar}>
+                      {habit.buddy_avatar || '🤝'}
+                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.buddyDetailName,
+                          { color: isDark ? '#FFFFFF' : '#0F172A' },
+                        ]}
+                      >
+                        Habit Buddy: {habit.buddy_name || 'Friend'}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.buddyDetailSub,
+                          { color: isDark ? '#94A3B8' : '#64748B' },
+                        ]}
+                      >
+                        Shared routine • Mutual progress active
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.buddyDetailStreak}>
+                    <Flame size={12} color="#F59E0B" fill="#F59E0B" />
+                    <Text style={styles.buddyDetailStreakText}>
+                      {stats.currentStreak}d Streak
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.buddyNudgeBtn}
+                  onPress={() => nudgeFriend(habit.buddy_id || 'friend-1', habit.name)}
+                >
+                  <Bell size={13} color="#F59E0B" />
+                  <Text style={styles.buddyNudgeBtnText}>
+                    👋 Send a Friendly Reminder / Cheer
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Calendar */}
             <View
@@ -639,6 +697,65 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '800',
+  },
+  buddyDetailCard: {
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    marginBottom: 14,
+    gap: 10,
+  },
+  buddyDetailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  buddyDetailLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  buddyDetailAvatar: {
+    fontSize: 22,
+  },
+  buddyDetailName: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  buddyDetailSub: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  buddyDetailStreak: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 3,
+  },
+  buddyDetailStreakText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  buddyNudgeBtn: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+  },
+  buddyNudgeBtnText: {
+    color: '#F59E0B',
+    fontSize: 12,
     fontWeight: '800',
   },
 });

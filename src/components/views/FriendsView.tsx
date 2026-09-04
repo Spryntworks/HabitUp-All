@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { IconRenderer } from '../common/IconRenderer';
-import { FriendUser } from '../../types';
+import { FriendUser, FriendPublicHabit, Habit } from '../../types';
 import {
   Users,
   Flame,
@@ -21,9 +21,12 @@ import {
   Plus,
   X,
   Copy,
-  Sparkles,
   Clock,
   Zap,
+  Bell,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -35,19 +38,27 @@ const QUICK_HABIT_PRESETS = [
   { name: 'Strength Workout', icon: 'Dumbbell', color: '#EF4444', time: '18:00' },
 ];
 
+const WEEK_DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
 export const FriendsView: React.FC = () => {
   const {
     user,
     habits,
+    completions,
+    selectedDate,
+    toggleCompletion,
     friends,
     adoptFriendHabit,
     createSharedHabit,
     addFriendByCodeOrUsername,
+    nudgeFriend,
+    toggleFriendHabitCompletion,
     theme,
     showToast,
   } = useHabit();
 
   const isDark = theme === 'dark';
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // Input for adding friend
   const [friendCodeInput, setFriendCodeInput] = useState<string>('');
@@ -65,18 +76,49 @@ export const FriendsView: React.FC = () => {
     return `HABIT-${prefix}77`;
   }, [user]);
 
-  // Set of lowercase habit names the user already has
-  const myHabitNames = useMemo(() => {
-    return new Set(
-      habits
-        .filter((h) => !h.deleted_at && !h.archived_at)
-        .map((h) => h.name.trim().toLowerCase())
-    );
+  // Map of active user habits by lowercase name
+  const myHabitsMap = useMemo(() => {
+    const map = new Map<string, Habit>();
+    habits
+      .filter((h) => !h.deleted_at && !h.archived_at)
+      .forEach((h) => {
+        map.set(h.name.trim().toLowerCase(), h);
+      });
+    return map;
   }, [habits]);
 
   const connectedFriends = useMemo(() => {
     return friends.filter((f) => f.isFriend);
   }, [friends]);
+
+  // Helper to check if current user completed a specific habit today
+  const isMyHabitDoneToday = (habitId: string) => {
+    return completions.some(
+      (c) => c.habit_id === habitId && (c.completion_date || '').split('T')[0] === todayStr
+    );
+  };
+
+  // Helper to get user's 7-day completion history for a specific habit
+  const getMyHabitWeeklyHistory = (habitId: string): boolean[] => {
+    const history: boolean[] = [];
+    const today = new Date();
+    // Calculate Monday of current week
+    const currentDay = today.getDay(); // 0 is Sunday
+    const distanceToMonday = (currentDay + 6) % 7;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - distanceToMonday);
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dStr = d.toISOString().split('T')[0];
+      const isDone = completions.some(
+        (c) => c.habit_id === habitId && (c.completion_date || '').split('T')[0] === dStr
+      );
+      history.push(isDone);
+    }
+    return history;
+  };
 
   const handleAddFriend = () => {
     if (!friendCodeInput.trim()) {
@@ -141,10 +183,10 @@ export const FriendsView: React.FC = () => {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-            Friends & Shared Habits
+            Friends & Mutual Progress
           </Text>
           <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Add friends with code, see routines & build streaks together
+            Adopt habits & track real-time accountability together
           </Text>
         </View>
       </View>
@@ -235,120 +277,358 @@ export const FriendsView: React.FC = () => {
         </Text>
       </View>
 
-      {/* 5. Friend Cards & Their Habits */}
-      {connectedFriends.map((friend) => (
-        <View
-          key={friend.id}
-          style={[
-            styles.friendCard,
-            {
-              backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-              borderColor: isDark ? '#1E293B' : '#E2E8F0',
-            },
-          ]}
-        >
-          {/* Friend Profile Header */}
-          <View style={styles.friendProfileRow}>
-            <View style={styles.friendProfileLeft}>
-              <View style={styles.friendAvatarCircle}>
-                <Text style={styles.friendAvatarEmoji}>{friend.avatar}</Text>
+      {/* 5. Friend Cards & Mutual Progress Trackers */}
+      {connectedFriends.map((friend) => {
+        // Separate habits into Shared/Adopted vs Not Adopted
+        const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
+        const unadoptedHabits: FriendPublicHabit[] = [];
+
+        friend.habits.forEach((fh) => {
+          const myMatch = myHabitsMap.get(fh.name.trim().toLowerCase());
+          if (myMatch) {
+            sharedHabits.push({ friendHabit: fh, myHabit: myMatch });
+          } else {
+            unadoptedHabits.push(fh);
+          }
+        });
+
+        return (
+          <View
+            key={friend.id}
+            style={[
+              styles.friendCard,
+              {
+                backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              },
+            ]}
+          >
+            {/* Friend Profile Header */}
+            <View style={styles.friendProfileRow}>
+              <View style={styles.friendProfileLeft}>
+                <View style={styles.friendAvatarCircle}>
+                  <Text style={styles.friendAvatarEmoji}>{friend.avatar}</Text>
+                </View>
+                <View>
+                  <Text style={[styles.friendName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                    {friend.name}
+                  </Text>
+                  <Text style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                    {friend.username} • {friend.plantStage}
+                  </Text>
+                </View>
               </View>
-              <View>
-                <Text style={[styles.friendName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                  {friend.name}
-                </Text>
-                <Text style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                  {friend.username} • {friend.plantStage}
-                </Text>
-              </View>
-            </View>
 
-            <View style={styles.friendHeaderRight}>
-              <View style={styles.streakFlameBadge}>
-                <Flame size={14} color="#FF6B6B" fill="#FF6B6B" />
-                <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
-              </View>
+              <View style={styles.friendHeaderRight}>
+                <View style={styles.streakFlameBadge}>
+                  <Flame size={14} color="#FF6B6B" fill="#FF6B6B" />
+                  <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
+                </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.buddyTogetherBtn,
-                  { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
-                ]}
-                onPress={() => openTogetherWithFriend(friend)}
-              >
-                <Plus size={12} color="#7C5CFF" strokeWidth={3} />
-                <Text style={styles.buddyTogetherBtnText}>Habit Together</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Friend's Habits (With 1-Tap Follow Button) */}
-          <View style={styles.habitsWrapper}>
-            <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              {friend.name.toUpperCase()}'S HABITS ({friend.habits.length})
-            </Text>
-
-            {friend.habits.map((h) => {
-              const isAlreadyAdopted = myHabitNames.has(h.name.trim().toLowerCase());
-
-              return (
-                <View
-                  key={h.id}
+                <TouchableOpacity
                   style={[
-                    styles.habitItem,
-                    {
-                      backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-                      borderColor: isDark ? '#334155' : '#E2E8F0',
-                    },
+                    styles.buddyTogetherBtn,
+                    { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
                   ]}
+                  onPress={() => openTogetherWithFriend(friend)}
                 >
-                  <View style={styles.habitItemLeft}>
+                  <Plus size={12} color="#7C5CFF" strokeWidth={3} />
+                  <Text style={styles.buddyTogetherBtnText}>Habit Together</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* SECTION A: SHARED & MUTUAL PROGRESS HABITS */}
+            {sharedHabits.length > 0 && (
+              <View style={styles.sharedSection}>
+                <View style={styles.sharedSectionTitleRow}>
+                  <Zap size={14} color="#10B981" />
+                  <Text style={[styles.sharedSectionTitle, { color: '#10B981' }]}>
+                    MUTUAL HABITS ({sharedHabits.length} SHARED)
+                  </Text>
+                </View>
+
+                {sharedHabits.map(({ friendHabit, myHabit }) => {
+                  const myDone = isMyHabitDoneToday(myHabit.id);
+                  const friendDone = friendHabit.isCompletedToday;
+                  const bothDone = myDone && friendDone;
+                  const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
+                  const friendWeekly = friendHabit.weeklyHistory || [true, true, true, true, true, true, false];
+
+                  return (
                     <View
+                      key={friendHabit.id}
                       style={[
-                        styles.habitIconBox,
-                        { backgroundColor: h.color || '#7C5CFF' },
+                        styles.mutualTrackerCard,
+                        {
+                          backgroundColor: isDark ? '#182438' : '#F1F5F9',
+                          borderColor: bothDone
+                            ? '#10B981'
+                            : isDark
+                            ? '#334155'
+                            : '#CBD5E1',
+                        },
                       ]}
                     >
-                      <IconRenderer name={h.icon} size={16} color="#FFFFFF" />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.habitItemName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                        {h.name}
-                      </Text>
-                      <Text style={[styles.habitItemMeta, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                        🔥 {h.currentStreak} day streak • ⏰ {h.reminder_time || 'Daily'}
-                      </Text>
-                    </View>
-                  </View>
+                      {/* Top: Habit Name & Shared Streak */}
+                      <View style={styles.mutualHeader}>
+                        <View style={styles.mutualTitleGroup}>
+                          <View
+                            style={[
+                              styles.habitIconBox,
+                              { backgroundColor: friendHabit.color || '#7C5CFF' },
+                            ]}
+                          >
+                            <IconRenderer name={friendHabit.icon} size={16} color="#FFFFFF" />
+                          </View>
+                          <View>
+                            <Text
+                              style={[
+                                styles.mutualHabitName,
+                                { color: isDark ? '#FFFFFF' : '#0F172A' },
+                              ]}
+                            >
+                              {friendHabit.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.mutualHabitSub,
+                                { color: isDark ? '#94A3B8' : '#64748B' },
+                              ]}
+                            >
+                              Shared Routine • ⏰ {friendHabit.reminder_time || '08:00'}
+                            </Text>
+                          </View>
+                        </View>
 
-                  {/* 1-Tap Follow / Clone Habit Button */}
-                  <TouchableOpacity
+                        <View style={styles.sharedStreakBox}>
+                          <Flame size={12} color="#F59E0B" fill="#F59E0B" />
+                          <Text style={styles.sharedStreakText}>
+                            {Math.max(friendHabit.currentStreak, 1)}d Shared Streak
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Today's Mutual Status Banner */}
+                      <View
+                        style={[
+                          styles.statusBanner,
+                          bothDone
+                            ? styles.statusBannerBothDone
+                            : styles.statusBannerPending,
+                        ]}
+                      >
+                        <View style={styles.statusAvatarRow}>
+                          {/* You */}
+                          <View style={styles.userStatusPill}>
+                            <Text style={styles.miniAvatar}>{user?.avatar || '🌟'}</Text>
+                            <Text style={styles.statusLabelText}>
+                              You: {myDone ? 'Done ✅' : 'Pending ⏳'}
+                            </Text>
+                          </View>
+
+                          {/* Friend */}
+                          <View style={styles.userStatusPill}>
+                            <Text style={styles.miniAvatar}>{friend.avatar}</Text>
+                            <Text style={styles.statusLabelText}>
+                              {friend.name.split(' ')[0]}: {friendDone ? 'Done ✅' : 'Pending ⏳'}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* Status Message */}
+                        <Text
+                          style={[
+                            styles.statusBannerMessage,
+                            { color: bothDone ? '#10B981' : isDark ? '#CBD5E1' : '#475569' },
+                          ]}
+                        >
+                          {bothDone
+                            ? '🎉 Both completed today! Mutual streak maintained!'
+                            : myDone && !friendDone
+                            ? `⚡ You're done! ${friend.name.split(' ')[0]} is still working on it.`
+                            : !myDone && friendDone
+                            ? `⏳ ${friend.name.split(' ')[0]} completed today! Your turn to check in.`
+                            : '⏳ Both pending today. Keep each other accountable!'}
+                        </Text>
+                      </View>
+
+                      {/* 7-Day Weekly Comparison Progress Tracker */}
+                      <View style={styles.weeklyComparisonSection}>
+                        <Text style={[styles.weeklySectionHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                          WEEKLY PROGRESS COMPARISON
+                        </Text>
+
+                        {/* Day Headers: M T W T F S S */}
+                        <View style={styles.daysHeaderRow}>
+                          <View style={{ width: 60 }} />
+                          <View style={styles.daysCols}>
+                            {WEEK_DAYS.map((d, i) => (
+                              <Text
+                                key={i}
+                                style={[
+                                  styles.dayColHeader,
+                                  { color: isDark ? '#64748B' : '#94A3B8' },
+                                ]}
+                              >
+                                {d}
+                              </Text>
+                            ))}
+                          </View>
+                        </View>
+
+                        {/* Row 1: You */}
+                        <View style={styles.weeklyRow}>
+                          <Text
+                            style={[
+                              styles.weeklyRowLabel,
+                              { color: isDark ? '#E2E8F0' : '#334155' },
+                            ]}
+                          >
+                            You
+                          </Text>
+                          <View style={styles.daysCols}>
+                            {myWeekly.map((done, idx) => (
+                              <View
+                                key={idx}
+                                style={[
+                                  styles.progressDot,
+                                  done
+                                    ? styles.progressDotDoneYou
+                                    : isDark
+                                    ? styles.progressDotPendingDark
+                                    : styles.progressDotPendingLight,
+                                ]}
+                              >
+                                {done && <Check size={10} color="#FFFFFF" strokeWidth={3} />}
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+
+                        {/* Row 2: Friend */}
+                        <View style={styles.weeklyRow}>
+                          <Text
+                            style={[
+                              styles.weeklyRowLabel,
+                              { color: isDark ? '#E2E8F0' : '#334155' },
+                            ]}
+                          >
+                            {friend.name.split(' ')[0]}
+                          </Text>
+                          <View style={styles.daysCols}>
+                            {friendWeekly.map((done, idx) => (
+                              <View
+                                key={idx}
+                                style={[
+                                  styles.progressDot,
+                                  done
+                                    ? styles.progressDotDoneFriend
+                                    : isDark
+                                    ? styles.progressDotPendingDark
+                                    : styles.progressDotPendingLight,
+                                ]}
+                              >
+                                {done && <Check size={10} color="#FFFFFF" strokeWidth={3} />}
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Interactive Actions Footer */}
+                      <View style={styles.mutualActionsRow}>
+                        {/* 1. If You are pending, 1-tap check-in button */}
+                        {!myDone && (
+                          <TouchableOpacity
+                            style={styles.markMyDoneBtn}
+                            onPress={() => toggleCompletion(myHabit.id, todayStr)}
+                          >
+                            <CheckCircle2 size={13} color="#FFFFFF" />
+                            <Text style={styles.markMyDoneBtnText}>Mark My Routine Done</Text>
+                          </TouchableOpacity>
+                        )}
+
+                        {/* 2. If Friend is pending, friendly Nudge button */}
+                        {!friendDone && (
+                          <TouchableOpacity
+                            style={styles.nudgeBtn}
+                            onPress={() => nudgeFriend(friend.id, friendHabit.name)}
+                          >
+                            <Bell size={13} color="#F59E0B" />
+                            <Text style={styles.nudgeBtnText}>
+                              👋 Nudge {friend.name.split(' ')[0]}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+
+                        {/* 3. If Both are done, celebratory button */}
+                        {bothDone && (
+                          <View style={styles.celebratedBadge}>
+                            <Sparkles size={13} color="#10B981" />
+                            <Text style={styles.celebratedBadgeText}>Streak Secured! 🔥</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT) */}
+            {unadoptedHabits.length > 0 && (
+              <View style={styles.habitsWrapper}>
+                <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                  MORE HABITS FROM {friend.name.toUpperCase()} ({unadoptedHabits.length})
+                </Text>
+
+                {unadoptedHabits.map((h) => (
+                  <View
+                    key={h.id}
                     style={[
-                      styles.followHabitBtn,
-                      isAlreadyAdopted && styles.followHabitBtnDone,
+                      styles.habitItem,
+                      {
+                        backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                        borderColor: isDark ? '#334155' : '#E2E8F0',
+                      },
                     ]}
-                    disabled={isAlreadyAdopted}
-                    onPress={() => adoptFriendHabit(h, friend.name)}
-                    activeOpacity={0.8}
                   >
-                    {isAlreadyAdopted ? (
-                      <>
-                        <Check size={12} color="#10B981" strokeWidth={3} />
-                        <Text style={styles.followHabitBtnTextDone}>Following</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Plus size={12} color="#FFFFFF" strokeWidth={3} />
-                        <Text style={styles.followHabitBtnText}>Follow Habit</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
+                    <View style={styles.habitItemLeft}>
+                      <View
+                        style={[
+                          styles.habitIconBox,
+                          { backgroundColor: h.color || '#7C5CFF' },
+                        ]}
+                      >
+                        <IconRenderer name={h.icon} size={16} color="#FFFFFF" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.habitItemName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                          {h.name}
+                        </Text>
+                        <Text style={[styles.habitItemMeta, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                          🔥 {h.currentStreak}d streak • ⏰ {h.reminder_time || 'Daily'} • {h.isCompletedToday ? 'Done today ✅' : 'Pending today ⏳'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* 1-Tap Adopt / Follow Habit */}
+                    <TouchableOpacity
+                      style={styles.followHabitBtn}
+                      onPress={() => adoptFriendHabit(h, friend.id, friend.name, friend.avatar)}
+                      activeOpacity={0.8}
+                    >
+                      <Plus size={12} color="#FFFFFF" strokeWidth={3} />
+                      <Text style={styles.followHabitBtnText}>Follow Habit</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
           </View>
-        </View>
-      ))}
+        );
+      })}
 
       {connectedFriends.length === 0 && (
         <View style={styles.emptyCard}>
@@ -357,7 +637,7 @@ export const FriendsView: React.FC = () => {
             No friends added yet
           </Text>
           <Text style={[styles.emptySub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Enter an invite code or username above to connect with habit buddies!
+            Enter an invite code or username above to connect with habit buddies and track mutual progress!
           </Text>
         </View>
       )}
@@ -381,7 +661,7 @@ export const FriendsView: React.FC = () => {
             </View>
 
             <Text style={[styles.modalSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Create a shared habit that both you and your friend follow and track together.
+              Create a shared habit that both you and your friend follow and see each other's progress on.
             </Text>
 
             {/* Pick Friend */}
@@ -735,9 +1015,203 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
-  habitsWrapper: {
+  sharedSection: {
+    gap: 10,
+    paddingTop: 4,
+  },
+  sharedSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  sharedSectionTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  mutualTrackerCard: {
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    gap: 10,
+  },
+  mutualHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mutualTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  mutualHabitName: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  mutualHabitSub: {
+    fontSize: 10,
+    marginTop: 1,
+  },
+  sharedStreakBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    gap: 3,
+  },
+  sharedStreakText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  statusBanner: {
+    padding: 10,
+    borderRadius: 12,
+    gap: 6,
+  },
+  statusBannerBothDone: {
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+    borderWidth: 1,
+  },
+  statusBannerPending: {
+    backgroundColor: 'rgba(124, 92, 255, 0.08)',
+    borderColor: 'rgba(124, 92, 255, 0.2)',
+    borderWidth: 1,
+  },
+  statusAvatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  userStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  miniAvatar: {
+    fontSize: 14,
+  },
+  statusLabelText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  statusBannerMessage: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  weeklyComparisonSection: {
+    gap: 6,
+    paddingVertical: 4,
+  },
+  weeklySectionHeading: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  daysHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  daysCols: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dayColHeader: {
+    width: 22,
+    textAlign: 'center',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  weeklyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  weeklyRowLabel: {
+    width: 60,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  progressDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressDotDoneYou: {
+    backgroundColor: '#10B981',
+  },
+  progressDotDoneFriend: {
+    backgroundColor: '#7C5CFF',
+  },
+  progressDotPendingDark: {
+    backgroundColor: '#334155',
+  },
+  progressDotPendingLight: {
+    backgroundColor: '#CBD5E1',
+  },
+  mutualActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 8,
     paddingTop: 2,
+  },
+  markMyDoneBtn: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
+  },
+  markMyDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  nudgeBtn: {
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 4,
+  },
+  nudgeBtnText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  celebratedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    gap: 4,
+  },
+  celebratedBadgeText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  habitsWrapper: {
+    gap: 8,
+    paddingTop: 4,
   },
   habitsSubHeading: {
     fontSize: 10,
@@ -782,16 +1256,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 4,
   },
-  followHabitBtnDone: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-  },
   followHabitBtnText: {
     color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  followHabitBtnTextDone: {
-    color: '#10B981',
     fontSize: 11,
     fontWeight: '800',
   },

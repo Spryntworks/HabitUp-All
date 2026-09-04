@@ -1,4 +1,4 @@
-﻿import { FriendUser, SocialFeedActivity } from '../types';
+import { FriendUser, SocialFeedActivity } from '../types';
 
 export const INITIAL_FRIENDS: FriendUser[] = [
   {
@@ -26,6 +26,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 21,
         isCompletedToday: true,
         adoptersCount: 48,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
       {
         id: 'fh-102',
@@ -39,6 +40,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 35,
         isCompletedToday: true,
         adoptersCount: 112,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
       {
         id: 'fh-103',
@@ -52,6 +54,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 14,
         isCompletedToday: false,
         adoptersCount: 76,
+        weeklyHistory: [true, true, false, true, true, true, false],
       },
     ],
   },
@@ -80,6 +83,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 16,
         isCompletedToday: true,
         adoptersCount: 89,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
       {
         id: 'fh-202',
@@ -93,6 +97,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 19,
         isCompletedToday: false,
         adoptersCount: 64,
+        weeklyHistory: [true, true, true, true, false, true, false],
       },
     ],
   },
@@ -121,6 +126,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 12,
         isCompletedToday: true,
         adoptersCount: 135,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
       {
         id: 'fh-302',
@@ -134,6 +140,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 9,
         isCompletedToday: false,
         adoptersCount: 92,
+        weeklyHistory: [true, false, true, true, true, false, false],
       },
     ],
   },
@@ -162,6 +169,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 8,
         isCompletedToday: true,
         adoptersCount: 154,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
       {
         id: 'fh-402',
@@ -175,6 +183,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 15,
         isCompletedToday: true,
         adoptersCount: 88,
+        weeklyHistory: [true, false, true, false, true, false, true],
       },
     ],
   },
@@ -203,6 +212,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 28,
         isCompletedToday: true,
         adoptersCount: 180,
+        weeklyHistory: [true, true, true, true, true, false, false],
       },
       {
         id: 'fh-502',
@@ -216,6 +226,7 @@ export const INITIAL_FRIENDS: FriendUser[] = [
         currentStreak: 30,
         isCompletedToday: true,
         adoptersCount: 71,
+        weeklyHistory: [true, true, true, true, true, true, true],
       },
     ],
   },

@@ -110,6 +110,13 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
                 <Text style={styles.badgeArchivedText}>ARCHIVED</Text>
               </View>
             )}
+            {habit.is_shared && (
+              <View style={styles.badgeBuddy}>
+                <Text style={styles.badgeBuddyText}>
+                  {habit.buddy_avatar || '🤝'} {habit.buddy_name || 'Buddy'}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.subRow}>
@@ -281,6 +288,19 @@ const styles = StyleSheet.create({
     fontSize: 8,
     fontWeight: '800',
     color: '#94A3B8',
+  },
+  badgeBuddy: {
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    borderColor: 'rgba(124, 92, 255, 0.3)',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  badgeBuddyText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#7C5CFF',
   },
   subRow: {
     flexDirection: 'row',

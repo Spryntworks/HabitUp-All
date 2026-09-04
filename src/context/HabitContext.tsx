@@ -133,9 +133,11 @@ interface HabitContextType {
   // Social & Friends Hub
   friends: FriendUser[];
   socialFeed: SocialFeedActivity[];
-  adoptFriendHabit: (habit: FriendPublicHabit, friendName: string) => Promise<void>;
+  adoptFriendHabit: (habit: FriendPublicHabit, friendId: string, friendName: string, friendAvatar?: string) => Promise<void>;
   createSharedHabit: (friendId: string, habitName: string, icon?: string, color?: string, time?: string) => void;
   addFriendByCodeOrUsername: (input: string) => void;
+  nudgeFriend: (friendId: string, habitName: string) => void;
+  toggleFriendHabitCompletion: (friendId: string, habitId: string) => void;
   sendKudos: (activityId: string) => void;
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
@@ -1014,16 +1016,20 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Social & Community Actions
   const adoptFriendHabit = useCallback(
-    async (friendHabit: FriendPublicHabit, friendName: string) => {
+    async (friendHabit: FriendPublicHabit, friendId: string, friendName: string, friendAvatar?: string) => {
       createHabit({
         name: friendHabit.name,
-        description: friendHabit.description || `Adopted from ${friendName}`,
+        description: friendHabit.description || `Shared routine with ${friendName}`,
         icon: friendHabit.icon,
         color: friendHabit.color,
         frequency_type: friendHabit.frequency_type,
         scheduled_days: friendHabit.scheduled_days,
         reminder_time: friendHabit.reminder_time,
         reminder_enabled: !!friendHabit.reminder_time,
+        buddy_id: friendId,
+        buddy_name: friendName,
+        buddy_avatar: friendAvatar || '🤝',
+        is_shared: true,
       });
 
       const newFeedItem: SocialFeedActivity = {
@@ -1058,7 +1064,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         } catch {}
       }
-      showToast(`Adopted "${friendHabit.name}" from ${friendName}! 🎉`, undefined, 'success');
+      showToast(`Adopted "${friendHabit.name}" with ${friendName}! Now tracking mutual progress 🎉`, undefined, 'success');
     },
     [createHabit, user, soundEnabled, hapticsEnabled, showToast]
   );
@@ -1120,16 +1126,24 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const createSharedHabit = useCallback(
     (friendId: string, habitName: string, icon?: string, color?: string, time?: string) => {
+      const friend = friends.find((f) => f.id === friendId);
+      const friendName = friend?.name || 'Friend';
+      const friendAvatar = friend?.avatar || '🤝';
+
       // 1. Add to current user's habits
       createHabit({
         name: habitName,
-        description: 'Shared habit buddy routine 🤝',
+        description: `Shared routine with ${friendName} 🤝`,
         icon: icon || 'Target',
         color: color || '#7C5CFF',
         frequency_type: 'daily',
         scheduled_days: [0, 1, 2, 3, 4, 5, 6],
         reminder_time: time || '08:00',
         reminder_enabled: !!time,
+        buddy_id: friendId,
+        buddy_name: friendName,
+        buddy_avatar: friendAvatar,
+        is_shared: true,
       });
 
       // 2. Add to friend's habits list
@@ -1148,6 +1162,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               currentStreak: 0,
               isCompletedToday: false,
               adoptersCount: 2,
+              weeklyHistory: [true, true, true, false, true, true, false],
             };
             return {
               ...f,
@@ -1164,9 +1179,69 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         } catch {}
       }
-      showToast(`Shared habit "${habitName}" created for both of you! 🤝`, undefined, 'success');
+      showToast(`Shared habit "${habitName}" created for you and ${friendName}! 🤝`, undefined, 'success');
     },
-    [createHabit, user, soundEnabled, hapticsEnabled, showToast]
+    [createHabit, friends, user, soundEnabled, hapticsEnabled, showToast]
+  );
+
+  const nudgeFriend = useCallback(
+    (friendId: string, habitName: string) => {
+      const friend = friends.find((f) => f.id === friendId);
+      const friendName = friend?.name || 'Your buddy';
+
+      setFriends((prev) =>
+        prev.map((f) => {
+          if (f.id === friendId) {
+            return {
+              ...f,
+              habits: f.habits.map((h) =>
+                h.name.toLowerCase() === habitName.toLowerCase()
+                  ? { ...h, lastNudgeTime: new Date().toISOString() }
+                  : h
+              ),
+            };
+          }
+          return f;
+        })
+      );
+
+      if (soundEnabled) soundService.playClickSound();
+      if (hapticsEnabled) {
+        try {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        } catch {}
+      }
+      showToast(`Sent a friendly reminder to ${friendName} for "${habitName}"! ⚡👋`, undefined, 'success');
+    },
+    [friends, soundEnabled, hapticsEnabled, showToast]
+  );
+
+  const toggleFriendHabitCompletion = useCallback(
+    (friendId: string, habitId: string) => {
+      setFriends((prev) =>
+        prev.map((f) => {
+          if (f.id === friendId) {
+            return {
+              ...f,
+              habits: f.habits.map((h) =>
+                h.id === habitId
+                  ? {
+                      ...h,
+                      isCompletedToday: !h.isCompletedToday,
+                      currentStreak: !h.isCompletedToday
+                        ? h.currentStreak + 1
+                        : Math.max(0, h.currentStreak - 1),
+                    }
+                  : h
+              ),
+            };
+          }
+          return f;
+        })
+      );
+      if (soundEnabled) soundService.playClickSound();
+    },
+    [soundEnabled]
   );
 
   const addFriendByCodeOrUsername = useCallback(
@@ -1223,6 +1298,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               currentStreak: 5,
               isCompletedToday: true,
               adoptersCount: 1,
+              weeklyHistory: [true, true, true, true, true, true, false],
             },
             {
               id: `fh-custom-2-${Date.now()}`,
@@ -1236,6 +1312,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               currentStreak: 7,
               isCompletedToday: false,
               adoptersCount: 2,
+              weeklyHistory: [true, true, true, true, false, true, false],
             },
           ],
         };
@@ -1342,6 +1419,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         adoptFriendHabit,
         createSharedHabit,
         addFriendByCodeOrUsername,
+        nudgeFriend,
+        toggleFriendHabitCompletion,
         sendKudos,
         sendFriendRequest,
         acceptFriendRequest,

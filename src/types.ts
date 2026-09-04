@@ -17,6 +17,10 @@ export interface Habit {
   paused_at?: string | null;
   archived_at?: string | null;
   deleted_at?: string | null;
+  buddy_id?: string;
+  buddy_name?: string;
+  buddy_avatar?: string;
+  is_shared?: boolean;
 }
 
 export interface HabitCompletion {
@@ -123,6 +127,8 @@ export interface FriendPublicHabit {
   currentStreak: number;
   isCompletedToday: boolean;
   adoptersCount: number;
+  weeklyHistory?: boolean[]; // last 7 days completions (e.g. Mon-Sun)
+  lastNudgeTime?: string;
 }
 
 export interface FriendUser {
