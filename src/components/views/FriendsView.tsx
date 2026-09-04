@@ -308,20 +308,7 @@ export const FriendsView: React.FC = () => {
         </View>
       </View>
 
-      {/* 3. Action Button: Start a Habit Together */}
-      <TouchableOpacity
-        style={styles.startTogetherBtn}
-        onPress={() => {
-          setSelectedFriendForTogether(connectedFriends[0] || null);
-          setIsTogetherModalOpen(true);
-        }}
-        activeOpacity={0.85}
-      >
-        <Zap size={18} color="#FFFFFF" strokeWidth={2.5} />
-        <Text style={styles.startTogetherBtnText}>🤝 Create & Follow a Habit Together</Text>
-      </TouchableOpacity>
-
-      {/* 4. Friends List Heading */}
+      {/* 3. Friends List Heading */}
       <View style={styles.listHeaderRow}>
         <Text style={[styles.sectionTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
           MY HABIT BUDDIES ({connectedFriends.length})
