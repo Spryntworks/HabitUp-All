@@ -1,0 +1,96 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - 'release'
+          - 'debug'
+
+jobs:
+  build:
+    name: 🤖 Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📱 Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 🟢 Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Install Dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: ⚙️ Generate Native Android Project (Expo Prebuild)
+        run: npx expo prebuild --platform android --clean
+
+      - name: 🔑 Configure Release Keystore
+        working-directory: android
+        run: |
+          cat << 'EOF' >> app/build.gradle
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile file('debug.keystore')
+                      storePassword 'android'
+                      keyAlias 'androiddebugkey'
+                      keyPassword 'android'
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                  }
+              }
+          }
+          EOF
+
+      - name: 🔨 Build Android Release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: 📦 Locate & Rename APK
+        run: |
+          mkdir -p build-output
+          find android/app/build/outputs/apk/ -name "*.apk" -exec cp {} build-output/HabitUp-release.apk \;
+          ls -la build-output/
+
+      - name: 🚀 Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HabitUp-Android-APK
+          path: build-output/HabitUp-release.apk
+          retention-days: 30
+
+      - name: 📝 Summary
+        run: |
+          echo "### 📱 Android APK Build Complete! 🎉" >> "$GITHUB_STEP_SUMMARY"
+          echo "Your standalone **HabitUp-release.apk** is ready for download in the Artifacts section above." >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Platform:** Android" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Version:** 1.0.0" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Package:** com.habitup.tracker" >> "$GITHUB_STEP_SUMMARY"

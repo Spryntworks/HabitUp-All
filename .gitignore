@@ -9,5 +9,7 @@ coverage/
 .expo/
 android/
 ios/
-build_output/
 *.apk
+*.aab
+.eas/
+build-output/
