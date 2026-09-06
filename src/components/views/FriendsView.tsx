@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Share,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useHabit } from '../../context/HabitContext';
@@ -21,6 +22,7 @@ import {
   formatFriendDisplayName,
 } from '../../utils/streakCalculator';
 import { FriendUser, FriendPublicHabit, Habit } from '../../types';
+import { localApi } from '../../services/apiService';
 import {
   Users,
   Flame,
@@ -39,6 +41,7 @@ import {
   Lock,
   UserCheck,
   AtSign,
+  Search,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -74,9 +77,12 @@ export const FriendsView: React.FC = () => {
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
 
-  // Username input for following friends
-  const [usernameInput, setUsernameInput] = useState<string>('');
-  const [isFollowingLoading, setIsFollowingLoading] = useState<boolean>(false);
+  // Search by username state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; username: string; name?: string }>>([]);
+  const [isSearching, setIsSearching] = useState<boolean>(false);
+  const [hasSearched, setHasSearched] = useState<boolean>(false);
+  const [followingMap, setFollowingMap] = useState<Record<string, 'loading' | 'requested' | 'following'>>({});
 
   // Remove friend confirmation state
   const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
@@ -99,10 +105,6 @@ export const FriendsView: React.FC = () => {
     return `@${clean || 'user'}`;
   }, [user]);
 
-  const myInviteCode = useMemo(() => {
-    return getUserInviteCode(user);
-  }, [user]);
-
   const connectedFriends = useMemo(() => {
     return friends.filter((f) => {
       if (!f.isFriend && f.requestStatus === 'none') return false;
@@ -118,21 +120,97 @@ export const FriendsView: React.FC = () => {
     });
   }, [friends, user]);
 
-  const handleSendFollowRequest = async () => {
-    const clean = usernameInput.trim();
-    if (!clean) {
-      showToast('Please enter a @username to follow', undefined, 'info');
+  const handlePerformSearch = async (queryText?: string) => {
+    const q = (queryText !== undefined ? queryText : searchQuery).trim().replace(/^@/, '');
+    if (!q) {
+      setSearchResults([]);
+      setHasSearched(false);
       return;
     }
-    setIsFollowingLoading(true);
+    setIsSearching(true);
+    setHasSearched(true);
+    try {
+      // 1. Search backend /users/search endpoint
+      const serverResults = await localApi.searchUsersByUsername(q);
+
+      // 2. Search local friends / mock users for instant offline matching
+      const localMatches: Array<{ id: string; username: string; name?: string }> = friends
+        .filter((f) => {
+          const u = (f.username || '').replace(/^@/, '').toLowerCase();
+          const n = (f.name || '').toLowerCase();
+          return u.includes(q.toLowerCase()) || n.includes(q.toLowerCase());
+        })
+        .map((f) => ({
+          id: f.id,
+          username: (f.username || '').replace(/^@/, '') || f.name.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+          name: f.name,
+        }));
+
+      const combined = [...serverResults];
+      for (const lm of localMatches) {
+        if (!combined.some((r) => r.username.toLowerCase() === lm.username.toLowerCase())) {
+          combined.push(lm);
+        }
+      }
+
+      // If no exact match found yet user typed >=2 chars, provide fallback so they can directly follow
+      if (combined.length === 0 && q.length >= 2) {
+        combined.push({
+          id: `usr_${q.toLowerCase()}`,
+          username: q.toLowerCase(),
+          name: q,
+        });
+      }
+
+      // Filter out self
+      const myClean = (user?.username || '').replace(/^@/, '').toLowerCase();
+      const filtered = combined.filter((r) => r.username.toLowerCase() !== myClean);
+
+      setSearchResults(filtered);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleFollowUserFromSearch = async (targetUsername: string, targetId?: string) => {
+    const clean = targetUsername.trim().replace(/^@/, '');
+    if (!clean) return;
+    setFollowingMap((prev) => ({ ...prev, [clean]: 'loading' }));
     try {
       const res = await sendFriendRequestByUsername(clean);
       if (res.success) {
-        setUsernameInput('');
+        setFollowingMap((prev) => ({ ...prev, [clean]: 'requested' }));
+      } else {
+        setFollowingMap((prev) => {
+          const copy = { ...prev };
+          delete copy[clean];
+          return copy;
+        });
       }
-    } finally {
-      setIsFollowingLoading(false);
+    } catch {
+      setFollowingMap((prev) => {
+        const copy = { ...prev };
+        delete copy[clean];
+        return copy;
+      });
     }
+  };
+
+  const getFollowStatusForUser = (targetUsername: string) => {
+    const clean = targetUsername.replace(/^@/, '').toLowerCase();
+    if (followingMap[clean]) return followingMap[clean];
+    const existing = friends.find((f) => {
+      const fUser = (f.username || '').replace(/^@/, '').toLowerCase();
+      return fUser === clean;
+    });
+    if (existing) {
+      if (existing.isFriend) return 'following';
+      if (existing.requestStatus === 'pending_sent') return 'requested';
+      if (existing.requestStatus === 'pending_received') return 'requested';
+    }
+    return 'none';
   };
 
   // Match ONLY habits that were explicitly created/followed with this friend
@@ -286,51 +364,20 @@ export const FriendsView: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* 2. My Handle & Search / Follow Card */}
+      {/* 2. Search by Username */}
       <View
         style={[
-          styles.card,
+          styles.searchBarContainer,
           {
             backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
             borderColor: isDark ? '#1E293B' : '#E2E8F0',
           },
         ]}
       >
-        {/* Top: My Username Handle */}
-        <View style={styles.codeRow}>
-          <View>
-            <Text style={[styles.codeLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              YOUR PROFILE USERNAME
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-              <Text style={[styles.codeValue, { color: '#7C5CFF' }]}>{myUsername}</Text>
-            </View>
-          </View>
-
-          <View style={styles.codeActionsRow}>
-            <TouchableOpacity style={styles.copyBtn} onPress={handleCopyUsername}>
-              <Copy size={14} color={isDark ? '#E2E8F0' : '#0F172A'} />
-              <Text style={[styles.copyBtnText, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>Copy</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.shareBtn} onPress={handleShareUsername}>
-              <Share2 size={14} color="#FFFFFF" />
-              <Text style={styles.shareBtnText}>Share</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]} />
-
-        {/* Bottom: Follow Friend by Username */}
-        <Text style={[styles.codeLabel, { color: isDark ? '#94A3B8' : '#64748B', marginBottom: 6 }]}>
-          FOLLOW BY USERNAME
-        </Text>
-
-        <View style={styles.addInputRow}>
+        <View style={styles.searchInputRow}>
           <View style={styles.inputWrapper}>
             <View style={styles.inputPrefixIcon}>
-              <AtSign size={15} color={isDark ? '#94A3B8' : '#64748B'} />
+              <Search size={16} color={isDark ? '#94A3B8' : '#64748B'} />
             </View>
             <TextInput
               style={[
@@ -342,17 +389,31 @@ export const FriendsView: React.FC = () => {
                   color: isDark ? '#FFFFFF' : '#0F172A',
                 },
               ]}
-              placeholder="Enter username (e.g. ram, alex_fit)..."
+              placeholder="Search by @username..."
               placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              value={usernameInput}
-              onChangeText={setUsernameInput}
+              value={searchQuery}
+              onChangeText={(txt) => {
+                setSearchQuery(txt);
+                if (txt.trim().length >= 2) {
+                  handlePerformSearch(txt);
+                } else if (txt.trim().length === 0) {
+                  setSearchResults([]);
+                  setHasSearched(false);
+                }
+              }}
+              onSubmitEditing={() => handlePerformSearch()}
+              returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {usernameInput.length > 0 && (
+            {searchQuery.length > 0 && (
               <TouchableOpacity
                 style={styles.inputActionBtn}
-                onPress={() => setUsernameInput('')}
+                onPress={() => {
+                  setSearchQuery('');
+                  setSearchResults([]);
+                  setHasSearched(false);
+                }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <X size={14} color={isDark ? '#94A3B8' : '#64748B'} />
@@ -361,15 +422,104 @@ export const FriendsView: React.FC = () => {
           </View>
 
           <TouchableOpacity
-            style={[styles.addFriendBtn, isFollowingLoading && { opacity: 0.7 }]}
-            onPress={handleSendFollowRequest}
-            disabled={isFollowingLoading}
+            style={[styles.searchActionBtn, isSearching && { opacity: 0.7 }]}
+            onPress={() => handlePerformSearch()}
+            disabled={isSearching}
             activeOpacity={0.8}
           >
-            <UserPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.addFriendBtnText}>Follow</Text>
+            {isSearching ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <>
+                <Search size={15} color="#FFFFFF" strokeWidth={2.5} />
+                <Text style={styles.searchActionBtnText}>Search</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
+
+        {/* Live Search Results */}
+        {searchResults.length > 0 && (
+          <View style={styles.searchResultsWrapper}>
+            <Text style={[styles.searchResultsTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              SEARCH RESULTS ({searchResults.length})
+            </Text>
+            {searchResults.map((item) => {
+              const status = getFollowStatusForUser(item.username);
+              const cleanHandle = item.username.replace(/^@/, '');
+              const initial = (item.name || item.username || 'U').charAt(0).toUpperCase();
+
+              return (
+                <View
+                  key={item.id || item.username}
+                  style={[
+                    styles.searchResultItem,
+                    {
+                      backgroundColor: isDark ? '#1A2438' : '#F8FAFC',
+                      borderColor: isDark ? '#2D3B55' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <View style={styles.searchResultItemLeft}>
+                    <View style={styles.searchResultAvatar}>
+                      <Text style={styles.searchResultAvatarText}>{initial}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[styles.searchResultName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                        numberOfLines={1}
+                      >
+                        {item.name || `@${cleanHandle}`}
+                      </Text>
+                      <Text style={[styles.searchResultHandle, { color: '#7C5CFF' }]}>
+                        @{cleanHandle}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {status === 'following' ? (
+                    <View style={styles.followingPill}>
+                      <UserCheck size={13} color="#10B981" />
+                      <Text style={styles.followingPillText}>Following</Text>
+                    </View>
+                  ) : status === 'requested' ? (
+                    <View style={styles.requestedPill}>
+                      <Clock size={13} color="#F59E0B" />
+                      <Text style={styles.requestedPillText}>Requested</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[
+                        styles.followResultBtn,
+                        status === 'loading' && { opacity: 0.7 },
+                      ]}
+                      onPress={() => handleFollowUserFromSearch(cleanHandle, item.id)}
+                      disabled={status === 'loading'}
+                      activeOpacity={0.8}
+                    >
+                      {status === 'loading' ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <UserPlus size={13} color="#FFFFFF" strokeWidth={2.5} />
+                          <Text style={styles.followResultBtnText}>Follow</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {hasSearched && searchResults.length === 0 && !isSearching && searchQuery.trim().length > 0 && (
+          <View style={styles.noResultsBox}>
+            <Text style={[styles.noResultsText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              No users found matching &quot;{searchQuery}&quot;
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* 3. Incoming Follow Requests Card (Instagram-Style Approvals) */}
@@ -1365,6 +1515,134 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 12,
     marginTop: 2,
+  },
+  searchBarContainer: {
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 10,
+  },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  searchActionBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 11,
+    borderRadius: 14,
+    gap: 5,
+  },
+  searchActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  searchResultsWrapper: {
+    gap: 8,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(124, 92, 255, 0.15)',
+  },
+  searchResultsTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  searchResultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  searchResultItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  searchResultAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResultAvatarText: {
+    color: '#7C5CFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  searchResultName: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  searchResultHandle: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  followResultBtn: {
+    backgroundColor: '#7C5CFF',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    gap: 4,
+  },
+  followResultBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  followingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    gap: 4,
+  },
+  followingPillText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  requestedPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    gap: 4,
+  },
+  requestedPillText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  noResultsBox: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noResultsText: {
+    fontSize: 12,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   card: {
     padding: 16,
