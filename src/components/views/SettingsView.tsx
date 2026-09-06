@@ -357,27 +357,12 @@ export const SettingsView: React.FC = () => {
               </Text>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {notificationsEnabled && (
-              <TouchableOpacity
-                style={[
-                  styles.testAlertBtn,
-                  { backgroundColor: isDark ? 'rgba(124, 92, 255, 0.15)' : '#F3E8FF' },
-                ]}
-                onPress={() => triggerTestNotification()}
-                activeOpacity={0.7}
-              >
-                <Sparkles size={11} color="#7C5CFF" />
-                <Text style={styles.testAlertText}>Test</Text>
-              </TouchableOpacity>
-            )}
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={handleToggleNotifications}
-              trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: '#7C5CFF' }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+          <Switch
+            value={notificationsEnabled}
+            onValueChange={handleToggleNotifications}
+            trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: '#7C5CFF' }}
+            thumbColor="#FFFFFF"
+          />
         </View>
 
         {/* Divider */}
@@ -866,19 +851,6 @@ const styles = StyleSheet.create({
   themeToggleText: {
     fontSize: 12,
     fontWeight: '800',
-  },
-  testAlertBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  testAlertText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#7C5CFF',
   },
   divider: {
     height: 1,

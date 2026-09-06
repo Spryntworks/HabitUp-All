@@ -1,7 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Bell, Sun, Moon, WifiOff, Settings } from 'lucide-react-native';
+import { Sun, Moon, WifiOff, Settings } from 'lucide-react-native';
 import { HabitlyMascot } from './HabitlyMascot';
 
 interface HomeHeroProps {
@@ -16,7 +16,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onMascotClick }) => {
     isOffline,
     setIsOffline,
     setActiveTab,
-    setIsNotificationModalOpen,
     showToast,
   } = useHabit();
 
@@ -56,14 +55,6 @@ export const HomeHero: React.FC<HomeHeroProps> = ({ onMascotClick }) => {
             ) : (
               <Moon size={18} color="#6366F1" />
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={() => setIsNotificationModalOpen(true)}
-            style={styles.actionBtn}
-          >
-            <Bell size={18} color={isDark ? '#E2E8F0' : '#475569'} />
-            <View style={styles.bellDot} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -124,15 +115,6 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 10,
     position: 'relative',
-  },
-  bellDot: {
-    position: 'absolute',
-    top: 5,
-    right: 5,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#F43F5E',
   },
   bodyRow: {
     flexDirection: 'row',
