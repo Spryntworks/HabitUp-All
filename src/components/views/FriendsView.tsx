@@ -798,6 +798,7 @@ export const FriendsView: React.FC = () => {
                   const bothDone = myDone && friendDone;
                   const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
                   const friendWeekly = friendHabit.weeklyHistory || [false, false, false, false, false, false, false];
+                  const friendShortName = (friend.name || friend.username || 'Friend').trim().split(' ')[0];
 
                   return (
                     <View
@@ -805,127 +806,225 @@ export const FriendsView: React.FC = () => {
                       style={[
                         styles.mutualTrackerCard,
                         {
-                          backgroundColor: isDark ? '#182438' : '#F1F5F9',
+                          backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
                           borderColor: bothDone
-                            ? '#10B981'
+                            ? 'rgba(16, 185, 129, 0.4)'
                             : isDark
-                            ? '#334155'
-                            : '#CBD5E1',
+                            ? '#1E2B42'
+                            : '#E2E8F0',
                         },
                       ]}
                     >
-                      {/* Top: Habit Name & Shared Streak */}
+                      {/* Top Header: Icon, Habit Name, Time, Shared Streak */}
                       <View style={styles.mutualHeader}>
                         <View style={styles.mutualTitleGroup}>
                           <View
                             style={[
-                              styles.habitIconBox,
+                              styles.habitIconBoxLarge,
                               { backgroundColor: friendHabit.color || '#7C5CFF' },
                             ]}
                           >
-                            <IconRenderer name={friendHabit.icon} size={16} color="#FFFFFF" />
+                            <IconRenderer name={friendHabit.icon} size={18} color="#FFFFFF" />
                           </View>
-                          <View>
+                          <View style={{ flex: 1, minWidth: 0 }}>
                             <Text
                               style={[
                                 styles.mutualHabitName,
                                 { color: isDark ? '#FFFFFF' : '#0F172A' },
                               ]}
+                              numberOfLines={1}
                             >
                               {friendHabit.name}
                             </Text>
-                            <Text
-                              style={[
-                                styles.mutualHabitSub,
-                                { color: isDark ? '#94A3B8' : '#64748B' },
-                              ]}
-                            >
-                              Shared Routine • ⏰ {formatTo12Hour(friendHabit.reminder_time || '08:00')}
-                            </Text>
+                            <View style={styles.mutualSubtitleRow}>
+                              <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
+                              <Text
+                                style={[
+                                  styles.mutualHabitSub,
+                                  { color: isDark ? '#94A3B8' : '#64748B' },
+                                ]}
+                              >
+                                {formatTo12Hour(friendHabit.reminder_time || '08:00')} • Shared Routine
+                              </Text>
+                            </View>
                           </View>
                         </View>
 
                         <View style={styles.sharedStreakBox}>
-                          <Flame size={12} color="#F59E0B" fill="#F59E0B" />
+                          <Flame size={13} color="#F59E0B" fill="#F59E0B" />
                           <Text style={styles.sharedStreakText}>
-                            {friendHabit.currentStreak}d Shared Streak
+                            {friendHabit.currentStreak}d Streak
                           </Text>
                         </View>
                       </View>
 
-                      {/* Today's Mutual Status Banner */}
+                      {/* Today's Check-in Comparison Cards */}
                       <View
                         style={[
-                          styles.statusBanner,
-                          bothDone
-                            ? styles.statusBannerBothDone
-                            : styles.statusBannerPending,
+                          styles.todayComparisonBox,
+                          {
+                            backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                            borderColor: isDark ? '#1A253A' : '#E2E8F0',
+                          },
                         ]}
                       >
-                        <View style={styles.statusAvatarRow}>
-                          {/* You */}
-                          <View style={styles.userStatusPill}>
-                            <Text style={styles.miniAvatar}>{user?.avatar || '🌟'}</Text>
-                            <Text style={styles.statusLabelText}>
-                              {myDisplayName} (You): {myDone ? 'Done ✅' : 'Pending ⏳'}
-                            </Text>
+                        <View style={styles.todayCheckinRow}>
+                          {/* You Status Card */}
+                          <View
+                            style={[
+                              styles.userCheckinCard,
+                              {
+                                backgroundColor: isDark ? '#162033' : '#FFFFFF',
+                                borderColor: myDone ? '#10B981' : isDark ? '#23324C' : '#CBD5E1',
+                              },
+                            ]}
+                          >
+                            <View style={styles.checkinUserMeta}>
+                              <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
+                              <Text
+                                style={[
+                                  styles.checkinUserName,
+                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                You
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.checkinStatusBadge,
+                                myDone
+                                  ? styles.checkinBadgeDone
+                                  : isDark
+                                  ? styles.checkinBadgePendingDark
+                                  : styles.checkinBadgePendingLight,
+                              ]}
+                            >
+                              {myDone ? (
+                                <>
+                                  <Check size={11} color="#10B981" strokeWidth={3} />
+                                  <Text style={styles.checkinBadgeDoneText}>Done</Text>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={11} color="#F59E0B" />
+                                  <Text style={styles.checkinBadgePendingText}>Pending</Text>
+                                </>
+                              )}
+                            </View>
                           </View>
 
-                          {/* Friend */}
-                          <View style={styles.userStatusPill}>
-                            <Text style={styles.miniAvatar}>{friend.avatar}</Text>
-                            <Text style={styles.statusLabelText}>
-                              {friendDisplayName}: {friendDone ? 'Done ✅' : 'Pending ⏳'}
-                            </Text>
+                          {/* Friend Status Card */}
+                          <View
+                            style={[
+                              styles.userCheckinCard,
+                              {
+                                backgroundColor: isDark ? '#162033' : '#FFFFFF',
+                                borderColor: friendDone ? '#7C5CFF' : isDark ? '#23324C' : '#CBD5E1',
+                              },
+                            ]}
+                          >
+                            <View style={styles.checkinUserMeta}>
+                              <Text style={styles.checkinAvatar}>{friend.avatar || '👤'}</Text>
+                              <Text
+                                style={[
+                                  styles.checkinUserName,
+                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {friendShortName}
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.checkinStatusBadge,
+                                friendDone
+                                  ? styles.checkinBadgeFriendDone
+                                  : isDark
+                                  ? styles.checkinBadgePendingDark
+                                  : styles.checkinBadgePendingLight,
+                              ]}
+                            >
+                              {friendDone ? (
+                                <>
+                                  <Check size={11} color="#7C5CFF" strokeWidth={3} />
+                                  <Text style={styles.checkinBadgeFriendDoneText}>Done</Text>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock size={11} color="#F59E0B" />
+                                  <Text style={styles.checkinBadgePendingText}>Pending</Text>
+                                </>
+                              )}
+                            </View>
                           </View>
                         </View>
 
-                        {/* Status Message */}
+                        {/* Motivational Accountability Caption */}
                         <Text
                           style={[
-                            styles.statusBannerMessage,
-                            { color: bothDone ? '#10B981' : isDark ? '#CBD5E1' : '#475569' },
+                            styles.accountabilityText,
+                            { color: bothDone ? '#10B981' : isDark ? '#94A3B8' : '#64748B' },
                           ]}
                         >
                           {bothDone
-                            ? '🎉 Both completed today! Mutual streak maintained!'
+                            ? '🎉 Both completed today! Shared streak secured!'
                             : myDone && !friendDone
-                            ? `⚡ You're done! ${friendDisplayName} is still working on it.`
+                            ? `⚡ You're done! Remind ${friendShortName} to check in.`
                             : !myDone && friendDone
-                            ? `⏳ ${friendDisplayName} completed today! Your turn to check in.`
+                            ? `⏳ ${friendShortName} completed today! Your turn to check in.`
                             : '⏳ Both pending today. Keep each other accountable!'}
                         </Text>
                       </View>
 
-                      {/* 7-Day Weekly Comparison Progress Tracker */}
-                      <View style={styles.weeklyComparisonSection}>
-                        <Text style={[styles.weeklySectionHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                          WEEKLY PROGRESS COMPARISON
+                      {/* 7-Day Weekly Progress Matrix */}
+                      <View style={styles.weeklyMatrixContainer}>
+                        <Text
+                          style={[
+                            styles.weeklySectionHeading,
+                            { color: isDark ? '#94A3B8' : '#64748B' },
+                          ]}
+                        >
+                          WEEKLY PROGRESS
                         </Text>
 
-                        {/* Day Headers with Day Letter & Date Number */}
-                        <View style={styles.daysHeaderRow}>
-                          <View style={styles.weeklyRowSpacer} />
-                          <View style={styles.daysCols}>
+                        {/* Day & Date Headers */}
+                        <View style={styles.matrixHeaderRow}>
+                          <View style={styles.matrixNameSpacer} />
+                          <View style={styles.matrixGridCols}>
                             {currentWeekDays.map((item, i) => (
-                              <View key={i} style={styles.dayColHeaderWrapper}>
+                              <View
+                                key={i}
+                                style={[
+                                  styles.matrixDayCol,
+                                  item.isToday && styles.matrixDayColToday,
+                                ]}
+                              >
                                 <Text
                                   style={[
-                                    styles.dayColHeader,
-                                    { color: item.isToday ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
+                                    styles.matrixDayLetter,
+                                    {
+                                      color: item.isToday
+                                        ? '#7C5CFF'
+                                        : isDark
+                                        ? '#64748B'
+                                        : '#94A3B8',
+                                    },
                                   ]}
                                 >
                                   {item.dayName[0]}
                                 </Text>
                                 <Text
                                   style={[
-                                    styles.dayDateHeader,
+                                    styles.matrixDayNum,
                                     {
                                       color: item.isToday
                                         ? '#7C5CFF'
                                         : isDark
-                                        ? '#94A3B8'
-                                        : '#475569',
+                                        ? '#FFFFFF'
+                                        : '#0F172A',
                                       fontWeight: item.isToday ? '900' : '700',
                                     },
                                   ]}
@@ -938,62 +1037,64 @@ export const FriendsView: React.FC = () => {
                         </View>
 
                         {/* Row 1: You */}
-                        <View style={styles.weeklyRow}>
-                          <Text
-                            style={[
-                              styles.weeklyRowLabel,
-                              { color: isDark ? '#E2E8F0' : '#334155' },
-                            ]}
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                          >
-                            You ({myDisplayName})
-                          </Text>
-                          <View style={styles.daysCols}>
+                        <View style={styles.matrixRow}>
+                          <View style={styles.matrixNameBox}>
+                            <Text
+                              style={[
+                                styles.matrixNameText,
+                                { color: isDark ? '#E2E8F0' : '#334155' },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              You
+                            </Text>
+                          </View>
+                          <View style={styles.matrixGridCols}>
                             {myWeekly.map((done, idx) => (
                               <View
                                 key={idx}
                                 style={[
-                                  styles.progressDot,
+                                  styles.matrixDot,
                                   done
-                                    ? styles.progressDotDoneYou
+                                    ? styles.matrixDotDoneYou
                                     : isDark
-                                    ? styles.progressDotPendingDark
-                                    : styles.progressDotPendingLight,
+                                    ? styles.matrixDotPendingDark
+                                    : styles.matrixDotPendingLight,
                                 ]}
                               >
-                                {done && <Check size={10} color="#FFFFFF" strokeWidth={3} />}
+                                {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
                               </View>
                             ))}
                           </View>
                         </View>
 
                         {/* Row 2: Friend */}
-                        <View style={styles.weeklyRow}>
-                          <Text
-                            style={[
-                              styles.weeklyRowLabel,
-                              { color: isDark ? '#E2E8F0' : '#334155' },
-                            ]}
-                            numberOfLines={1}
-                            ellipsizeMode="tail"
-                          >
-                            {friendDisplayName}
-                          </Text>
-                          <View style={styles.daysCols}>
+                        <View style={styles.matrixRow}>
+                          <View style={styles.matrixNameBox}>
+                            <Text
+                              style={[
+                                styles.matrixNameText,
+                                { color: isDark ? '#E2E8F0' : '#334155' },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {friendShortName}
+                            </Text>
+                          </View>
+                          <View style={styles.matrixGridCols}>
                             {friendWeekly.map((done, idx) => (
                               <View
                                 key={idx}
                                 style={[
-                                  styles.progressDot,
+                                  styles.matrixDot,
                                   done
-                                    ? styles.progressDotDoneFriend
+                                    ? styles.matrixDotDoneFriend
                                     : isDark
-                                    ? styles.progressDotPendingDark
-                                    : styles.progressDotPendingLight,
+                                    ? styles.matrixDotPendingDark
+                                    : styles.matrixDotPendingLight,
                                 ]}
                               >
-                                {done && <Check size={10} color="#FFFFFF" strokeWidth={3} />}
+                                {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
                               </View>
                             ))}
                           </View>
@@ -1002,15 +1103,18 @@ export const FriendsView: React.FC = () => {
 
                       {/* Interactive Actions Footer */}
                       <View style={styles.mutualActionsRow}>
-                        {/* Unfollow button to selectively stop following this specific habit */}
                         <TouchableOpacity
                           style={[
                             styles.unfollowBtn,
-                            { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
+                            {
+                              backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
+                              borderColor: isDark ? '#2D3A50' : '#E2E8F0',
+                            },
                           ]}
                           onPress={() => unfollowFriendHabit(myHabit.id, friendHabit.name)}
                           activeOpacity={0.7}
                         >
+                          <UserMinus size={13} color={isDark ? '#94A3B8' : '#64748B'} />
                           <Text
                             style={[
                               styles.unfollowBtnText,
@@ -1021,20 +1125,19 @@ export const FriendsView: React.FC = () => {
                           </Text>
                         </TouchableOpacity>
 
-                        {/* 1. If Friend is pending, friendly Nudge button */}
                         {!friendDone && (
                           <TouchableOpacity
                             style={styles.nudgeBtn}
                             onPress={() => nudgeFriend(friend.id, friendHabit.name)}
+                            activeOpacity={0.8}
                           >
                             <Bell size={13} color="#F59E0B" />
                             <Text style={styles.nudgeBtnText}>
-                              👋 Nudge {friendDisplayName}
+                              Nudge {friendShortName}
                             </Text>
                           </TouchableOpacity>
                         )}
 
-                        {/* 3. If Both are done, celebratory button */}
                         {bothDone && (
                           <View style={styles.celebratedBadge}>
                             <Sparkles size={13} color="#10B981" />
@@ -1096,8 +1199,8 @@ export const FriendsView: React.FC = () => {
                       onPress={() => adoptFriendHabit(h, friend.id, friendDisplayName, friend.avatar)}
                       activeOpacity={0.8}
                     >
-                      <Plus size={13} color="#FFFFFF" strokeWidth={3} />
-                      <Text style={styles.followHabitBtnText}>+ Follow Habit</Text>
+                      <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                      <Text style={styles.followHabitBtnText}>Follow Habit</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -2066,172 +2169,225 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   mutualTrackerCard: {
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 20,
     borderWidth: 1.5,
-    gap: 10,
+    gap: 12,
   },
   mutualHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
   },
   mutualTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     flex: 1,
+    minWidth: 0,
+  },
+  habitIconBoxLarge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   mutualHabitName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '900',
+    flexShrink: 1,
+  },
+  mutualSubtitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
   },
   mutualHabitSub: {
-    fontSize: 10,
-    marginTop: 1,
+    fontSize: 11,
+    fontWeight: '600',
   },
   sharedStreakBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+    flexShrink: 0,
+  },
+  sharedStreakText: {
+    color: '#F59E0B',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  todayComparisonBox: {
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+  },
+  todayCheckinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  userCheckinCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+  },
+  checkinUserMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+  },
+  checkinAvatar: {
+    fontSize: 14,
+  },
+  checkinUserName: {
+    fontSize: 12,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  checkinStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 8,
     gap: 3,
+    flexShrink: 0,
   },
-  sharedStreakText: {
-    color: '#F59E0B',
+  checkinBadgeDone: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  },
+  checkinBadgeDoneText: {
+    color: '#10B981',
     fontSize: 10,
-    fontWeight: '900',
-  },
-  statusBanner: {
-    padding: 10,
-    borderRadius: 12,
-    gap: 6,
-  },
-  statusBannerBothDone: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    borderWidth: 1,
-  },
-  statusBannerPending: {
-    backgroundColor: 'rgba(124, 92, 255, 0.08)',
-    borderColor: 'rgba(124, 92, 255, 0.2)',
-    borderWidth: 1,
-  },
-  statusAvatarRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  userStatusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  miniAvatar: {
-    fontSize: 14,
-  },
-  statusLabelText: {
-    fontSize: 12,
     fontWeight: '800',
   },
-  statusBannerMessage: {
+  checkinBadgeFriendDone: {
+    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+  },
+  checkinBadgeFriendDoneText: {
+    color: '#7C5CFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  checkinBadgePendingDark: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  checkinBadgePendingLight: {
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  checkinBadgePendingText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  accountabilityText: {
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 2,
   },
-  weeklyComparisonSection: {
-    gap: 6,
-    paddingVertical: 4,
+  weeklyMatrixContainer: {
+    gap: 8,
+    paddingVertical: 2,
   },
   weeklySectionHeading: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
-  daysHeaderRow: {
+  matrixHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  weeklyRowSpacer: {
-    width: 48,
+  matrixNameSpacer: {
+    width: 60,
     flexShrink: 0,
   },
-  daysCols: {
+  matrixGridCols: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  dayColHeaderWrapper: {
-    width: 24,
+  matrixDayCol: {
+    width: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 2,
+    borderRadius: 6,
     gap: 1,
   },
-  dayColHeader: {
+  matrixDayColToday: {
+    backgroundColor: 'rgba(124, 92, 255, 0.12)',
+  },
+  matrixDayLetter: {
     fontSize: 9,
     fontWeight: '800',
     textAlign: 'center',
   },
-  dayDateHeader: {
+  matrixDayNum: {
     fontSize: 10,
     textAlign: 'center',
   },
-  weeklyRow: {
+  matrixRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 2,
+    marginVertical: 3,
   },
-  weeklyRowLabel: {
-    width: 48,
-    fontSize: 11,
-    fontWeight: '800',
+  matrixNameBox: {
+    width: 60,
     flexShrink: 0,
+    paddingRight: 6,
   },
-  progressDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  matrixNameText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  matrixDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  progressDotDoneYou: {
+  matrixDotDoneYou: {
     backgroundColor: '#10B981',
   },
-  progressDotDoneFriend: {
+  matrixDotDoneFriend: {
     backgroundColor: '#7C5CFF',
   },
-  progressDotPendingDark: {
-    backgroundColor: '#334155',
+  matrixDotPendingDark: {
+    backgroundColor: '#1E293B',
   },
-  progressDotPendingLight: {
-    backgroundColor: '#CBD5E1',
+  matrixDotPendingLight: {
+    backgroundColor: '#E2E8F0',
   },
   mutualActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     gap: 8,
     paddingTop: 4,
-    marginTop: 2,
-  },
-  markMyDoneBtn: {
-    backgroundColor: '#10B981',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
-  },
-  markMyDoneBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '900',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(124, 92, 255, 0.1)',
   },
   nudgeBtn: {
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
@@ -2240,19 +2396,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
+    paddingVertical: 7,
+    borderRadius: 12,
+    gap: 5,
   },
   nudgeBtnText: {
     color: '#F59E0B',
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 12,
+    fontWeight: '800',
   },
   unfollowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
   },
   unfollowBtnText: {
     fontSize: 11,
@@ -2262,9 +2422,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
     gap: 4,
   },
   celebratedBadgeText: {
