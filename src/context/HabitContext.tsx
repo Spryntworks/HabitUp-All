@@ -1063,15 +1063,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // 4. Check Auth state
         const authVal = await AsyncStorage.getItem('habitup_is_authenticated_v1');
         const isAuth = authVal ? JSON.parse(authVal) : false;
-        setIsAuthenticated(isAuth);
 
-        if (isAuth) {
+        if (isAuth && localApi.hasAuthToken()) {
+          setIsAuthenticated(true);
           try {
             const me = await localApi.fetchMe();
             if (me) {
               setUser(me);
               localApi.saveUser(me, me.id);
               AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(me)).catch(() => {});
+            } else {
+              setIsAuthenticated(false);
+              AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
             }
             const serverHabits = await localApi.fetchHabitsFromServer();
             if (serverHabits && serverHabits.length > 0) {
@@ -1083,6 +1086,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           } catch {
             // offline fallback already loaded
+          }
+        } else {
+          setIsAuthenticated(false);
+          if (isAuth && !localApi.hasAuthToken()) {
+            AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
           }
         }
 
@@ -1216,9 +1224,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // 1. Fetch locally stored follow requests
         const stored = await getStoredFollowRequests();
 
-        // 2. Fetch server requests if online
+        // 2. Fetch server requests if online and authenticated
         let serverRequests: any[] = [];
-        if (!isOffline && isAuthenticated) {
+        if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
           try {
             serverRequests = await localApi.fetchPendingFriendRequests();
           } catch {}
@@ -1967,6 +1975,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const syncWithBackend = useCallback(async () => {
     if (isSyncing) return;
+    if (!isAuthenticated || !localApi.hasAuthToken()) {
+      showToast('Please log in to sync with cloud backend.', undefined, 'warning');
+      return;
+    }
     setIsSyncing(true);
     showToast('Syncing with cloud backend...', undefined, 'info');
 

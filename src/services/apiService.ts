@@ -119,6 +119,10 @@ class ApiClient {
     };
   }
 
+  hasAuthToken(): boolean {
+    return !!(this.accessToken || this.refreshToken);
+  }
+
   setTokens(accessToken: string | null, refreshToken?: string | null): void {
     this.accessToken = accessToken;
     this.setStorage('habitup_access_token', accessToken);
@@ -178,6 +182,22 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+    const isPublicEndpoint =
+      endpoint.includes('/auth/login') ||
+      endpoint.includes('/auth/register') ||
+      endpoint.includes('/auth/refresh') ||
+      endpoint.includes('/auth/reset-password') ||
+      endpoint.includes('/auth/forgot-password');
+
+    // Guard: Prevent unauthenticated calls to protected endpoints
+    if (!isPublicEndpoint && !this.accessToken && !this.refreshToken) {
+      return {
+        ok: false,
+        status: 401,
+        error: 'Not authenticated',
+      };
+    }
+
     const url = endpoint.startsWith('http')
       ? endpoint
       : `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
@@ -204,7 +224,11 @@ class ApiClient {
         if (refreshed && this.accessToken) {
           headers['Authorization'] = `Bearer ${this.accessToken}`;
           res = await fetch(url, { ...options, headers });
+        } else {
+          this.clearTokens();
         }
+      } else if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+        this.clearTokens();
       }
 
       const contentType = res.headers.get('content-type');
