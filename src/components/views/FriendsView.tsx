@@ -828,7 +828,7 @@ export const FriendsView: React.FC = () => {
                         },
                       ]}
                     >
-                      {/* Top Header: Icon, Habit Name, Time, Shared Streak */}
+                      {/* Top Header: Icon, Full Habit Name, Time, Shared Streak */}
                       <View style={styles.mutualHeader}>
                         <View style={styles.mutualTitleGroup}>
                           <View
@@ -863,27 +863,11 @@ export const FriendsView: React.FC = () => {
                           </View>
                         </View>
 
-                        <View style={styles.mutualHeaderRight}>
-                          <View style={styles.sharedStreakBox}>
-                            <Flame size={13} color="#F59E0B" fill="#F59E0B" />
-                            <Text style={styles.sharedStreakText}>
-                              {friendHabit.currentStreak}d Streak
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            style={[
-                              styles.progressPillBtn,
-                              {
-                                backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
-                                borderColor: isDark ? '#334155' : '#C7D2FE',
-                              },
-                            ]}
-                            onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
-                            activeOpacity={0.7}
-                          >
-                            <Calendar size={12} color="#6366F1" />
-                            <Text style={styles.progressPillBtnText}>Progress</Text>
-                          </TouchableOpacity>
+                        <View style={styles.sharedStreakBox}>
+                          <Flame size={13} color="#F59E0B" fill="#F59E0B" />
+                          <Text style={styles.sharedStreakText}>
+                            {friendHabit.currentStreak}d Streak
+                          </Text>
                         </View>
                       </View>
 
@@ -1012,28 +996,6 @@ export const FriendsView: React.FC = () => {
                       <View style={styles.mutualActionsRow}>
                         <TouchableOpacity
                           style={[
-                            styles.unfollowBtn,
-                            {
-                              backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
-                              borderColor: isDark ? '#2D3A50' : '#E2E8F0',
-                            },
-                          ]}
-                          onPress={() => unfollowFriendHabit(myHabit.id, friendHabit.name)}
-                          activeOpacity={0.7}
-                        >
-                          <UserMinus size={13} color={isDark ? '#94A3B8' : '#64748B'} />
-                          <Text
-                            style={[
-                              styles.unfollowBtnText,
-                              { color: isDark ? '#94A3B8' : '#64748B' },
-                            ]}
-                          >
-                            Unfollow
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
                             styles.calendarActionBtn,
                             {
                               backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
@@ -1068,6 +1030,44 @@ export const FriendsView: React.FC = () => {
                             <Text style={styles.celebratedBadgeText}>Streak Secured! 🔥</Text>
                           </View>
                         )}
+
+                        {!bothDone && friendDone && (
+                          <View
+                            style={[
+                              styles.celebratedBadge,
+                              {
+                                backgroundColor: isDark ? 'rgba(124, 92, 255, 0.15)' : '#EDE9FE',
+                              },
+                            ]}
+                          >
+                            <Check size={13} color="#7C5CFF" strokeWidth={2.5} />
+                            <Text style={[styles.celebratedBadgeText, { color: '#7C5CFF' }]}>
+                              {friendShortName} Done ✓
+                            </Text>
+                          </View>
+                        )}
+
+                        <TouchableOpacity
+                          style={[
+                            styles.unfollowBtn,
+                            {
+                              backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
+                              borderColor: isDark ? '#2D3A50' : '#E2E8F0',
+                            },
+                          ]}
+                          onPress={() => unfollowFriendHabit(myHabit.id, friendHabit.name)}
+                          activeOpacity={0.7}
+                        >
+                          <UserMinus size={12} color={isDark ? '#94A3B8' : '#64748B'} />
+                          <Text
+                            style={[
+                              styles.unfollowBtnText,
+                              { color: isDark ? '#94A3B8' : '#64748B' },
+                            ]}
+                          >
+                            Unfollow
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
                   );
@@ -2462,17 +2462,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingVertical: 9,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 6,
+    gap: 4,
   },
   checkinUserMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flex: 1,
-    minWidth: 0,
+    gap: 5,
+    flexShrink: 0,
   },
   checkinAvatar: {
     fontSize: 14,
@@ -2480,13 +2479,12 @@ const styles = StyleSheet.create({
   checkinUserName: {
     fontSize: 12,
     fontWeight: '800',
-    flexShrink: 1,
   },
   checkinStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingVertical: 3.5,
     borderRadius: 8,
     gap: 3,
     flexShrink: 0,
@@ -2604,33 +2602,50 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    paddingTop: 4,
+    gap: 6,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(124, 92, 255, 0.1)',
   },
+  calendarActionBtn: {
+    flex: 1,
+    height: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+  },
+  calendarActionBtnText: {
+    color: '#6366F1',
+    fontSize: 11,
+    fontWeight: '800',
+  },
   nudgeBtn: {
+    flex: 1.2,
+    height: 36,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderColor: '#F59E0B',
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    gap: 5,
+    justifyContent: 'center',
+    borderRadius: 10,
+    gap: 4,
   },
   nudgeBtnText: {
     color: '#F59E0B',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
   },
   unfollowBtn: {
+    height: 36,
+    paddingHorizontal: 9,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 12,
+    justifyContent: 'center',
+    borderRadius: 10,
     borderWidth: 1,
     gap: 4,
   },
@@ -2639,12 +2654,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   celebratedBadge: {
+    flex: 1.2,
+    height: 36,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    borderRadius: 10,
     gap: 4,
   },
   celebratedBadgeText: {
@@ -3043,20 +3059,6 @@ const styles = StyleSheet.create({
   progressPillBtnText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#6366F1',
-  },
-  calendarActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  calendarActionBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
     color: '#6366F1',
   },
   calendarProgressModalBox: {
