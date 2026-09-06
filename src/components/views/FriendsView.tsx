@@ -742,14 +742,19 @@ export const FriendsView: React.FC = () => {
                 <TouchableOpacity
                   style={[
                     styles.removeFriendBtn,
-                    { backgroundColor: isDark ? 'rgba(239, 68, 68, 0.15)' : '#FEE2E2' },
+                    {
+                      backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEE2E2',
+                      borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FECACA',
+                    },
                   ]}
                   onPress={() => setFriendToRemove(friend)}
                   activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityLabel={`Remove ${friendDisplayName}`}
+                  accessibilityLabel={isPendingSent ? `Cancel request to ${friendDisplayName}` : `Unfollow ${friendDisplayName}`}
                 >
-                  <UserMinus size={13} color="#EF4444" strokeWidth={2.5} />
+                  <UserMinus size={11} color="#EF4444" strokeWidth={2.5} />
+                  <Text style={styles.removeFriendBtnText}>
+                    {isPendingSent ? 'Cancel' : 'Unfollow'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1453,7 +1458,7 @@ export const FriendsView: React.FC = () => {
           <Modal
             visible={true}
             transparent
-            animationType="slide"
+            animationType="fade"
             onRequestClose={() => setSelectedSharedHabitProgress(null)}
           >
             <View style={styles.modalOverlay}>
@@ -2352,11 +2357,18 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   removeFriendBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+  },
+  removeFriendBtnText: {
+    color: '#EF4444',
+    fontSize: 11,
+    fontWeight: '800',
   },
   sharedSection: {
     gap: 10,
@@ -2742,13 +2754,21 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
   },
   modalBox: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    width: '100%',
+    maxWidth: 460,
+    borderRadius: 24,
     padding: 20,
-    paddingBottom: 36,
+    paddingBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 10,
   },
   modalHeader: {
     flexDirection: 'row',
