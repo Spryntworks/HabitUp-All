@@ -26,6 +26,7 @@ import {
   SocialFeedActivity,
 } from '../types';
 import { INITIAL_FRIENDS, INITIAL_FEED } from '../constants/socialData';
+import { getDetectedTimezone } from '../constants/timezones';
 import { localApi, getUserIdFromEmail, createDefaultUserProfile } from '../services/apiService';
 import {
   notificationService,
@@ -1568,7 +1569,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         (username || '').trim().replace(/^@/, '').toLowerCase() ||
         cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const pass = (password || '').trim();
-      const chosenTimezone = timezone || 'Asia/Kolkata';
+      const chosenTimezone = timezone || getDetectedTimezone();
 
       if (!cleanEmail || !pass) {
         showToast('Please provide email, password, and username.', undefined, 'warning');

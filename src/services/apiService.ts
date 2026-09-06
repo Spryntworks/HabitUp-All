@@ -6,6 +6,7 @@ import {
   UserSession,
   SyncMutation,
 } from '../types';
+import { getDetectedTimezone } from '../constants/timezones';
 
 export const BACKEND_BASE_URL = 'https://habitup-backend-v2-production.up.railway.app';
 
@@ -24,7 +25,7 @@ export const createDefaultUserProfile = (name?: string, email?: string, timezone
     name: cleanName,
     email: cleanEmail,
     username: cleanUsername,
-    timezone: timezone || 'Asia/Kolkata',
+    timezone: timezone || getDetectedTimezone(),
     avatar: '',
     created_at: new Date().toISOString(),
   };
@@ -320,7 +321,7 @@ class ApiClient {
     const cleanUsername =
       (username || '').trim().replace(/^@/, '').toLowerCase() ||
       cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
-    const tz = timezone || 'Asia/Kolkata';
+    const tz = timezone || getDetectedTimezone();
 
     const res = await this.request<{ accessToken: string; refreshToken?: string; user: UserProfile }>('/auth/register', {
       method: 'POST',

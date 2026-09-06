@@ -23,7 +23,6 @@ import {
   Save,
   CheckCircle2,
 } from 'lucide-react-native';
-import { TimezoneSelect } from '../common/TimezoneSelect';
 
 const AVATAR_PRESETS = [
   {

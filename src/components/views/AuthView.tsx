@@ -26,7 +26,6 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import { HabitUpLogo } from '../common/HabitUpLogo';
-import { TimezoneSelect } from '../common/TimezoneSelect';
 import { getDetectedTimezone } from '../../constants/timezones';
 import { PasswordStrengthIndicator, getPasswordStrength } from '../common/PasswordStrengthIndicator';
 
@@ -46,8 +45,6 @@ export const AuthView: React.FC = () => {
   const [usernameFeedback, setUsernameFeedback] = useState<string>('');
   const isUsernameCustomized = React.useRef(false);
   const checkUsernameTimer = React.useRef<any>(null);
-
-  const [selectedTimezone, setSelectedTimezone] = useState(getDetectedTimezone());
 
   // Forgot password states
   const [forgotEmail, setForgotEmail] = useState('');
@@ -177,7 +174,8 @@ export const AuthView: React.FC = () => {
     }
     setIsLoading(true);
     try {
-      const res = await register(cleanName, cleanEmail, password, cleanUsername, selectedTimezone);
+      const mobileTimezone = getDetectedTimezone();
+      const res = await register(cleanName, cleanEmail, password, cleanUsername, mobileTimezone);
       if (!res.success && res.error) {
         setAuthError(res.error);
       }
@@ -572,8 +570,6 @@ export const AuthView: React.FC = () => {
               </View>
               <PasswordStrengthIndicator password={password} isDark={isDark} />
             </View>
-
-            <TimezoneSelect value={selectedTimezone} onChange={setSelectedTimezone} />
 
             <TouchableOpacity
               style={styles.primaryBtn}
