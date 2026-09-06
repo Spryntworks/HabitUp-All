@@ -839,37 +839,40 @@ export const FriendsView: React.FC = () => {
                           >
                             <IconRenderer name={friendHabit.icon} size={18} color="#FFFFFF" />
                           </View>
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text
-                              style={[
-                                styles.mutualHabitName,
-                                { color: isDark ? '#FFFFFF' : '#0F172A' },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {friendHabit.name}
-                            </Text>
-                            <View style={styles.mutualSubtitleRow}>
-                              <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
+                            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
                               <Text
                                 style={[
-                                  styles.mutualHabitSub,
-                                  { color: isDark ? '#94A3B8' : '#64748B' },
+                                  styles.mutualHabitName,
+                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
                                 ]}
+                                numberOfLines={2}
                               >
-                                {formatTo12Hour(friendHabit.reminder_time || '08:00')} • Shared Routine
+                                {friendHabit.name}
                               </Text>
+                              <View style={styles.mutualSubtitleRow}>
+                                <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
+                                <Text
+                                  style={[
+                                    styles.mutualHabitSub,
+                                    { color: isDark ? '#94A3B8' : '#64748B' },
+                                  ]}
+                                >
+                                  {formatTo12Hour(friendHabit.reminder_time || '08:00')}
+                                </Text>
+                                {friendHabit.currentStreak > 0 && (
+                                  <>
+                                    <Text style={{ color: isDark ? '#475569' : '#CBD5E1', fontSize: 10 }}>•</Text>
+                                    <Flame size={11} color="#F59E0B" fill="#F59E0B" />
+                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '800' }}>
+                                      {friendHabit.currentStreak}d streak
+                                    </Text>
+                                  </>
+                                )}
+                              </View>
                             </View>
                           </View>
-                        </View>
 
                         <View style={styles.mutualHeaderRight}>
-                          <View style={styles.sharedStreakBox}>
-                            <Flame size={12} color="#F59E0B" fill="#F59E0B" />
-                            <Text style={styles.sharedStreakText}>
-                              {friendHabit.currentStreak}d
-                            </Text>
-                          </View>
                           <TouchableOpacity
                             style={[
                               styles.progressPillBtn,
@@ -922,24 +925,18 @@ export const FriendsView: React.FC = () => {
                             </View>
                             <View
                               style={[
-                                styles.checkinStatusBadge,
+                                styles.checkinStatusSymbol,
                                 myDone
-                                  ? styles.checkinBadgeDone
+                                  ? styles.checkinSymbolDone
                                   : isDark
-                                  ? styles.checkinBadgePendingDark
-                                  : styles.checkinBadgePendingLight,
+                                  ? styles.checkinSymbolPendingDark
+                                  : styles.checkinSymbolPendingLight,
                               ]}
                             >
                               {myDone ? (
-                                <>
-                                  <Check size={11} color="#10B981" strokeWidth={3} />
-                                  <Text style={styles.checkinBadgeDoneText}>Done</Text>
-                                </>
+                                <Check size={14} color="#10B981" strokeWidth={3} />
                               ) : (
-                                <>
-                                  <Clock size={11} color="#F59E0B" />
-                                  <Text style={styles.checkinBadgePendingText}>Pending</Text>
-                                </>
+                                <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
                               )}
                             </View>
                           </View>
@@ -968,24 +965,18 @@ export const FriendsView: React.FC = () => {
                             </View>
                             <View
                               style={[
-                                styles.checkinStatusBadge,
+                                styles.checkinStatusSymbol,
                                 friendDone
-                                  ? styles.checkinBadgeFriendDone
+                                  ? styles.checkinSymbolFriendDone
                                   : isDark
-                                  ? styles.checkinBadgePendingDark
-                                  : styles.checkinBadgePendingLight,
+                                  ? styles.checkinSymbolPendingDark
+                                  : styles.checkinSymbolPendingLight,
                               ]}
                             >
                               {friendDone ? (
-                                <>
-                                  <Check size={11} color="#7C5CFF" strokeWidth={3} />
-                                  <Text style={styles.checkinBadgeFriendDoneText}>Done</Text>
-                                </>
+                                <Check size={14} color="#7C5CFF" strokeWidth={3} />
                               ) : (
-                                <>
-                                  <Clock size={11} color="#F59E0B" />
-                                  <Text style={styles.checkinBadgePendingText}>Pending</Text>
-                                </>
+                                <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
                               )}
                             </View>
                           </View>
@@ -2464,45 +2455,25 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     includeFontPadding: false,
   },
-  checkinStatusBadge: {
-    flexDirection: 'row',
+  checkinStatusSymbol: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 3.5,
     flexShrink: 0,
   },
-  checkinBadgeDone: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+  checkinSymbolDone: {
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
   },
-  checkinBadgeDoneText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '800',
-    includeFontPadding: false,
+  checkinSymbolFriendDone: {
+    backgroundColor: 'rgba(124, 92, 255, 0.16)',
   },
-  checkinBadgeFriendDone: {
-    backgroundColor: 'rgba(124, 92, 255, 0.15)',
+  checkinSymbolPendingDark: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
   },
-  checkinBadgeFriendDoneText: {
-    color: '#7C5CFF',
-    fontSize: 10,
-    fontWeight: '800',
-    includeFontPadding: false,
-  },
-  checkinBadgePendingDark: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  checkinBadgePendingLight: {
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  checkinBadgePendingText: {
-    color: '#F59E0B',
-    fontSize: 10,
-    fontWeight: '800',
-    includeFontPadding: false,
+  checkinSymbolPendingLight: {
+    backgroundColor: 'rgba(245, 158, 11, 0.14)',
   },
   accountabilityText: {
     fontSize: 11,
