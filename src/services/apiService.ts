@@ -15,13 +15,15 @@ export const getUserIdFromEmail = (email: string): string => {
   return `usr_${normalized.replace(/[^a-z0-9]/g, '_')}`;
 };
 
-export const createDefaultUserProfile = (name?: string, email?: string, timezone?: string): UserProfile => {
+export const createDefaultUserProfile = (name?: string, email?: string, timezone?: string, username?: string): UserProfile => {
   const cleanEmail = (email || '').trim();
   const cleanName = (name || '').trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'User');
+  const cleanUsername = (username || '').trim().replace(/^@/, '').toLowerCase() || (cleanEmail ? cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_') : cleanName.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
   return {
     id: getUserIdFromEmail(cleanEmail),
     name: cleanName,
     email: cleanEmail,
+    username: cleanUsername,
     timezone: timezone || 'Asia/Kolkata',
     avatar: '',
     created_at: new Date().toISOString(),
@@ -187,7 +189,8 @@ class ApiClient {
       endpoint.includes('/auth/register') ||
       endpoint.includes('/auth/refresh') ||
       endpoint.includes('/auth/reset-password') ||
-      endpoint.includes('/auth/forgot-password');
+      endpoint.includes('/auth/forgot-password') ||
+      endpoint.includes('/users/');
 
     // Guard: Prevent unauthenticated calls to protected endpoints
     if (!isPublicEndpoint && !this.accessToken && !this.refreshToken) {
@@ -279,14 +282,44 @@ class ApiClient {
 
   // --- AUTH METHODS ---
 
+  async checkUsernameAvailability(username: string): Promise<{ available: boolean; error?: string }> {
+    const clean = (username || '').trim().replace(/^@/, '').toLowerCase();
+    if (!clean || clean.length < 3) {
+      return { available: false, error: 'Username must be at least 3 characters.' };
+    }
+    if (!/^[a-z0-9_.]+$/.test(clean)) {
+      return { available: false, error: 'Only letters, numbers, underscores, and dots are allowed.' };
+    }
+
+    try {
+      const url = `${this.baseUrl}/users/@${encodeURIComponent(clean)}`;
+      const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      if (res.status === 404) {
+        // User not found -> username is available!
+        return { available: true };
+      }
+      if (res.status === 200) {
+        // User found -> username is already taken!
+        return { available: false, error: `@${clean} is already taken.` };
+      }
+      return { available: true };
+    } catch {
+      return { available: true };
+    }
+  }
+
   async registerUser(
     name: string,
     email: string,
     password: string,
+    username?: string,
     timezone?: string
   ): Promise<{ success: boolean; user?: UserProfile; accessToken?: string; error?: string }> {
     const cleanEmail = (email || '').trim().toLowerCase();
     const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'User';
+    const cleanUsername =
+      (username || '').trim().replace(/^@/, '').toLowerCase() ||
+      cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
     const tz = timezone || 'Asia/Kolkata';
 
     const res = await this.request<{ accessToken: string; refreshToken?: string; user: UserProfile }>('/auth/register', {
@@ -294,13 +327,17 @@ class ApiClient {
       body: JSON.stringify({
         name: cleanName,
         email: cleanEmail,
+        username: cleanUsername,
         password,
         timezone: tz,
       }),
     });
 
     if (res.ok && res.data?.user) {
-      const user = res.data.user;
+      const user = {
+        ...res.data.user,
+        username: res.data.user.username || cleanUsername,
+      };
       this.setCurrentUserId(user.id);
       this.setTokens(res.data.accessToken, res.data.refreshToken);
       this.saveUser(user, user.id);
@@ -314,13 +351,19 @@ class ApiClient {
         res.status === 409 ||
         res.status === 400 ||
         res.status === 422 ||
-        /exist|already|duplicate/i.test(err)
+        /exist|already|duplicate|username/i.test(err)
       ) {
+        if (/username/i.test(err)) {
+          return {
+            success: false,
+            error: err.includes('status') ? 'This username is already taken. Please choose a different username.' : err,
+          };
+        }
         return {
           success: false,
           error: /exist|already|duplicate/i.test(err)
             ? err
-            : 'An account with this email already exists. Please sign in instead.',
+            : 'An account with this email or username already exists. Please choose a different username or sign in.',
         };
       }
 
@@ -342,6 +385,7 @@ class ApiClient {
       id: uid,
       name: cleanName,
       email: cleanEmail,
+      username: cleanUsername,
       timezone: tz,
       avatar: '',
       created_at: new Date().toISOString(),
@@ -352,18 +396,23 @@ class ApiClient {
   }
 
   async loginUser(
-    email: string,
+    identifier: string,
     password?: string
   ): Promise<{ success: boolean; user?: UserProfile; accessToken?: string; error?: string }> {
-    const cleanEmail = (email || '').trim().toLowerCase();
-    if (!cleanEmail) {
-      return { success: false, error: 'Email address is required.' };
+    const cleanIdentifier = (identifier || '').trim().replace(/^@/, '');
+    if (!cleanIdentifier) {
+      return { success: false, error: 'Email or username is required.' };
     }
 
     if (password) {
+      const isEmail = cleanIdentifier.includes('@');
+      const payload = isEmail
+        ? { email: cleanIdentifier.toLowerCase(), password }
+        : { username: cleanIdentifier.toLowerCase(), password };
+
       const res = await this.request<{ accessToken: string; refreshToken?: string; user: UserProfile }>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: cleanEmail, password }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok && res.data?.user) {
@@ -374,7 +423,7 @@ class ApiClient {
         return { success: true, user, accessToken: res.data.accessToken };
       }
 
-      // Explicit authentication failure (Wrong password or email not found)
+      // Explicit authentication failure (Wrong password or email/username not found)
       if (
         !res.ok &&
         (res.status === 401 ||
@@ -385,7 +434,7 @@ class ApiClient {
       ) {
         return {
           success: false,
-          error: res.error && !res.error.includes('status') ? res.error : 'Incorrect email or password. Please try again.',
+          error: res.error && !res.error.includes('status') ? res.error : 'Incorrect credentials or password. Please try again.',
         };
       }
 
@@ -397,11 +446,17 @@ class ApiClient {
       }
     }
 
-    const uid = getUserIdFromEmail(cleanEmail);
+    const isEmail = cleanIdentifier.includes('@');
+    const uid = isEmail ? getUserIdFromEmail(cleanIdentifier) : `usr_${cleanIdentifier.toLowerCase()}`;
     const existing = this.getUser(uid);
     const userToUse: UserProfile = existing && existing.id
       ? existing
-      : createDefaultUserProfile(cleanEmail.split('@')[0], cleanEmail);
+      : createDefaultUserProfile(
+          cleanIdentifier.split('@')[0],
+          isEmail ? cleanIdentifier : `${cleanIdentifier}@example.com`,
+          undefined,
+          cleanIdentifier
+        );
     this.setCurrentUserId(uid);
     this.saveUser(userToUse, uid);
     return { success: true, user: userToUse };

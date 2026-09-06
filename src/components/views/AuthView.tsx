@@ -16,6 +16,7 @@ import {
   Lock,
   Mail,
   User,
+  AtSign,
   Eye,
   EyeOff,
   ArrowRight,
@@ -40,6 +41,12 @@ export const AuthView: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [usernameFeedback, setUsernameFeedback] = useState<string>('');
+  const isUsernameCustomized = React.useRef(false);
+  const checkUsernameTimer = React.useRef<any>(null);
+
   const [selectedTimezone, setSelectedTimezone] = useState(getDetectedTimezone());
 
   // Forgot password states
@@ -49,10 +56,72 @@ export const AuthView: React.FC = () => {
   const [forgotStep, setForgotStep] = useState<'request' | 'confirm'>('request');
   const [isLoading, setIsLoading] = useState(false);
 
+  const validateAndCheckUsername = (val: string) => {
+    const clean = val.trim().replace(/^@/, '').toLowerCase();
+    if (checkUsernameTimer.current) {
+      clearTimeout(checkUsernameTimer.current);
+    }
+
+    if (!clean) {
+      setUsernameStatus('idle');
+      setUsernameFeedback('');
+      return;
+    }
+
+    if (clean.length < 3) {
+      setUsernameStatus('invalid');
+      setUsernameFeedback('Min 3 characters');
+      return;
+    }
+
+    if (!/^[a-z0-9_.]+$/.test(clean)) {
+      setUsernameStatus('invalid');
+      setUsernameFeedback('Letters, numbers, _, . only');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    setUsernameFeedback('Checking...');
+
+    checkUsernameTimer.current = setTimeout(async () => {
+      try {
+        const res = await apiService.checkUsernameAvailability(clean);
+        if (res.available) {
+          setUsernameStatus('available');
+          setUsernameFeedback(`@${clean} is available`);
+        } else {
+          setUsernameStatus('taken');
+          setUsernameFeedback(res.error || `@${clean} is taken`);
+        }
+      } catch {
+        setUsernameStatus('available');
+        setUsernameFeedback(`@${clean}`);
+      }
+    }, 350);
+  };
+
+  const handleNameChange = (val: string) => {
+    setName(val);
+    if (!isUsernameCustomized.current) {
+      const suggested = val.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
+      if (suggested) {
+        setUsername(suggested);
+        validateAndCheckUsername(suggested);
+      }
+    }
+  };
+
+  const handleUsernameChange = (val: string) => {
+    isUsernameCustomized.current = true;
+    const clean = val.replace(/\s+/g, '').replace(/^@/, '').toLowerCase();
+    setUsername(clean);
+    validateAndCheckUsername(clean);
+  };
+
   const handleSignIn = async () => {
     setAuthError(null);
     if (!email.trim() || !password.trim()) {
-      const err = 'Please enter both your email and password.';
+      const err = 'Please enter your email/username and password.';
       setAuthError(err);
       showToast(err, undefined, 'warning');
       return;
@@ -72,8 +141,30 @@ export const AuthView: React.FC = () => {
 
   const handleSignUp = async () => {
     setAuthError(null);
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      const err = 'Please fill out your name, email, and password.';
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    const cleanUsername = username.trim().replace(/^@/, '').toLowerCase();
+
+    if (!cleanName || !cleanEmail || !password.trim()) {
+      const err = 'Please fill out your name, email, username, and password.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
+      return;
+    }
+    if (!cleanUsername || cleanUsername.length < 3) {
+      const err = 'Username must be at least 3 characters.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
+      return;
+    }
+    if (!/^[a-z0-9_.]+$/.test(cleanUsername)) {
+      const err = 'Username can only contain letters, numbers, underscores, and dots.';
+      setAuthError(err);
+      showToast(err, undefined, 'warning');
+      return;
+    }
+    if (usernameStatus === 'taken') {
+      const err = `@${cleanUsername} is already taken. Please choose another username.`;
       setAuthError(err);
       showToast(err, undefined, 'warning');
       return;
@@ -86,7 +177,7 @@ export const AuthView: React.FC = () => {
     }
     setIsLoading(true);
     try {
-      const res = await register(name.trim(), email.trim(), password, selectedTimezone);
+      const res = await register(cleanName, cleanEmail, password, cleanUsername, selectedTimezone);
       if (!res.success && res.error) {
         setAuthError(res.error);
       }
@@ -238,7 +329,7 @@ export const AuthView: React.FC = () => {
           <View style={styles.formContainer}>
             <View style={styles.inputGroup}>
               <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
-                Email Address
+                Email or Username
               </Text>
               <View
                 style={[
@@ -252,7 +343,7 @@ export const AuthView: React.FC = () => {
                 <Mail size={18} color="#94A3B8" />
                 <TextInput
                   style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
-                  placeholder="user@example.com"
+                  placeholder="user@example.com or @username"
                   placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                   value={email}
                   onChangeText={setEmail}
@@ -350,9 +441,77 @@ export const AuthView: React.FC = () => {
                   placeholder="Alex Rivera"
                   placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={handleNameChange}
                 />
               </View>
+            </View>
+
+            {/* Unique Username */}
+            <View style={styles.inputGroup}>
+              <View style={styles.usernameHeaderRow}>
+                <Text style={[styles.label, { color: isDark ? '#CBD5E1' : '#334155' }]}>
+                  Choose Username
+                </Text>
+                {usernameFeedback ? (
+                  <View style={styles.usernameStatusBadge}>
+                    {usernameStatus === 'checking' && (
+                      <ActivityIndicator size="small" color="#7C5CFF" style={{ transform: [{ scale: 0.7 }] }} />
+                    )}
+                    {usernameStatus === 'available' && (
+                      <CheckCircle2 size={13} color="#10B981" />
+                    )}
+                    {(usernameStatus === 'taken' || usernameStatus === 'invalid') && (
+                      <AlertCircle size={13} color="#EF4444" />
+                    )}
+                    <Text
+                      style={[
+                        styles.usernameStatusText,
+                        {
+                          color:
+                            usernameStatus === 'available'
+                              ? '#10B981'
+                              : usernameStatus === 'taken' || usernameStatus === 'invalid'
+                              ? '#EF4444'
+                              : '#818CF8',
+                        },
+                      ]}
+                    >
+                      {usernameFeedback}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View
+                style={[
+                  styles.inputWrapper,
+                  {
+                    backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
+                    borderColor:
+                      usernameStatus === 'available'
+                        ? '#10B981'
+                        : usernameStatus === 'taken' || usernameStatus === 'invalid'
+                        ? '#EF4444'
+                        : isDark
+                        ? '#1E293B'
+                        : '#CBD5E1',
+                  },
+                ]}
+              >
+                <AtSign size={18} color={usernameStatus === 'available' ? '#10B981' : '#94A3B8'} />
+                <TextInput
+                  style={[styles.input, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                  placeholder="alex_rivera"
+                  placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
+                  value={username}
+                  onChangeText={handleUsernameChange}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+              <Text style={[styles.helperText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                Unique handle for friends to find, follow, and compare routines.
+              </Text>
             </View>
 
             <View style={styles.inputGroup}>
@@ -767,5 +926,24 @@ const styles = StyleSheet.create({
   guestBtnText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  usernameHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  usernameStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  usernameStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  helperText: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 2,
   },
 });

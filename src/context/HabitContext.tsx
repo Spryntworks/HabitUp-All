@@ -105,8 +105,8 @@ interface HabitContextType {
 
   // Auth Actions
   isAuthLoading: boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
-  register: (name: string, email: string, password?: string, timezone?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (emailOrUsername: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  register: (name: string, email: string, password?: string, username?: string, timezone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   deleteAccount: (password: string) => Promise<{ success: boolean; error?: string }>;
   biometricLogin: () => void;
@@ -1513,53 +1513,81 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [checkAndDeliverPendingNudges]);
 
   const login = useCallback(
-    async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
-      const cleanEmail = email.trim().toLowerCase();
+    async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+      const cleanIdentifier = (identifier || '').trim();
       const pass = (password || '').trim();
 
-      if (!cleanEmail) {
-        showToast('Please enter an email address.', undefined, 'warning');
-        return { success: false, error: 'Please enter an email address.' };
+      if (!cleanIdentifier) {
+        showToast('Please enter an email or username.', undefined, 'warning');
+        return { success: false, error: 'Please enter an email or username.' };
       }
       if (!pass) {
         showToast('Please enter your password.', undefined, 'warning');
         return { success: false, error: 'Please enter your password.' };
       }
 
-      const res = await localApi.loginUser(cleanEmail, pass);
+      const res = await localApi.loginUser(cleanIdentifier, pass);
       if (!res.success) {
         showToast(res.error || 'Authentication failed. Please check your credentials.', undefined, 'warning');
         return { success: false, error: res.error };
       }
 
-      const uid = res.user?.id || getUserIdFromEmail(cleanEmail);
-      const targetUser: UserProfile = res.user || createDefaultUserProfile(cleanEmail.split('@')[0], cleanEmail);
+      const uid =
+        res.user?.id ||
+        (cleanIdentifier.includes('@')
+          ? getUserIdFromEmail(cleanIdentifier)
+          : `usr_${cleanIdentifier.toLowerCase()}`);
+      const targetUser: UserProfile =
+        res.user ||
+        createDefaultUserProfile(
+          cleanIdentifier.split('@')[0],
+          cleanIdentifier.includes('@') ? cleanIdentifier : `${cleanIdentifier}@example.com`,
+          undefined,
+          cleanIdentifier
+        );
 
       await switchAccountData(targetUser);
 
-      showToast(`Welcome back, ${targetUser.name || cleanEmail}!`, undefined, 'success');
+      showToast(`Welcome back, ${targetUser.name || targetUser.username || cleanIdentifier}!`, undefined, 'success');
       return { success: true };
     },
     [switchAccountData, showToast]
   );
 
   const register = useCallback(
-    async (name: string, email: string, password?: string, timezone?: string): Promise<{ success: boolean; error?: string }> => {
-      const cleanEmail = email.trim().toLowerCase();
-      const cleanName = name.trim() || cleanEmail.split('@')[0] || 'User';
+    async (
+      name: string,
+      email: string,
+      password?: string,
+      username?: string,
+      timezone?: string
+    ): Promise<{ success: boolean; error?: string }> => {
+      const cleanEmail = (email || '').trim().toLowerCase();
+      const cleanName = (name || '').trim() || cleanEmail.split('@')[0] || 'User';
+      const cleanUsername =
+        (username || '').trim().replace(/^@/, '').toLowerCase() ||
+        cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9_]/g, '_');
       const pass = (password || '').trim();
       const chosenTimezone = timezone || 'Asia/Kolkata';
 
       if (!cleanEmail || !pass) {
-        showToast('Please provide both email and password.', undefined, 'warning');
-        return { success: false, error: 'Please provide both email and password.' };
+        showToast('Please provide email, password, and username.', undefined, 'warning');
+        return { success: false, error: 'Please provide email, password, and username.' };
+      }
+      if (!cleanUsername || cleanUsername.length < 3) {
+        showToast('Username must be at least 3 characters.', undefined, 'warning');
+        return { success: false, error: 'Username must be at least 3 characters.' };
+      }
+      if (!/^[a-z0-9_.]+$/.test(cleanUsername)) {
+        showToast('Username can only contain letters, numbers, underscores, and dots.', undefined, 'warning');
+        return { success: false, error: 'Username can only contain letters, numbers, underscores, and dots.' };
       }
       if (pass.length < 6) {
         showToast('Password must be at least 6 characters.', undefined, 'warning');
         return { success: false, error: 'Password must be at least 6 characters.' };
       }
 
-      const res = await localApi.registerUser(cleanName, cleanEmail, pass, chosenTimezone);
+      const res = await localApi.registerUser(cleanName, cleanEmail, pass, cleanUsername, chosenTimezone);
       if (!res.success) {
         showToast(res.error || 'Registration failed.', undefined, 'warning');
         return { success: false, error: res.error };
@@ -1571,9 +1599,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         id: uid,
         name: cleanName,
         email: cleanEmail,
+        username: res.user?.username || cleanUsername,
         timezone: chosenTimezone,
         avatar: '',
-        created_at: new Date().toISOString(),
+        created_at: res.user?.created_at || new Date().toISOString(),
       };
 
       localApi.setCurrentUserId(uid);
@@ -1594,10 +1623,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActiveTab('home');
       setIsOnboardingModalOpen(true);
 
-      showToast(`Welcome, ${cleanName}! Let's set up your habits.`, undefined, 'success');
+      showToast(`Welcome, @${newUser.username || cleanUsername}! Let's set up your habits.`, undefined, 'success');
       return { success: true };
     },
-    [showToast]
+    [showToast, setActiveTab, setIsOnboardingModalOpen]
   );
 
   const logout = useCallback(() => {
