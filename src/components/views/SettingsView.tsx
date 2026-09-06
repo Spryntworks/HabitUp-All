@@ -19,7 +19,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useHabit } from '../../context/HabitContext';
 import { soundService } from '../../services/soundService';
 import { requestNotificationPermission } from '../../services/notificationService';
-import { TimezoneSelect } from '../common/TimezoneSelect';
 import { HabitUpLogo } from '../common/HabitUpLogo';
 import {
   ChevronLeft,
@@ -33,8 +32,6 @@ import {
   FileSpreadsheet,
   LogOut,
   Camera,
-  Globe,
-  Crosshair,
   Trash2,
   AlertTriangle,
   Lock,
@@ -202,18 +199,6 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  const handleAutoDetectTimezone = () => {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
-      if (user) {
-        updateUser({ timezone: tz });
-      }
-      showToast(`Detected timezone: ${tz}`, undefined, 'success');
-    } catch {
-      showToast('Could not detect timezone', undefined, 'warning');
-    }
-  };
-
   const handleConfirmDeleteAccount = async () => {
     if (!deletePassword.trim()) {
       setDeleteError('Please enter your password to confirm.');
@@ -313,9 +298,6 @@ export const SettingsView: React.FC = () => {
             </Text>
             <Text style={[styles.userEmail, { color: isDark ? '#94A3B8' : '#64748B' }]}>
               {user?.email || 'user@gmail.com'}
-            </Text>
-            <Text style={styles.userTimezone}>
-              Timezone: {user?.timezone || 'Asia/Calcutta'}
             </Text>
           </View>
         </View>
@@ -454,36 +436,6 @@ export const SettingsView: React.FC = () => {
           />
         </View>
 
-        {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
-
-        {/* 4. Selected Timezone matching Image 2 */}
-        <View style={styles.timezoneBlock}>
-          <View style={styles.timezoneHeaderRow}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Globe size={15} color="#FF4D6D" />
-              <Text style={styles.timezoneLabel}>Selected Timezone</Text>
-            </View>
-
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-              onPress={handleAutoDetectTimezone}
-            >
-              <Crosshair size={13} color="#FF4D6D" />
-              <Text style={styles.autoDetectText}>Auto-detect</Text>
-            </TouchableOpacity>
-          </View>
-
-          <TimezoneSelect
-            value={user?.timezone || 'Asia/Calcutta'}
-            label=""
-            showAutoDetect={false}
-            onChange={(newTz) => {
-              if (user) updateUser({ timezone: newTz });
-              showToast(`Timezone updated to ${newTz}`, undefined, 'success');
-            }}
-          />
-        </View>
       </View>
 
       {/* Simplified Standalone Export CSV Button */}
@@ -792,12 +744,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  userTimezone: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#10B981',
-    marginTop: 4,
-  },
   editDpBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -855,25 +801,6 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginVertical: 6,
-  },
-  timezoneBlock: {
-    paddingTop: 10,
-  },
-  timezoneHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  timezoneLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FF4D6D',
-  },
-  autoDetectText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FF4D6D',
   },
   exportCsvBtn: {
     marginHorizontal: 20,
