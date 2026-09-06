@@ -795,246 +795,90 @@ export const FriendsView: React.FC = () => {
             ) : (
               <>
 
-            {/* SECTION A: SHARED & MUTUAL PROGRESS HABITS */}
+            {/* SECTION A: MUTUAL HABITS */}
             {sharedHabits.length > 0 && (
-              <View style={styles.sharedSection}>
-                <View style={styles.sharedSectionTitleRow}>
-                  <Zap size={14} color="#10B981" />
-                  <Text style={[styles.sharedSectionTitle, { color: '#10B981' }]}>
+              <View style={styles.habitsWrapper}>
+                <View style={styles.habitsHeaderRow}>
+                  <Text style={[styles.habitsSubHeading, { color: '#10B981' }]}>
                     MUTUAL HABITS ({sharedHabits.length} SHARED)
+                  </Text>
+                  <Text style={[styles.habitsSubExplainer, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                    Active routines
                   </Text>
                 </View>
 
                 {sharedHabits.map(({ friendHabit, myHabit }) => {
-                  const myDone = isMyHabitDoneToday(myHabit.id);
-                  const friendDone = friendHabit.isCompletedToday;
-                  const bothDone = myDone && friendDone;
-                  const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
-                  const friendWeekly = friendHabit.weeklyHistory || [false, false, false, false, false, false, false];
-                  const friendShortName = (friend.name || friend.username || 'Friend').trim().split(' ')[0];
-
                   return (
-                    <View
+                    <TouchableOpacity
                       key={friendHabit.id}
                       style={[
-                        styles.mutualTrackerCard,
+                        styles.habitItem,
                         {
-                          backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
-                          borderColor: bothDone
-                            ? 'rgba(16, 185, 129, 0.4)'
-                            : isDark
-                            ? '#1E2B42'
-                            : '#E2E8F0',
+                          backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+                          borderColor: isDark ? '#334155' : '#E2E8F0',
                         },
                       ]}
+                      onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
+                      activeOpacity={0.8}
                     >
-                      {/* Top Header: Icon, Full Habit Name, Time, Shared Streak & Top Progress Button */}
-                      <View style={styles.mutualHeader}>
-                        <View style={styles.mutualTitleGroup}>
-                          <View
-                            style={[
-                              styles.habitIconBoxLarge,
-                              { backgroundColor: friendHabit.color || '#7C5CFF' },
-                            ]}
-                          >
-                            <IconRenderer name={friendHabit.icon} size={18} color="#FFFFFF" />
-                          </View>
-                            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
-                              <Text
-                                style={[
-                                  styles.mutualHabitName,
-                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                ]}
-                                numberOfLines={2}
-                              >
-                                {friendHabit.name}
-                              </Text>
-                              <View style={styles.mutualSubtitleRow}>
-                                <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
-                                <Text
-                                  style={[
-                                    styles.mutualHabitSub,
-                                    { color: isDark ? '#94A3B8' : '#64748B' },
-                                  ]}
-                                >
-                                  {formatTo12Hour(friendHabit.reminder_time || '08:00')}
-                                </Text>
-                                {friendHabit.currentStreak > 0 && (
-                                  <>
-                                    <Text style={{ color: isDark ? '#475569' : '#CBD5E1', fontSize: 10 }}>•</Text>
-                                    <Flame size={11} color="#F59E0B" fill="#F59E0B" />
-                                    <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '800' }}>
-                                      {friendHabit.currentStreak}d streak
-                                    </Text>
-                                  </>
-                                )}
-                              </View>
-                            </View>
-                          </View>
-
-                        <View style={styles.mutualHeaderRight}>
-                          <TouchableOpacity
-                            style={[
-                              styles.progressPillBtn,
-                              {
-                                backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
-                                borderColor: isDark ? '#334155' : '#C7D2FE',
-                              },
-                            ]}
-                            onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
-                            activeOpacity={0.7}
-                          >
-                            <Calendar size={12} color="#6366F1" />
-                            <Text style={styles.progressPillBtnText}>Progress</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-
-                      {/* Today's Check-in Comparison Cards */}
-                      <View
-                        style={[
-                          styles.todayComparisonBox,
-                          {
-                            backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
-                            borderColor: isDark ? '#1A253A' : '#E2E8F0',
-                          },
-                        ]}
-                      >
-                        <View style={styles.todayCheckinRow}>
-                          {/* You Status Card */}
-                          <View
-                            style={[
-                              styles.userCheckinCard,
-                              {
-                                backgroundColor: isDark ? '#162033' : '#FFFFFF',
-                                borderColor: myDone ? '#10B981' : isDark ? '#23324C' : '#CBD5E1',
-                              },
-                            ]}
-                          >
-                            <View style={styles.checkinUserMeta}>
-                              <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
-                              <Text
-                                style={[
-                                  styles.checkinUserName,
-                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                You
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.checkinStatusSymbol,
-                                myDone
-                                  ? styles.checkinSymbolDone
-                                  : isDark
-                                  ? styles.checkinSymbolPendingDark
-                                  : styles.checkinSymbolPendingLight,
-                              ]}
-                            >
-                              {myDone ? (
-                                <Check size={14} color="#10B981" strokeWidth={3} />
-                              ) : (
-                                <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
-                              )}
-                            </View>
-                          </View>
-
-                          {/* Friend Status Card */}
-                          <View
-                            style={[
-                              styles.userCheckinCard,
-                              {
-                                backgroundColor: isDark ? '#162033' : '#FFFFFF',
-                                borderColor: friendDone ? '#7C5CFF' : isDark ? '#23324C' : '#CBD5E1',
-                              },
-                            ]}
-                          >
-                            <View style={styles.checkinUserMeta}>
-                              <Text style={styles.checkinAvatar}>{friend.avatar || '👤'}</Text>
-                              <Text
-                                style={[
-                                  styles.checkinUserName,
-                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {friendShortName}
-                              </Text>
-                            </View>
-                            <View
-                              style={[
-                                styles.checkinStatusSymbol,
-                                friendDone
-                                  ? styles.checkinSymbolFriendDone
-                                  : isDark
-                                  ? styles.checkinSymbolPendingDark
-                                  : styles.checkinSymbolPendingLight,
-                              ]}
-                            >
-                              {friendDone ? (
-                                <Check size={14} color="#7C5CFF" strokeWidth={3} />
-                              ) : (
-                                <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
-                              )}
-                            </View>
-                          </View>
-                        </View>
-
-                        {/* Motivational Accountability Caption */}
-                        <Text
+                      <View style={styles.habitItemLeft}>
+                        <View
                           style={[
-                            styles.accountabilityText,
-                            { color: bothDone ? '#10B981' : isDark ? '#94A3B8' : '#64748B' },
+                            styles.habitIconBox,
+                            { backgroundColor: friendHabit.color || '#7C5CFF' },
                           ]}
                         >
-                          {bothDone
-                            ? '🎉 Both completed today! Shared streak secured!'
-                            : myDone && !friendDone
-                            ? `⚡ You're done! Remind ${friendShortName} to check in.`
-                            : !myDone && friendDone
-                            ? `⏳ ${friendShortName} completed today! Your turn to check in.`
-                            : '⏳ Both pending today. Keep each other accountable!'}
-                        </Text>
-                      </View>
-
-                      {/* Interactive Actions Footer (Nudge & Leave Habit) */}
-                      <View style={styles.mutualActionsRow}>
-                        <TouchableOpacity
-                          style={styles.nudgeBtn}
-                          onPress={() => nudgeFriend(friend.id, friendHabit.name)}
-                          activeOpacity={0.8}
-                        >
-                          <Bell size={13} color="#F59E0B" />
-                          <Text style={styles.nudgeBtnText}>
-                            Nudge {friendShortName}
-                          </Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.leaveHabitBtn,
-                            {
-                              backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
-                              borderColor: isDark ? '#2D3A50' : '#E2E8F0',
-                            },
-                          ]}
-                          onPress={() => unfollowFriendHabit(myHabit.id, friendHabit.name)}
-                          activeOpacity={0.7}
-                        >
-                          <UserMinus size={12} color={isDark ? '#94A3B8' : '#64748B'} />
+                          <IconRenderer name={friendHabit.icon} size={16} color="#FFFFFF" />
+                        </View>
+                        <View style={{ flex: 1, justifyContent: 'center' }}>
                           <Text
                             style={[
-                              styles.leaveHabitBtnText,
-                              { color: isDark ? '#94A3B8' : '#64748B' },
+                              styles.habitItemName,
+                              { color: isDark ? '#FFFFFF' : '#0F172A' },
                             ]}
+                            numberOfLines={1}
                           >
-                            Leave Habit
+                            {friendHabit.name}
                           </Text>
-                        </TouchableOpacity>
+                          <View style={styles.mutualSubtitleRow}>
+                            <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
+                            <Text
+                              style={[
+                                styles.mutualHabitSub,
+                                { color: isDark ? '#94A3B8' : '#64748B' },
+                              ]}
+                            >
+                              {formatTo12Hour(friendHabit.reminder_time || '08:00')}
+                            </Text>
+                            {friendHabit.currentStreak > 0 && (
+                              <>
+                                <Text style={{ color: isDark ? '#475569' : '#CBD5E1', fontSize: 10 }}>•</Text>
+                                <Flame size={11} color="#F59E0B" fill="#F59E0B" />
+                                <Text style={{ color: '#F59E0B', fontSize: 11, fontWeight: '800' }}>
+                                  {friendHabit.currentStreak}d streak
+                                </Text>
+                              </>
+                            )}
+                          </View>
+                        </View>
                       </View>
-                    </View>
+
+                      {/* View Progress Button */}
+                      <TouchableOpacity
+                        style={[
+                          styles.viewProgressBtn,
+                          {
+                            backgroundColor: isDark ? '#2D3A50' : '#EEF2FF',
+                            borderColor: isDark ? '#3E4F6D' : '#C7D2FE',
+                          },
+                        ]}
+                        onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
+                        activeOpacity={0.7}
+                      >
+                        <Calendar size={13} color="#6366F1" />
+                        <Text style={styles.viewProgressBtnText}>View Progress</Text>
+                      </TouchableOpacity>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -1418,6 +1262,9 @@ export const FriendsView: React.FC = () => {
 
         const friendDisplayName = formatFriendDisplayName(liveFriend).displayName;
         const friendShortName = (liveFriend.name || liveFriend.username || 'Friend').trim().split(' ')[0];
+        const myModalDone = isMyHabitDoneToday(liveMyHabit.id);
+        const friendModalDone = liveFriendHabit.isCompletedToday;
+        const bothModalDone = myModalDone && friendModalDone;
         const myWeekly = getMyHabitWeeklyHistory(liveMyHabit.id);
         const friendWeekly = liveFriendHabit.weeklyHistory || [false, false, false, false, false, false, false];
         const myCount = myWeekly.filter(Boolean).length;
@@ -1461,11 +1308,11 @@ export const FriendsView: React.FC = () => {
                       <Text
                         style={[
                           styles.modalSub,
-                          { color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 },
+                          { color: isDark ? '#94A3B8' : '#64748B', marginTop: 2, marginBottom: 0 },
                         ]}
                         numberOfLines={1}
                       >
-                        Shared Routine with {friendDisplayName}
+                        {formatTo12Hour(liveFriendHabit.reminder_time || '08:00')} • Shared with {friendDisplayName}
                       </Text>
                     </View>
                   </View>
@@ -1475,6 +1322,114 @@ export const FriendsView: React.FC = () => {
                   >
                     <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
                   </TouchableOpacity>
+                </View>
+
+                {/* Today's Live Check-in Comparison Box */}
+                <View
+                  style={[
+                    styles.todayComparisonBox,
+                    {
+                      backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                      borderColor: isDark ? '#1E2B42' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <View style={styles.todayCheckinRow}>
+                    {/* You Status Card */}
+                    <View
+                      style={[
+                        styles.userCheckinCard,
+                        {
+                          backgroundColor: isDark ? '#162033' : '#FFFFFF',
+                          borderColor: myModalDone ? '#10B981' : isDark ? '#23324C' : '#CBD5E1',
+                        },
+                      ]}
+                    >
+                      <View style={styles.checkinUserMeta}>
+                        <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
+                        <Text
+                          style={[
+                            styles.checkinUserName,
+                            { color: isDark ? '#FFFFFF' : '#0F172A' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          You
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.checkinStatusSymbol,
+                          myModalDone
+                            ? styles.checkinSymbolDone
+                            : isDark
+                            ? styles.checkinSymbolPendingDark
+                            : styles.checkinSymbolPendingLight,
+                        ]}
+                      >
+                        {myModalDone ? (
+                          <Check size={14} color="#10B981" strokeWidth={3} />
+                        ) : (
+                          <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Friend Status Card */}
+                    <View
+                      style={[
+                        styles.userCheckinCard,
+                        {
+                          backgroundColor: isDark ? '#162033' : '#FFFFFF',
+                          borderColor: friendModalDone ? '#7C5CFF' : isDark ? '#23324C' : '#CBD5E1',
+                        },
+                      ]}
+                    >
+                      <View style={styles.checkinUserMeta}>
+                        <Text style={styles.checkinAvatar}>{liveFriend.avatar || '👤'}</Text>
+                        <Text
+                          style={[
+                            styles.checkinUserName,
+                            { color: isDark ? '#FFFFFF' : '#0F172A' },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {friendShortName}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.checkinStatusSymbol,
+                          friendModalDone
+                            ? styles.checkinSymbolFriendDone
+                            : isDark
+                            ? styles.checkinSymbolPendingDark
+                            : styles.checkinSymbolPendingLight,
+                        ]}
+                      >
+                        {friendModalDone ? (
+                          <Check size={14} color="#7C5CFF" strokeWidth={3} />
+                        ) : (
+                          <Clock size={13} color="#F59E0B" strokeWidth={2.5} />
+                        )}
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={[
+                      styles.accountabilityText,
+                      { color: bothModalDone ? '#10B981' : isDark ? '#94A3B8' : '#64748B' },
+                    ]}
+                  >
+                    {bothModalDone
+                      ? '🎉 Both completed today! Shared streak secured!'
+                      : myModalDone && !friendModalDone
+                      ? `⚡ You're done! Remind ${friendShortName} to check in.`
+                      : !myModalDone && friendModalDone
+                      ? `⏳ ${friendShortName} completed today! Your turn to check in.`
+                      : '⏳ Both pending today. Keep each other accountable!'}
+                  </Text>
                 </View>
 
                 {/* Stat Summary Cards */}
@@ -1682,6 +1637,45 @@ export const FriendsView: React.FC = () => {
                       ))}
                     </View>
                   </View>
+                </View>
+
+                {/* Interactive Actions (Nudge & Leave Habit) */}
+                <View style={styles.mutualActionsRow}>
+                  <TouchableOpacity
+                    style={styles.nudgeBtn}
+                    onPress={() => nudgeFriend(liveFriend.id, liveFriendHabit.name)}
+                    activeOpacity={0.8}
+                  >
+                    <Bell size={13} color="#F59E0B" />
+                    <Text style={styles.nudgeBtnText}>
+                      Nudge {friendShortName}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.leaveHabitBtn,
+                      {
+                        backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
+                        borderColor: isDark ? '#2D3A50' : '#E2E8F0',
+                      },
+                    ]}
+                    onPress={() => {
+                      setSelectedSharedHabitProgress(null);
+                      unfollowFriendHabit(liveMyHabit.id, liveFriendHabit.name);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <UserMinus size={12} color={isDark ? '#94A3B8' : '#64748B'} />
+                    <Text
+                      style={[
+                        styles.leaveHabitBtnText,
+                        { color: isDark ? '#94A3B8' : '#64748B' },
+                      ]}
+                    >
+                      Leave Habit
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* Modal Footer / Dismiss */}
@@ -3009,6 +3003,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   progressPillBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6366F1',
+  },
+  viewProgressBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5.5,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  viewProgressBtnText: {
     fontSize: 11,
     fontWeight: '800',
     color: '#6366F1',
