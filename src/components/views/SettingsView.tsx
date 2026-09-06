@@ -18,6 +18,7 @@ import * as Sharing from 'expo-sharing';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useHabit } from '../../context/HabitContext';
 import { soundService } from '../../services/soundService';
+import { requestNotificationPermission } from '../../services/notificationService';
 import { TimezoneSelect } from '../common/TimezoneSelect';
 import { HabitUpLogo } from '../common/HabitUpLogo';
 import {
@@ -25,6 +26,8 @@ import {
   ChevronRight,
   Moon,
   Sun,
+  Bell,
+  Sparkles,
   Volume2,
   Smartphone,
   FileSpreadsheet,
@@ -50,6 +53,9 @@ export const SettingsView: React.FC = () => {
     setHapticsEnabled,
     soundEnabled,
     setSoundEnabled,
+    notificationsEnabled,
+    setNotificationsEnabled,
+    triggerTestNotification,
     habits,
     completions,
     getHabitStats,
@@ -67,6 +73,24 @@ export const SettingsView: React.FC = () => {
   const [deleteError, setDeleteError] = useState<string>('');
 
   const isDark = theme === 'dark';
+
+  const handleToggleNotifications = async (val: boolean) => {
+    setNotificationsEnabled(val);
+    if (val) {
+      try {
+        const granted = await requestNotificationPermission();
+        if (granted) {
+          showToast('Habit reminders enabled! 🔔', undefined, 'success');
+        } else {
+          showToast('Please allow notifications in your device settings.', undefined, 'warning');
+        }
+      } catch {
+        showToast('Habit reminders enabled! 🔔', undefined, 'success');
+      }
+    } else {
+      showToast('Habit reminders turned off.', undefined, 'info');
+    }
+  };
 
   const handleExportCSV = async () => {
     try {
@@ -320,10 +344,82 @@ export const SettingsView: React.FC = () => {
           APP PREFERENCES
         </Text>
 
-        {/* 1. Theme Mode */}
+        {/* 1. Habit Reminders */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
-            <Moon size={18} color="#C084FC" />
+            <Bell size={18} color="#C084FC" />
+            <View>
+              <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                Habit Reminders
+              </Text>
+              <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Send alerts at scheduled times
+              </Text>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {notificationsEnabled && (
+              <TouchableOpacity
+                style={[
+                  styles.testAlertBtn,
+                  { backgroundColor: isDark ? 'rgba(124, 92, 255, 0.15)' : '#F3E8FF' },
+                ]}
+                onPress={() => triggerTestNotification()}
+                activeOpacity={0.7}
+              >
+                <Sparkles size={11} color="#7C5CFF" />
+                <Text style={styles.testAlertText}>Test</Text>
+              </TouchableOpacity>
+            )}
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: '#7C5CFF' }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        </View>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
+
+        {/* 2. Notification Sound */}
+        <View style={styles.preferenceRow}>
+          <View style={styles.prefLeft}>
+            <Volume2 size={18} color="#10B981" />
+            <View>
+              <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                Notification Sound
+              </Text>
+              <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Play chime on reminders & check-ins
+              </Text>
+            </View>
+          </View>
+          <Switch
+            value={soundEnabled}
+            onValueChange={(val) => {
+              setSoundEnabled(val);
+              if (val) {
+                try {
+                  soundService.playCompletionChime();
+                } catch {
+                  // ignore
+                }
+              }
+            }}
+            trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: '#10B981' }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
+
+        {/* 3. Theme Mode */}
+        <View style={styles.preferenceRow}>
+          <View style={styles.prefLeft}>
+            {isDark ? <Moon size={18} color="#818CF8" /> : <Sun size={18} color="#F59E0B" />}
             <View>
               <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Theme Mode
@@ -352,40 +448,7 @@ export const SettingsView: React.FC = () => {
         {/* Divider */}
         <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
 
-        {/* 2. Sound Effects */}
-        <View style={styles.preferenceRow}>
-          <View style={styles.prefLeft}>
-            <Volume2 size={18} color="#10B981" />
-            <View>
-              <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                Sound Effects
-              </Text>
-              <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                Play chime when habit is completed
-              </Text>
-            </View>
-          </View>
-          <Switch
-            value={soundEnabled}
-            onValueChange={(val) => {
-              setSoundEnabled(val);
-              if (val) {
-                try {
-                  soundService.playCompletionChime();
-                } catch {
-                  // ignore
-                }
-              }
-            }}
-            trackColor={{ false: isDark ? '#334155' : '#CBD5E1', true: '#10B981' }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-
-        {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
-
-        {/* 3. Vibration Feedback */}
+        {/* 4. Vibration Feedback */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
             <Smartphone size={18} color="#F43F5E" />
@@ -803,6 +866,19 @@ const styles = StyleSheet.create({
   themeToggleText: {
     fontSize: 12,
     fontWeight: '800',
+  },
+  testAlertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  testAlertText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#7C5CFF',
   },
   divider: {
     height: 1,

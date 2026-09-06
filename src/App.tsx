@@ -18,7 +18,6 @@ import { OnboardingModal } from './components/modals/OnboardingModal';
 import { AuthSessionModal } from './components/modals/AuthSessionModal';
 import { BiometricScanModal } from './components/modals/BiometricScanModal';
 import { PlantGardenModal } from './components/modals/PlantGardenModal';
-import { NotificationCenterModal } from './components/modals/NotificationCenterModal';
 import { NotificationBanner } from './components/common/NotificationBanner';
 
 const AppContent: React.FC = () => {
@@ -62,7 +61,6 @@ const AppContent: React.FC = () => {
       <OnboardingModal />
       <AuthSessionModal />
       <PlantGardenModal />
-      <NotificationCenterModal />
     </MobileShell>
   );
 };

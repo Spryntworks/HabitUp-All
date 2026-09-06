@@ -1,17 +1,15 @@
-﻿import React from 'react';
+import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Bell, WifiOff, Sparkles, Moon, Sun } from 'lucide-react-native';
+import { WifiOff, Sparkles, Moon, Sun } from 'lucide-react-native';
 
 export const TopHeader: React.FC = () => {
   const {
     user,
-    habits,
     theme,
     toggleTheme,
     isOffline,
     setIsOffline,
-    setIsNotificationModalOpen,
     showToast,
   } = useHabit();
 
@@ -69,15 +67,6 @@ export const TopHeader: React.FC = () => {
             <Moon size={18} color="#6366F1" />
           )}
         </TouchableOpacity>
-
-        {/* Notifications Bell */}
-        <TouchableOpacity
-          onPress={() => setIsNotificationModalOpen(true)}
-          style={styles.iconBtn}
-        >
-          <Bell size={18} color={isDark ? '#94A3B8' : '#64748B'} />
-          <View style={styles.bellBadge} />
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -111,14 +100,5 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 12,
     position: 'relative',
-  },
-  bellBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#F43F5E',
   },
 });

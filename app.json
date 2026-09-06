@@ -32,6 +32,12 @@
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c0e15e1f-4f44-4231-a957-d8460467dc19"
+      }
+    },
+    "owner": "mchetan"
   }
 }
