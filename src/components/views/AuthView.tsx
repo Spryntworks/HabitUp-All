@@ -277,7 +277,7 @@ export const AuthView: React.FC = () => {
       borderColor: 'rgba(16, 185, 129, 0.4)',
       iconColor: '#10B981',
       title: 'Level Up Your Habit Garden',
-      subtitle: 'Every habit you complete waters your garden. Watch your seedling blossom into a magnificent oak tree with XP.',
+      subtitle: 'Every habit you complete waters your garden. Watch your seedling blossom into a magnificent oak tree with daily consistency.',
     },
   ];
 
@@ -316,7 +316,7 @@ export const AuthView: React.FC = () => {
           <View style={[styles.previewBadgeRow, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : '#FEF3C7' }]}>
             <Flame size={14} color="#F59E0B" />
             <Text style={[styles.previewBadgeText, { color: isDark ? '#FDE68A' : '#B45309' }]}>
-              7-Day Streak Active! • +50 XP Bonus
+              7-Day Streak Active! • Perfect Consistency
             </Text>
           </View>
         </View>
@@ -364,7 +364,7 @@ export const AuthView: React.FC = () => {
               <Text style={[styles.previewGardenLevel, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Stage 4: Flourishing Oak
               </Text>
-              <Text style={styles.previewGardenXp}>450 / 500 XP</Text>
+              <Text style={styles.previewGardenProgress}>14 / 21 Days</Text>
             </View>
             <View style={[styles.previewProgressTrack, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
               <View style={[styles.previewProgressFill, { width: '90%' }]} />
@@ -1283,7 +1283,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  previewGardenXp: {
+  previewGardenProgress: {
     fontSize: 11,
     fontWeight: '700',
     color: '#10B981',
