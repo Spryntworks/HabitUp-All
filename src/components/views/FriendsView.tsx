@@ -42,6 +42,7 @@ import {
   UserCheck,
   AtSign,
   Search,
+  UserX,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -133,12 +134,18 @@ export const FriendsView: React.FC = () => {
       // 1. Search backend /users/search endpoint
       const serverResults = await localApi.searchUsersByUsername(q);
 
+      // 1b. Direct profile lookup as secondary check if search query returned 0 results
+      let directUser: { id: string; username: string; total_habits?: number; current_streak?: number } | null = null;
+      if (serverResults.length === 0 && q.length >= 2) {
+        directUser = await localApi.fetchUserProfileByUsername(q);
+      }
+
       // 2. Search local friends / mock users for instant offline matching
       const localMatches: Array<{ id: string; username: string; name?: string }> = friends
         .filter((f) => {
           const u = (f.username || '').replace(/^@/, '').toLowerCase();
           const n = (f.name || '').toLowerCase();
-          return u.includes(q.toLowerCase()) || n.includes(q.toLowerCase());
+          return u === q.toLowerCase() || u.includes(q.toLowerCase()) || n.includes(q.toLowerCase());
         })
         .map((f) => ({
           id: f.id,
@@ -146,20 +153,18 @@ export const FriendsView: React.FC = () => {
           name: f.name,
         }));
 
-      const combined = [...serverResults];
+      const combined: Array<{ id: string; username: string; name?: string }> = [...serverResults];
+      if (directUser && !combined.some((r) => r.username.toLowerCase() === directUser!.username.toLowerCase())) {
+        combined.push({
+          id: directUser.id,
+          username: directUser.username,
+          name: directUser.username,
+        });
+      }
       for (const lm of localMatches) {
         if (!combined.some((r) => r.username.toLowerCase() === lm.username.toLowerCase())) {
           combined.push(lm);
         }
-      }
-
-      // If no exact match found yet user typed >=2 chars, provide fallback so they can directly follow
-      if (combined.length === 0 && q.length >= 2) {
-        combined.push({
-          id: `usr_${q.toLowerCase()}`,
-          username: q.toLowerCase(),
-          name: q,
-        });
       }
 
       // Filter out self
@@ -514,10 +519,30 @@ export const FriendsView: React.FC = () => {
         )}
 
         {hasSearched && searchResults.length === 0 && !isSearching && searchQuery.trim().length > 0 && (
-          <View style={styles.noResultsBox}>
-            <Text style={[styles.noResultsText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              No users found matching &quot;{searchQuery}&quot;
-            </Text>
+          <View
+            style={[
+              styles.noResultsBox,
+              {
+                backgroundColor: isDark ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.05)',
+                borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.2)',
+              },
+            ]}
+          >
+            <View style={styles.noResultsIconCircle}>
+              <UserX size={18} color="#EF4444" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.noResultsTitle, { color: isDark ? '#FCA5A5' : '#DC2626' }]}>
+                {searchQuery.trim().replace(/^@/, '').toLowerCase() === (user?.username || '').replace(/^@/, '').toLowerCase()
+                  ? 'This is your own username'
+                  : "Username doesn't exist"}
+              </Text>
+              <Text style={[styles.noResultsSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                {searchQuery.trim().replace(/^@/, '').toLowerCase() === (user?.username || '').replace(/^@/, '').toLowerCase()
+                  ? 'You cannot follow your own profile.'
+                  : `No HabitUp account found for @${searchQuery.trim().replace(/^@/, '')}. Please check the spelling.`}
+              </Text>
+            </View>
           </View>
         )}
       </View>
@@ -1635,14 +1660,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   noResultsBox: {
-    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+    marginTop: 4,
+  },
+  noResultsIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  noResultsText: {
-    fontSize: 12,
-    fontWeight: '600',
-    fontStyle: 'italic',
+  noResultsTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  noResultsSub: {
+    fontSize: 11,
+    marginTop: 2,
+    lineHeight: 16,
   },
   card: {
     padding: 16,
