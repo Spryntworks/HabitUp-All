@@ -43,6 +43,7 @@ import {
   AtSign,
   Search,
   UserX,
+  Calendar,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -87,6 +88,13 @@ export const FriendsView: React.FC = () => {
 
   // Remove friend confirmation state
   const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
+
+  // Modal for Viewing Shared Habit Progress / Calendar
+  const [selectedSharedHabitProgress, setSelectedSharedHabitProgress] = useState<{
+    friendHabit: FriendPublicHabit;
+    myHabit: Habit;
+    friend: FriendUser;
+  } | null>(null);
 
   // Modal for creating a habit together
   const [isTogetherModalOpen, setIsTogetherModalOpen] = useState<boolean>(false);
@@ -850,11 +858,27 @@ export const FriendsView: React.FC = () => {
                           </View>
                         </View>
 
-                        <View style={styles.sharedStreakBox}>
-                          <Flame size={13} color="#F59E0B" fill="#F59E0B" />
-                          <Text style={styles.sharedStreakText}>
-                            {friendHabit.currentStreak}d Streak
-                          </Text>
+                        <View style={styles.mutualHeaderRight}>
+                          <View style={styles.sharedStreakBox}>
+                            <Flame size={13} color="#F59E0B" fill="#F59E0B" />
+                            <Text style={styles.sharedStreakText}>
+                              {friendHabit.currentStreak}d Streak
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.progressPillBtn,
+                              {
+                                backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+                                borderColor: isDark ? '#334155' : '#C7D2FE',
+                              },
+                            ]}
+                            onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
+                            activeOpacity={0.7}
+                          >
+                            <Calendar size={12} color="#6366F1" />
+                            <Text style={styles.progressPillBtnText}>Progress</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
 
@@ -979,128 +1003,6 @@ export const FriendsView: React.FC = () => {
                         </Text>
                       </View>
 
-                      {/* 7-Day Weekly Progress Matrix */}
-                      <View style={styles.weeklyMatrixContainer}>
-                        <Text
-                          style={[
-                            styles.weeklySectionHeading,
-                            { color: isDark ? '#94A3B8' : '#64748B' },
-                          ]}
-                        >
-                          WEEKLY PROGRESS
-                        </Text>
-
-                        {/* Day & Date Headers */}
-                        <View style={styles.matrixHeaderRow}>
-                          <View style={styles.matrixNameSpacer} />
-                          <View style={styles.matrixGridCols}>
-                            {currentWeekDays.map((item, i) => (
-                              <View
-                                key={i}
-                                style={[
-                                  styles.matrixDayCol,
-                                  item.isToday && styles.matrixDayColToday,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.matrixDayLetter,
-                                    {
-                                      color: item.isToday
-                                        ? '#7C5CFF'
-                                        : isDark
-                                        ? '#64748B'
-                                        : '#94A3B8',
-                                    },
-                                  ]}
-                                >
-                                  {item.dayName[0]}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.matrixDayNum,
-                                    {
-                                      color: item.isToday
-                                        ? '#7C5CFF'
-                                        : isDark
-                                        ? '#FFFFFF'
-                                        : '#0F172A',
-                                      fontWeight: item.isToday ? '900' : '700',
-                                    },
-                                  ]}
-                                >
-                                  {item.dayNumber}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-
-                        {/* Row 1: You */}
-                        <View style={styles.matrixRow}>
-                          <View style={styles.matrixNameBox}>
-                            <Text
-                              style={[
-                                styles.matrixNameText,
-                                { color: isDark ? '#E2E8F0' : '#334155' },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              You
-                            </Text>
-                          </View>
-                          <View style={styles.matrixGridCols}>
-                            {myWeekly.map((done, idx) => (
-                              <View
-                                key={idx}
-                                style={[
-                                  styles.matrixDot,
-                                  done
-                                    ? styles.matrixDotDoneYou
-                                    : isDark
-                                    ? styles.matrixDotPendingDark
-                                    : styles.matrixDotPendingLight,
-                                ]}
-                              >
-                                {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-
-                        {/* Row 2: Friend */}
-                        <View style={styles.matrixRow}>
-                          <View style={styles.matrixNameBox}>
-                            <Text
-                              style={[
-                                styles.matrixNameText,
-                                { color: isDark ? '#E2E8F0' : '#334155' },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {friendShortName}
-                            </Text>
-                          </View>
-                          <View style={styles.matrixGridCols}>
-                            {friendWeekly.map((done, idx) => (
-                              <View
-                                key={idx}
-                                style={[
-                                  styles.matrixDot,
-                                  done
-                                    ? styles.matrixDotDoneFriend
-                                    : isDark
-                                    ? styles.matrixDotPendingDark
-                                    : styles.matrixDotPendingLight,
-                                ]}
-                              >
-                                {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
-                              </View>
-                            ))}
-                          </View>
-                        </View>
-                      </View>
-
                       {/* Interactive Actions Footer */}
                       <View style={styles.mutualActionsRow}>
                         <TouchableOpacity
@@ -1122,6 +1024,23 @@ export const FriendsView: React.FC = () => {
                             ]}
                           >
                             Unfollow
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.calendarActionBtn,
+                            {
+                              backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+                              borderColor: isDark ? '#334155' : '#C7D2FE',
+                            },
+                          ]}
+                          onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
+                          activeOpacity={0.7}
+                        >
+                          <Calendar size={13} color="#6366F1" />
+                          <Text style={styles.calendarActionBtnText}>
+                            Weekly Progress
                           </Text>
                         </TouchableOpacity>
 
@@ -1519,6 +1438,291 @@ export const FriendsView: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      {/* 6B. DEDICATED CALENDAR PROGRESS MODAL */}
+      {selectedSharedHabitProgress && (() => {
+        const { friendHabit, myHabit, friend } = selectedSharedHabitProgress;
+        const friendDisplayName = formatFriendDisplayName(friend).displayName;
+        const friendShortName = (friend.name || friend.username || 'Friend').trim().split(' ')[0];
+        const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
+        const friendWeekly = friendHabit.weeklyHistory || [false, false, false, false, false, false, false];
+        const myCount = myWeekly.filter(Boolean).length;
+        const friendCount = friendWeekly.filter(Boolean).length;
+
+        return (
+          <Modal
+            visible={true}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setSelectedSharedHabitProgress(null)}
+          >
+            <View style={styles.modalOverlay}>
+              <View
+                style={[
+                  styles.calendarProgressModalBox,
+                  { backgroundColor: isDark ? '#141D2E' : '#FFFFFF' },
+                ]}
+              >
+                {/* Header */}
+                <View style={styles.modalHeader}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+                    <View
+                      style={[
+                        styles.habitIconBoxLarge,
+                        { backgroundColor: friendHabit.color || '#7C5CFF' },
+                      ]}
+                    >
+                      <IconRenderer name={friendHabit.icon} size={20} color="#FFFFFF" />
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[
+                          styles.modalTitle,
+                          { color: isDark ? '#FFFFFF' : '#0F172A' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {friendHabit.name}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.modalSub,
+                          { color: isDark ? '#94A3B8' : '#64748B', marginTop: 2 },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Shared Routine with {friendDisplayName}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setSelectedSharedHabitProgress(null)}
+                    style={{ padding: 4 }}
+                  >
+                    <X size={20} color={isDark ? '#94A3B8' : '#64748B'} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Stat Summary Cards */}
+                <View style={styles.modalStatGrid}>
+                  <View
+                    style={[
+                      styles.modalStatCard,
+                      {
+                        backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                        borderColor: isDark ? '#1E2B42' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <Flame size={18} color="#F59E0B" fill="#F59E0B" />
+                    <Text
+                      style={[
+                        styles.modalStatValue,
+                        { color: isDark ? '#FFFFFF' : '#0F172A' },
+                      ]}
+                    >
+                      {friendHabit.currentStreak}d
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalStatLabel,
+                        { color: isDark ? '#94A3B8' : '#64748B' },
+                      ]}
+                    >
+                      Current Streak
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.modalStatCard,
+                      {
+                        backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                        borderColor: isDark ? '#1E2B42' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 16 }}>{user?.avatar || '🌟'}</Text>
+                    <Text style={[styles.modalStatValue, { color: '#10B981' }]}>
+                      {myCount}/7
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalStatLabel,
+                        { color: isDark ? '#94A3B8' : '#64748B' },
+                      ]}
+                    >
+                      You this week
+                    </Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.modalStatCard,
+                      {
+                        backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                        borderColor: isDark ? '#1E2B42' : '#E2E8F0',
+                      },
+                    ]}
+                  >
+                    <Text style={{ fontSize: 16 }}>{friend.avatar || '👤'}</Text>
+                    <Text style={[styles.modalStatValue, { color: '#7C5CFF' }]}>
+                      {friendCount}/7
+                    </Text>
+                    <Text
+                      style={[
+                        styles.modalStatLabel,
+                        { color: isDark ? '#94A3B8' : '#64748B' },
+                      ]}
+                    >
+                      {friendShortName} this week
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 7-Day Matrix in Modal */}
+                <View
+                  style={[
+                    styles.modalMatrixContainer,
+                    {
+                      backgroundColor: isDark ? '#0D1524' : '#F8FAFC',
+                      borderColor: isDark ? '#1E2B42' : '#E2E8F0',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.weeklySectionHeading,
+                      { color: isDark ? '#94A3B8' : '#64748B' },
+                    ]}
+                  >
+                    WEEKLY CALENDAR PROGRESS
+                  </Text>
+
+                  {/* Day & Date Headers */}
+                  <View style={styles.matrixHeaderRow}>
+                    <View style={styles.matrixNameSpacer} />
+                    <View style={styles.matrixGridCols}>
+                      {currentWeekDays.map((item, i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.matrixDayCol,
+                            item.isToday && styles.matrixDayColToday,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.matrixDayLetter,
+                              {
+                                color: item.isToday
+                                  ? '#7C5CFF'
+                                  : isDark
+                                  ? '#64748B'
+                                  : '#94A3B8',
+                              },
+                            ]}
+                          >
+                            {item.dayName[0]}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.matrixDayNum,
+                              {
+                                color: item.isToday
+                                  ? '#7C5CFF'
+                                  : isDark
+                                  ? '#FFFFFF'
+                                  : '#0F172A',
+                                fontWeight: item.isToday ? '900' : '700',
+                              },
+                            ]}
+                          >
+                            {item.dayNumber}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Row 1: You */}
+                  <View style={styles.matrixRow}>
+                    <View style={styles.matrixNameBox}>
+                      <Text
+                        style={[
+                          styles.matrixNameText,
+                          { color: isDark ? '#E2E8F0' : '#334155' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        You
+                      </Text>
+                    </View>
+                    <View style={styles.matrixGridCols}>
+                      {myWeekly.map((done, idx) => (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.matrixDot,
+                            done
+                              ? styles.matrixDotDoneYou
+                              : isDark
+                              ? styles.matrixDotPendingDark
+                              : styles.matrixDotPendingLight,
+                          ]}
+                        >
+                          {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Row 2: Friend */}
+                  <View style={styles.matrixRow}>
+                    <View style={styles.matrixNameBox}>
+                      <Text
+                        style={[
+                          styles.matrixNameText,
+                          { color: isDark ? '#E2E8F0' : '#334155' },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {friendShortName}
+                      </Text>
+                    </View>
+                    <View style={styles.matrixGridCols}>
+                      {friendWeekly.map((done, idx) => (
+                        <View
+                          key={idx}
+                          style={[
+                            styles.matrixDot,
+                            done
+                              ? styles.matrixDotDoneFriend
+                              : isDark
+                              ? styles.matrixDotPendingDark
+                              : styles.matrixDotPendingLight,
+                          ]}
+                        >
+                          {done && <Check size={11} color="#FFFFFF" strokeWidth={3} />}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Modal Footer / Dismiss */}
+                <TouchableOpacity
+                  style={styles.modalDoneBtn}
+                  onPress={() => setSelectedSharedHabitProgress(null)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.modalDoneBtnText}>Done</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
 
       {/* 7. REMOVE FRIEND CONFIRMATION MODAL */}
       <Modal
@@ -2795,6 +2999,99 @@ const styles = StyleSheet.create({
   confirmDeleteBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
+    fontWeight: '900',
+  },
+  mutualHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
+  progressPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  progressPillBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#6366F1',
+  },
+  calendarActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  calendarActionBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6366F1',
+  },
+  calendarProgressModalBox: {
+    width: '100%',
+    maxWidth: 440,
+    borderRadius: 24,
+    padding: 20,
+    gap: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalStatGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modalStatCard: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  modalStatValue: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  modalStatLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  modalMatrixContainer: {
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+  },
+  modalDoneBtn: {
+    backgroundColor: '#7C5CFF',
+    paddingVertical: 12,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  modalDoneBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '900',
   },
 });
