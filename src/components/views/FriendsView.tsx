@@ -350,12 +350,9 @@ export const FriendsView: React.FC = () => {
           <View style={styles.headerIconCircle}>
             <Users size={20} color="#7C5CFF" />
           </View>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
             <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
               Friends & Habit Following
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Follow by @username • Accept requests to see routines
             </Text>
           </View>
         </View>
