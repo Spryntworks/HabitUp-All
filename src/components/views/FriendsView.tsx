@@ -70,8 +70,6 @@ export const FriendsView: React.FC = () => {
     createSharedHabit,
     nudgeFriend,
     removeFriend,
-    toggleCompletion,
-    toggleFriendHabitCompletion,
     setActiveTab,
     theme,
     showToast,
@@ -901,7 +899,7 @@ export const FriendsView: React.FC = () => {
                       >
                         <View style={styles.todayCheckinRow}>
                           {/* You Status Card */}
-                          <TouchableOpacity
+                          <View
                             style={[
                               styles.userCheckinCard,
                               {
@@ -909,8 +907,6 @@ export const FriendsView: React.FC = () => {
                                 borderColor: myDone ? '#10B981' : isDark ? '#23324C' : '#CBD5E1',
                               },
                             ]}
-                            onPress={() => toggleCompletion(myHabit.id)}
-                            activeOpacity={0.75}
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
@@ -946,10 +942,10 @@ export const FriendsView: React.FC = () => {
                                 </>
                               )}
                             </View>
-                          </TouchableOpacity>
+                          </View>
 
                           {/* Friend Status Card */}
-                          <TouchableOpacity
+                          <View
                             style={[
                               styles.userCheckinCard,
                               {
@@ -957,8 +953,6 @@ export const FriendsView: React.FC = () => {
                                 borderColor: friendDone ? '#7C5CFF' : isDark ? '#23324C' : '#CBD5E1',
                               },
                             ]}
-                            onPress={() => toggleFriendHabitCompletion(friend.id, friendHabit.id)}
-                            activeOpacity={0.75}
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{friend.avatar || '👤'}</Text>
@@ -994,7 +988,7 @@ export const FriendsView: React.FC = () => {
                                 </>
                               )}
                             </View>
-                          </TouchableOpacity>
+                          </View>
                         </View>
 
                         {/* Motivational Accountability Caption */}
