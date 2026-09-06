@@ -914,20 +914,15 @@ export const FriendsView: React.FC = () => {
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
-                              <View>
-                                <Text
-                                  style={[
-                                    styles.checkinUserName,
-                                    { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  You
-                                </Text>
-                                <Text style={styles.checkinHintText}>
-                                  {myDone ? 'Checked in ✓' : 'Tap to check in'}
-                                </Text>
-                              </View>
+                              <Text
+                                style={[
+                                  styles.checkinUserName,
+                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                You
+                              </Text>
                             </View>
                             <View
                               style={[
@@ -967,20 +962,15 @@ export const FriendsView: React.FC = () => {
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{friend.avatar || '👤'}</Text>
-                              <View>
-                                <Text
-                                  style={[
-                                    styles.checkinUserName,
-                                    { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {friendShortName}
-                                </Text>
-                                <Text style={styles.checkinHintText}>
-                                  {friendDone ? 'Checked in ✓' : 'Tap to check in'}
-                                </Text>
-                              </View>
+                              <Text
+                                style={[
+                                  styles.checkinUserName,
+                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {friendShortName}
+                              </Text>
                             </View>
                             <View
                               style={[
@@ -3133,11 +3123,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
-  },
-  checkinHintText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#7C5CFF',
-    marginTop: 1,
   },
 });
