@@ -865,9 +865,9 @@ export const FriendsView: React.FC = () => {
 
                         <View style={styles.mutualHeaderRight}>
                           <View style={styles.sharedStreakBox}>
-                            <Flame size={13} color="#F59E0B" fill="#F59E0B" />
+                            <Flame size={12} color="#F59E0B" fill="#F59E0B" />
                             <Text style={styles.sharedStreakText}>
-                              {friendHabit.currentStreak}d Streak
+                              {friendHabit.currentStreak}d
                             </Text>
                           </View>
                           <TouchableOpacity
@@ -1081,12 +1081,12 @@ export const FriendsView: React.FC = () => {
                       >
                         <IconRenderer name={h.icon} size={16} color="#FFFFFF" />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.habitItemName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                      <View style={{ flex: 1, justifyContent: 'center' }}>
+                        <Text
+                          style={[styles.habitItemName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                          numberOfLines={1}
+                        >
                           {h.name}
-                        </Text>
-                        <Text style={[styles.habitItemMeta, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                          🔥 {h.currentStreak}d streak • ⏰ {formatTo12Hour(h.reminder_time) || 'Daily'} • {h.isCompletedToday ? 'Done today ✅' : 'Pending today ⏳'}
                         </Text>
                       </View>
                     </View>
@@ -2445,13 +2445,15 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 14,
     borderWidth: 1,
-    gap: 4,
+    minHeight: 44,
   },
   checkinUserMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
+    gap: 6,
+    flex: 1,
+    minWidth: 0,
+    marginRight: 4,
   },
   checkinAvatar: {
     fontSize: 14,
@@ -2459,14 +2461,17 @@ const styles = StyleSheet.create({
   checkinUserName: {
     fontSize: 12,
     fontWeight: '800',
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   checkinStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 7,
-    paddingVertical: 3.5,
+    paddingVertical: 4,
     borderRadius: 8,
-    gap: 3,
+    gap: 3.5,
     flexShrink: 0,
   },
   checkinBadgeDone: {
@@ -2476,6 +2481,7 @@ const styles = StyleSheet.create({
     color: '#10B981',
     fontSize: 10,
     fontWeight: '800',
+    includeFontPadding: false,
   },
   checkinBadgeFriendDone: {
     backgroundColor: 'rgba(124, 92, 255, 0.15)',
@@ -2484,6 +2490,7 @@ const styles = StyleSheet.create({
     color: '#7C5CFF',
     fontSize: 10,
     fontWeight: '800',
+    includeFontPadding: false,
   },
   checkinBadgePendingDark: {
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
@@ -2495,6 +2502,7 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     fontSize: 10,
     fontWeight: '800',
+    includeFontPadding: false,
   },
   accountabilityText: {
     fontSize: 11,
