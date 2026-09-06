@@ -603,12 +603,15 @@ async function proxyToRailwayBackend(req: Request, res: Response, next: NextFunc
     remotePath = remotePath.replace('/api', '');
   }
 
-  // Only forward known backend API patterns: /auth/*, /habits*, /reminders*, /stats*, /health
+  // Only forward known backend API patterns: /auth/*, /habits*, /reminders*, /stats*, /friends*, /users*, /health
   const shouldForward =
     remotePath.startsWith('/auth') ||
     remotePath.startsWith('/habits') ||
     remotePath.startsWith('/reminders') ||
     remotePath.startsWith('/stats') ||
+    remotePath.startsWith('/friends') ||
+    remotePath.startsWith('/users') ||
+    remotePath.startsWith('/admin') ||
     remotePath === '/health';
 
   if (!shouldForward) {

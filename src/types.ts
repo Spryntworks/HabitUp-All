@@ -46,6 +46,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  username?: string;
   timezone: string;
   avatar?: string;
   created_at: string;
@@ -144,6 +145,20 @@ export interface FriendUser {
   isFriend: boolean;
   requestStatus: 'none' | 'pending_sent' | 'pending_received' | 'accepted';
   habits: FriendPublicHabit[];
+}
+
+export interface FollowRequestItem {
+  id: string; // unique request ID
+  fromUserId: string;
+  fromName: string;
+  fromUsername: string; // e.g. "@alex"
+  fromAvatar?: string;
+  toUserId: string;
+  toUsername: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  totalHabits?: number;
+  bestStreak?: number;
 }
 
 export interface SocialFeedActivity {

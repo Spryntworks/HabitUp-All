@@ -34,9 +34,11 @@ import {
   Zap,
   Bell,
   Sparkles,
-  AlertCircle,
   ChevronLeft,
   UserMinus,
+  Lock,
+  UserCheck,
+  AtSign,
 } from 'lucide-react-native';
 
 const QUICK_HABIT_PRESETS = [
@@ -53,16 +55,16 @@ export const FriendsView: React.FC = () => {
     user,
     habits,
     completions,
-    selectedDate,
-    toggleCompletion,
     friends,
+    incomingRequests,
+    sendFriendRequestByUsername,
+    acceptFollowRequest,
+    declineFollowRequest,
+    unfollowFriendHabit,
     adoptFriendHabit,
     createSharedHabit,
-    addFriendByCodeOrUsername,
     nudgeFriend,
-    toggleFriendHabitCompletion,
     removeFriend,
-    deleteHabit,
     setActiveTab,
     theme,
     showToast,
@@ -72,8 +74,9 @@ export const FriendsView: React.FC = () => {
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
 
-  // Input for adding friend
-  const [friendCodeInput, setFriendCodeInput] = useState<string>('');
+  // Username input for following friends
+  const [usernameInput, setUsernameInput] = useState<string>('');
+  const [isFollowingLoading, setIsFollowingLoading] = useState<boolean>(false);
 
   // Remove friend confirmation state
   const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
@@ -88,13 +91,21 @@ export const FriendsView: React.FC = () => {
   const [togetherIcon, setTogetherIcon] = useState<string>('Target');
   const [togetherColor, setTogetherColor] = useState<string>('#7C5CFF');
 
+  const myUsername = useMemo(() => {
+    if (user?.username) {
+      return user.username.startsWith('@') ? user.username : `@${user.username}`;
+    }
+    const clean = (user?.name || 'user').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `@${clean || 'user'}`;
+  }, [user]);
+
   const myInviteCode = useMemo(() => {
     return getUserInviteCode(user);
   }, [user]);
 
   const connectedFriends = useMemo(() => {
     return friends.filter((f) => {
-      if (!f.isFriend) return false;
+      if (!f.isFriend && f.requestStatus === 'none') return false;
       if (user?.id && f.id === user.id) return false;
       if (user?.email && f.email && f.email.toLowerCase() === user.email.toLowerCase()) return false;
       const myName = (user?.name || '').trim().toLowerCase();
@@ -103,12 +114,26 @@ export const FriendsView: React.FC = () => {
       const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
       if (myHandle && fHandle && myHandle === fHandle) return false;
       if (myName && fName && myName === fName) return false;
-      const myCode = getUserInviteCode(user).toLowerCase();
-      const fCode = getUserInviteCode(f).toLowerCase();
-      if (myCode && fCode && myCode === fCode) return false;
       return true;
     });
   }, [friends, user]);
+
+  const handleSendFollowRequest = async () => {
+    const clean = usernameInput.trim();
+    if (!clean) {
+      showToast('Please enter a @username to follow', undefined, 'info');
+      return;
+    }
+    setIsFollowingLoading(true);
+    try {
+      const res = await sendFriendRequestByUsername(clean);
+      if (res.success) {
+        setUsernameInput('');
+      }
+    } finally {
+      setIsFollowingLoading(false);
+    }
+  };
 
   // Match ONLY habits that were explicitly created/followed with this friend
   const findMatchingMyHabit = (fh: FriendPublicHabit, friend: FriendUser): Habit | undefined => {
@@ -144,32 +169,23 @@ export const FriendsView: React.FC = () => {
     });
   };
 
-  const handleAddFriend = () => {
-    if (!friendCodeInput.trim()) {
-      showToast('Please enter a username or invite code', undefined, 'info');
-      return;
-    }
-    addFriendByCodeOrUsername(friendCodeInput);
-    setFriendCodeInput('');
-  };
-
-  const handleShareCode = async () => {
+  const handleShareUsername = async () => {
     try {
       await Share.share({
-        message: `Add me on HabitUp! My habit buddy invite code is ${myInviteCode}. Let's build and follow habits together! 🤝`,
+        message: `Follow my habit streaks on HabitUp! My username is ${myUsername}. Follow me to share routines! 🤝`,
       });
     } catch {}
   };
 
-  const handleCopyCode = async () => {
+  const handleCopyUsername = async () => {
     try {
-      await Clipboard.setStringAsync(myInviteCode);
-      showToast(`Invite code ${myInviteCode} copied to clipboard! 📋`, undefined, 'success');
+      await Clipboard.setStringAsync(myUsername);
+      showToast(`Username ${myUsername} copied to clipboard! 📋`, undefined, 'success');
     } catch {
       if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(myInviteCode).catch(() => {});
+        navigator.clipboard.writeText(myUsername).catch(() => {});
       }
-      showToast(`Invite code ${myInviteCode} copied! 📋`, undefined, 'success');
+      showToast(`Username ${myUsername} copied! 📋`, undefined, 'success');
     }
   };
 
@@ -199,7 +215,7 @@ export const FriendsView: React.FC = () => {
     }
     const targetFriend = selectedFriendForTogether || connectedFriends[0];
     if (!targetFriend) {
-      showToast('Please select or add a friend first', undefined, 'info');
+      showToast('Please select or follow a friend first', undefined, 'info');
       return;
     }
 
@@ -245,7 +261,10 @@ export const FriendsView: React.FC = () => {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.headerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-              Friends & Mutual Progress
+              Friends & Habit Following
+            </Text>
+            <Text style={[styles.headerSubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Follow by @username • Accept requests to see routines
             </Text>
           </View>
         </View>
@@ -267,7 +286,7 @@ export const FriendsView: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* 2. My Invite Code & Add Friend Card */}
+      {/* 2. My Handle & Search / Follow Card */}
       <View
         style={[
           styles.card,
@@ -277,22 +296,24 @@ export const FriendsView: React.FC = () => {
           },
         ]}
       >
-        {/* Top: My Code */}
+        {/* Top: My Username Handle */}
         <View style={styles.codeRow}>
           <View>
             <Text style={[styles.codeLabel, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              YOUR INVITE CODE
+              YOUR PROFILE USERNAME
             </Text>
-            <Text style={[styles.codeValue, { color: '#7C5CFF' }]}>{myInviteCode}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              <Text style={[styles.codeValue, { color: '#7C5CFF' }]}>{myUsername}</Text>
+            </View>
           </View>
 
           <View style={styles.codeActionsRow}>
-            <TouchableOpacity style={styles.copyBtn} onPress={handleCopyCode}>
+            <TouchableOpacity style={styles.copyBtn} onPress={handleCopyUsername}>
               <Copy size={14} color={isDark ? '#E2E8F0' : '#0F172A'} />
               <Text style={[styles.copyBtnText, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>Copy</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.shareBtn} onPress={handleShareCode}>
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShareUsername}>
               <Share2 size={14} color="#FFFFFF" />
               <Text style={styles.shareBtnText}>Share</Text>
             </TouchableOpacity>
@@ -301,33 +322,37 @@ export const FriendsView: React.FC = () => {
 
         <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]} />
 
-        {/* Bottom: Add Friend Input */}
+        {/* Bottom: Follow Friend by Username */}
         <Text style={[styles.codeLabel, { color: isDark ? '#94A3B8' : '#64748B', marginBottom: 6 }]}>
-          ADD FRIEND BY USERNAME OR CODE
+          FOLLOW BY USERNAME
         </Text>
 
         <View style={styles.addInputRow}>
           <View style={styles.inputWrapper}>
+            <View style={styles.inputPrefixIcon}>
+              <AtSign size={15} color={isDark ? '#94A3B8' : '#64748B'} />
+            </View>
             <TextInput
               style={[
                 styles.input,
+                styles.inputWithPrefix,
                 {
                   backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
                   borderColor: isDark ? '#334155' : '#CBD5E1',
                   color: isDark ? '#FFFFFF' : '#0F172A',
                 },
               ]}
-              placeholder="Enter @username or invite code..."
+              placeholder="Enter username (e.g. ram, alex_fit)..."
               placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
-              value={friendCodeInput}
-              onChangeText={setFriendCodeInput}
+              value={usernameInput}
+              onChangeText={setUsernameInput}
               autoCapitalize="none"
               autoCorrect={false}
             />
-            {friendCodeInput.length > 0 && (
+            {usernameInput.length > 0 && (
               <TouchableOpacity
                 style={styles.inputActionBtn}
-                onPress={() => setFriendCodeInput('')}
+                onPress={() => setUsernameInput('')}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <X size={14} color={isDark ? '#94A3B8' : '#64748B'} />
@@ -335,17 +360,109 @@ export const FriendsView: React.FC = () => {
             )}
           </View>
 
-          <TouchableOpacity style={styles.addFriendBtn} onPress={handleAddFriend}>
+          <TouchableOpacity
+            style={[styles.addFriendBtn, isFollowingLoading && { opacity: 0.7 }]}
+            onPress={handleSendFollowRequest}
+            disabled={isFollowingLoading}
+            activeOpacity={0.8}
+          >
             <UserPlus size={16} color="#FFFFFF" strokeWidth={2.5} />
-            <Text style={styles.addFriendBtnText}>Add</Text>
+            <Text style={styles.addFriendBtnText}>Follow</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* 3. Friends List Heading */}
+      {/* 3. Incoming Follow Requests Card (Instagram-Style Approvals) */}
+      {incomingRequests.length > 0 && (
+        <View
+          style={[
+            styles.incomingCard,
+            {
+              backgroundColor: isDark ? '#162238' : '#F0FDF4',
+              borderColor: isDark ? '#10B981' : '#86EFAC',
+            },
+          ]}
+        >
+          <View style={styles.incomingHeaderRow}>
+            <View style={styles.incomingBadge}>
+              <UserCheck size={14} color="#10B981" />
+              <Text style={styles.incomingBadgeText}>
+                INCOMING FOLLOW REQUESTS ({incomingRequests.length})
+              </Text>
+            </View>
+            <Text style={[styles.incomingNoticeSub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+              Accept to unlock each other's habits
+            </Text>
+          </View>
+
+          <View style={styles.incomingList}>
+            {incomingRequests.map((req) => {
+              const reqHandle = req.fromUsername.startsWith('@')
+                ? req.fromUsername
+                : `@${req.fromUsername}`;
+              return (
+                <View
+                  key={req.id}
+                  style={[
+                    styles.incomingItemRow,
+                    {
+                      backgroundColor: isDark ? '#1F2E4A' : '#FFFFFF',
+                      borderColor: isDark ? '#334155' : '#DCFCE7',
+                    },
+                  ]}
+                >
+                  <View style={styles.incomingItemLeft}>
+                    <View style={styles.incomingAvatarCircle}>
+                      <Text style={styles.incomingAvatarEmoji}>{req.fromAvatar || '🤝'}</Text>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text
+                        style={[styles.incomingName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
+                        numberOfLines={1}
+                      >
+                        {req.fromName}
+                      </Text>
+                      <Text
+                        style={[styles.incomingUsername, { color: '#10B981' }]}
+                        numberOfLines={1}
+                      >
+                        {reqHandle} • Wants to follow you
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.incomingActionButtons}>
+                    <TouchableOpacity
+                      style={styles.acceptBtn}
+                      onPress={() => acceptFollowRequest(req.id, req.fromUsername)}
+                      activeOpacity={0.8}
+                    >
+                      <Check size={14} color="#FFFFFF" strokeWidth={3} />
+                      <Text style={styles.acceptBtnText}>Accept</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.declineBtn,
+                        { backgroundColor: isDark ? '#334155' : '#F1F5F9' },
+                      ]}
+                      onPress={() => declineFollowRequest(req.id)}
+                      activeOpacity={0.8}
+                    >
+                      <X size={14} color={isDark ? '#94A3B8' : '#64748B'} strokeWidth={2.5} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* 4. Friends List Heading */}
       <View style={styles.listHeaderRow}>
         <Text style={[styles.sectionTitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-          MY HABIT BUDDIES ({connectedFriends.length})
+          HABIT BUDDIES ({connectedFriends.length})
         </Text>
       </View>
 
@@ -353,19 +470,22 @@ export const FriendsView: React.FC = () => {
       {connectedFriends.map((friend) => {
         const { displayName: friendDisplayName, usernameTag } = formatFriendDisplayName(friend);
         const myDisplayName = user?.name ? user.name.split(' ')[0] : 'You';
+        const isPendingSent = friend.requestStatus === 'pending_sent';
 
         // Separate habits into Shared/Adopted vs Not Adopted
         const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
         const unadoptedHabits: FriendPublicHabit[] = [];
 
-        friend.habits.forEach((fh) => {
-          const myMatch = findMatchingMyHabit(fh, friend);
-          if (myMatch) {
-            sharedHabits.push({ friendHabit: fh, myHabit: myMatch });
-          } else {
-            unadoptedHabits.push(fh);
-          }
-        });
+        if (!isPendingSent && Array.isArray(friend.habits)) {
+          friend.habits.forEach((fh) => {
+            const myMatch = findMatchingMyHabit(fh, friend);
+            if (myMatch) {
+              sharedHabits.push({ friendHabit: fh, myHabit: myMatch });
+            } else {
+              unadoptedHabits.push(fh);
+            }
+          });
+        }
 
         return (
           <View
@@ -374,7 +494,13 @@ export const FriendsView: React.FC = () => {
               styles.friendCard,
               {
                 backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                borderColor: isPendingSent
+                  ? isDark
+                    ? '#F59E0B'
+                    : '#FCD34D'
+                  : isDark
+                  ? '#1E293B'
+                  : '#E2E8F0',
               },
             ]}
           >
@@ -393,33 +519,42 @@ export const FriendsView: React.FC = () => {
                     >
                       {friendDisplayName}
                     </Text>
-                    <View style={styles.streakFlameBadge}>
-                      <Flame size={11} color="#FF6B6B" fill="#FF6B6B" />
-                      <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
-                    </View>
+                    {isPendingSent ? (
+                      <View style={styles.pendingBadge}>
+                        <Clock size={11} color="#F59E0B" />
+                        <Text style={styles.pendingBadgeText}>Requested ⏳</Text>
+                      </View>
+                    ) : (
+                      <View style={styles.streakFlameBadge}>
+                        <Flame size={11} color="#FF6B6B" fill="#FF6B6B" />
+                        <Text style={styles.streakFlameText}>{friend.currentStreak}d</Text>
+                      </View>
+                    )}
                   </View>
                   <Text
                     style={[styles.friendUserTag, { color: isDark ? '#94A3B8' : '#64748B' }]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
                   >
-                    {usernameTag} • {friend.plantStage}
+                    {usernameTag} {friend.plantStage ? `• ${friend.plantStage}` : ''}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.friendHeaderRight}>
-                <TouchableOpacity
-                  style={[
-                    styles.buddyTogetherBtn,
-                    { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
-                  ]}
-                  onPress={() => openTogetherWithFriend(friend)}
-                  activeOpacity={0.7}
-                >
-                  <Plus size={12} color="#7C5CFF" strokeWidth={3} />
-                  <Text style={styles.buddyTogetherBtnText}>Together</Text>
-                </TouchableOpacity>
+                {!isPendingSent && (
+                  <TouchableOpacity
+                    style={[
+                      styles.buddyTogetherBtn,
+                      { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
+                    ]}
+                    onPress={() => openTogetherWithFriend(friend)}
+                    activeOpacity={0.7}
+                  >
+                    <Plus size={12} color="#7C5CFF" strokeWidth={3} />
+                    <Text style={styles.buddyTogetherBtnText}>Together</Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={[
@@ -435,6 +570,42 @@ export const FriendsView: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* PENDING REQUEST LOCK NOTICE */}
+            {isPendingSent ? (
+              <View
+                style={[
+                  styles.lockedNoticeBox,
+                  {
+                    backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
+                    borderColor: isDark ? '#78350F' : '#FDE68A',
+                  },
+                ]}
+              >
+                <View style={styles.lockedIconWrapper}>
+                  <Lock size={16} color="#F59E0B" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.lockedNoticeTitle,
+                      { color: isDark ? '#FDE68A' : '#92400E' },
+                    ]}
+                  >
+                    Follow Request Pending
+                  </Text>
+                  <Text
+                    style={[
+                      styles.lockedNoticeText,
+                      { color: isDark ? '#D6D3D1' : '#B45309' },
+                    ]}
+                  >
+                    Habits and routines will unlock once {friendDisplayName} accepts your request.
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <>
 
             {/* SECTION A: SHARED & MUTUAL PROGRESS HABITS */}
             {sharedHabits.length > 0 && (
@@ -658,14 +829,19 @@ export const FriendsView: React.FC = () => {
                       <View style={styles.mutualActionsRow}>
                         {/* Unfollow button to selectively stop following this specific habit */}
                         <TouchableOpacity
-                          style={[styles.unfollowBtn, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}
-                          onPress={() => {
-                            deleteHabit(myHabit.id);
-                            showToast(`Unfollowed "${friendHabit.name}". You can re-follow anytime below! 🤝`, undefined, 'info');
-                          }}
+                          style={[
+                            styles.unfollowBtn,
+                            { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
+                          ]}
+                          onPress={() => unfollowFriendHabit(myHabit.id, friendHabit.name)}
                           activeOpacity={0.7}
                         >
-                          <Text style={[styles.unfollowBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                          <Text
+                            style={[
+                              styles.unfollowBtnText,
+                              { color: isDark ? '#94A3B8' : '#64748B' },
+                            ]}
+                          >
                             Unfollow
                           </Text>
                         </TouchableOpacity>
@@ -697,7 +873,7 @@ export const FriendsView: React.FC = () => {
               </View>
             )}
 
-            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT/FOLLOW) */}
+            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT/FOLLOW OR SKIP) */}
             {unadoptedHabits.length > 0 && (
               <View style={styles.habitsWrapper}>
                 <View style={styles.habitsHeaderRow}>
@@ -705,7 +881,7 @@ export const FriendsView: React.FC = () => {
                     MORE HABITS FROM {friendDisplayName.toUpperCase()} ({unadoptedHabits.length})
                   </Text>
                   <Text style={[styles.habitsSubExplainer, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                    Tap follow to join
+                    Follow to join or skip
                   </Text>
                 </View>
 
@@ -746,7 +922,7 @@ export const FriendsView: React.FC = () => {
                       activeOpacity={0.8}
                     >
                       <Plus size={13} color="#FFFFFF" strokeWidth={3} />
-                      <Text style={styles.followHabitBtnText}>Follow Habit</Text>
+                      <Text style={styles.followHabitBtnText}>+ Follow Habit</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -773,6 +949,8 @@ export const FriendsView: React.FC = () => {
                 </TouchableOpacity>
               </View>
             )}
+              </>
+            )}
           </View>
         );
       })}
@@ -781,10 +959,10 @@ export const FriendsView: React.FC = () => {
         <View style={styles.emptyCard}>
           <Users size={32} color="#7C5CFF" />
           <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-            No friends added yet
+            No friends followed yet
           </Text>
           <Text style={[styles.emptySub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Enter an invite code or username above to connect with habit buddies and track mutual progress!
+            Enter an @username above to send a follow request and share habit routines!
           </Text>
         </View>
       )}
@@ -816,37 +994,40 @@ export const FriendsView: React.FC = () => {
               DO THIS HABIT WITH:
             </Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.friendPillsRow}>
-              {connectedFriends.map((f) => {
-                const { displayName: fDisplayName } = formatFriendDisplayName(f);
-                const isSelected = (selectedFriendForTogether?.id || connectedFriends[0]?.id) === f.id;
-                return (
-                  <TouchableOpacity
-                    key={f.id}
-                    style={[
-                      styles.friendPill,
-                      isSelected && styles.friendPillActive,
-                      {
-                        backgroundColor: isSelected
-                          ? '#7C5CFF'
-                          : isDark
-                          ? '#1E293B'
-                          : '#F1F5F9',
-                      },
-                    ]}
-                    onPress={() => setSelectedFriendForTogether(f)}
-                  >
-                    <Text style={styles.friendPillEmoji}>{f.avatar}</Text>
-                    <Text
+              {connectedFriends
+                .filter((f) => f.requestStatus !== 'pending_sent')
+                .map((f) => {
+                  const { displayName: fDisplayName } = formatFriendDisplayName(f);
+                  const isSelected =
+                    (selectedFriendForTogether?.id || connectedFriends[0]?.id) === f.id;
+                  return (
+                    <TouchableOpacity
+                      key={f.id}
                       style={[
-                        styles.friendPillText,
-                        { color: isSelected ? '#FFFFFF' : isDark ? '#E2E8F0' : '#0F172A' },
+                        styles.friendPill,
+                        isSelected && styles.friendPillActive,
+                        {
+                          backgroundColor: isSelected
+                            ? '#7C5CFF'
+                            : isDark
+                            ? '#1E293B'
+                            : '#F1F5F9',
+                        },
                       ]}
+                      onPress={() => setSelectedFriendForTogether(f)}
                     >
-                      {fDisplayName}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+                      <Text style={styles.friendPillEmoji}>{f.avatar}</Text>
+                      <Text
+                        style={[
+                          styles.friendPillText,
+                          { color: isSelected ? '#FFFFFF' : isDark ? '#E2E8F0' : '#0F172A' },
+                        ]}
+                      >
+                        {fDisplayName}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
             </ScrollView>
 
             {/* Quick Presets */}
@@ -1080,15 +1261,15 @@ export const FriendsView: React.FC = () => {
             </View>
 
             <Text style={[styles.confirmTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-              Remove Habit Buddy?
+              {friendToRemove?.requestStatus === 'pending_sent'
+                ? 'Cancel Follow Request?'
+                : 'Remove Habit Buddy?'}
             </Text>
 
             <Text style={[styles.confirmMessage, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              Are you sure you want to remove{' '}
-              <Text style={{ fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>
-                {friendToRemove ? formatFriendDisplayName(friendToRemove).displayName : 'this friend'}
-              </Text>
-              {friendToRemove ? ` (${formatFriendDisplayName(friendToRemove).usernameTag})` : ''}? You will no longer track mutual streaks together.
+              {friendToRemove?.requestStatus === 'pending_sent'
+                ? `Cancel your pending follow request to ${friendToRemove ? formatFriendDisplayName(friendToRemove).displayName : 'this user'} (${friendToRemove ? formatFriendDisplayName(friendToRemove).usernameTag : ''})?`
+                : `Are you sure you want to remove ${friendToRemove ? formatFriendDisplayName(friendToRemove).displayName : 'this friend'}${friendToRemove ? ` (${formatFriendDisplayName(friendToRemove).usernameTag})` : ''}? You will no longer track mutual streaks together.`}
             </Text>
 
             <View style={styles.confirmBtnRow}>
@@ -1121,7 +1302,9 @@ export const FriendsView: React.FC = () => {
                 activeOpacity={0.8}
               >
                 <UserMinus size={14} color="#FFFFFF" strokeWidth={2.5} />
-                <Text style={styles.confirmDeleteBtnText}>Remove</Text>
+                <Text style={styles.confirmDeleteBtnText}>
+                  {friendToRemove?.requestStatus === 'pending_sent' ? 'Cancel Request' : 'Remove'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1252,6 +1435,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
   },
+  inputPrefixIcon: {
+    position: 'absolute',
+    left: 12,
+    zIndex: 1,
+  },
   input: {
     width: '100%',
     fontSize: 13,
@@ -1267,6 +1455,9 @@ const styles = StyleSheet.create({
           outlineColor: 'transparent',
         } as any)
       : {}),
+  },
+  inputWithPrefix: {
+    paddingLeft: 34,
   },
   inputActionBtn: {
     position: 'absolute',
@@ -1286,6 +1477,99 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
+  },
+  incomingCard: {
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 12,
+  },
+  incomingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  incomingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  incomingBadgeText: {
+    color: '#10B981',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  incomingNoticeSub: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  incomingList: {
+    gap: 8,
+  },
+  incomingItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 8,
+  },
+  incomingItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  incomingAvatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incomingAvatarEmoji: {
+    fontSize: 16,
+  },
+  incomingName: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  incomingUsername: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  incomingActionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  acceptBtn: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    gap: 4,
+  },
+  acceptBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  declineBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   startTogetherBtn: {
     backgroundColor: '#7C5CFF',
@@ -1386,6 +1670,47 @@ const styles = StyleSheet.create({
     color: '#FF6B6B',
     fontSize: 11,
     fontWeight: '900',
+  },
+  pendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+    flexShrink: 0,
+  },
+  pendingBadgeText: {
+    color: '#F59E0B',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  lockedNoticeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+  },
+  lockedIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockedNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  lockedNoticeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 2,
+    lineHeight: 15,
   },
   buddyTogetherBtn: {
     flexDirection: 'row',
