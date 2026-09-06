@@ -1008,47 +1008,22 @@ export const FriendsView: React.FC = () => {
                         </Text>
                       </View>
 
-                      {/* Interactive Actions Footer (Nudge & Unfollow) */}
+                      {/* Interactive Actions Footer (Nudge & Leave Habit) */}
                       <View style={styles.mutualActionsRow}>
-                        {!friendDone && (
-                          <TouchableOpacity
-                            style={styles.nudgeBtn}
-                            onPress={() => nudgeFriend(friend.id, friendHabit.name)}
-                            activeOpacity={0.8}
-                          >
-                            <Bell size={13} color="#F59E0B" />
-                            <Text style={styles.nudgeBtnText}>
-                              Nudge {friendShortName}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {bothDone && (
-                          <View style={styles.celebratedBadge}>
-                            <Sparkles size={13} color="#10B981" />
-                            <Text style={styles.celebratedBadgeText}>Streak Secured! 🔥</Text>
-                          </View>
-                        )}
-
-                        {!bothDone && friendDone && (
-                          <View
-                            style={[
-                              styles.celebratedBadge,
-                              {
-                                backgroundColor: isDark ? 'rgba(124, 92, 255, 0.15)' : '#EDE9FE',
-                              },
-                            ]}
-                          >
-                            <Check size={13} color="#7C5CFF" strokeWidth={2.5} />
-                            <Text style={[styles.celebratedBadgeText, { color: '#7C5CFF' }]}>
-                              {friendShortName} Done ✓
-                            </Text>
-                          </View>
-                        )}
+                        <TouchableOpacity
+                          style={styles.nudgeBtn}
+                          onPress={() => nudgeFriend(friend.id, friendHabit.name)}
+                          activeOpacity={0.8}
+                        >
+                          <Bell size={13} color="#F59E0B" />
+                          <Text style={styles.nudgeBtnText}>
+                            Nudge {friendShortName}
+                          </Text>
+                        </TouchableOpacity>
 
                         <TouchableOpacity
                           style={[
-                            styles.unfollowBtn,
+                            styles.leaveHabitBtn,
                             {
                               backgroundColor: isDark ? '#1C2638' : '#F1F5F9',
                               borderColor: isDark ? '#2D3A50' : '#E2E8F0',
@@ -1060,11 +1035,11 @@ export const FriendsView: React.FC = () => {
                           <UserMinus size={12} color={isDark ? '#94A3B8' : '#64748B'} />
                           <Text
                             style={[
-                              styles.unfollowBtnText,
+                              styles.leaveHabitBtnText,
                               { color: isDark ? '#94A3B8' : '#64748B' },
                             ]}
                           >
-                            Unfollow
+                            Leave Habit
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -2640,6 +2615,20 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   unfollowBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  leaveHabitBtn: {
+    height: 38,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 5,
+  },
+  leaveHabitBtnText: {
     fontSize: 12,
     fontWeight: '700',
   },
