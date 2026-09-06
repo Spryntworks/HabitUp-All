@@ -884,15 +884,17 @@ export const FriendsView: React.FC = () => {
               </View>
             )}
 
-            {/* SECTION B: OTHER PUBLIC HABITS (AVAILABLE TO ADOPT/FOLLOW OR SKIP) */}
+            {/* SECTION B: UNFOLLOWED / AVAILABLE PUBLIC HABITS */}
             {unadoptedHabits.length > 0 && (
               <View style={styles.habitsWrapper}>
                 <View style={styles.habitsHeaderRow}>
                   <Text style={[styles.habitsSubHeading, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    MORE HABITS FROM {friendDisplayName.toUpperCase()} ({unadoptedHabits.length})
+                    {sharedHabits.length > 0
+                      ? `MORE HABITS FROM ${friendDisplayName.toUpperCase()} (${unadoptedHabits.length})`
+                      : `HABITS FROM ${friendDisplayName.toUpperCase()} (${unadoptedHabits.length})`}
                   </Text>
                   <Text style={[styles.habitsSubExplainer, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                    Follow to join or skip
+                    Follow to join
                   </Text>
                 </View>
 
@@ -923,6 +925,17 @@ export const FriendsView: React.FC = () => {
                         >
                           {h.name}
                         </Text>
+                        <View style={styles.mutualSubtitleRow}>
+                          <Clock size={11} color={isDark ? '#94A3B8' : '#64748B'} />
+                          <Text
+                            style={[
+                              styles.mutualHabitSub,
+                              { color: isDark ? '#94A3B8' : '#64748B' },
+                            ]}
+                          >
+                            {formatTo12Hour(h.reminder_time || '08:00')}
+                          </Text>
+                        </View>
                       </View>
                     </View>
 
