@@ -828,7 +828,7 @@ export const FriendsView: React.FC = () => {
                         },
                       ]}
                     >
-                      {/* Top Header: Icon, Full Habit Name, Time, Shared Streak */}
+                      {/* Top Header: Icon, Full Habit Name, Time, Shared Streak & Top Progress Button */}
                       <View style={styles.mutualHeader}>
                         <View style={styles.mutualTitleGroup}>
                           <View
@@ -863,11 +863,27 @@ export const FriendsView: React.FC = () => {
                           </View>
                         </View>
 
-                        <View style={styles.sharedStreakBox}>
-                          <Flame size={13} color="#F59E0B" fill="#F59E0B" />
-                          <Text style={styles.sharedStreakText}>
-                            {friendHabit.currentStreak}d Streak
-                          </Text>
+                        <View style={styles.mutualHeaderRight}>
+                          <View style={styles.sharedStreakBox}>
+                            <Flame size={13} color="#F59E0B" fill="#F59E0B" />
+                            <Text style={styles.sharedStreakText}>
+                              {friendHabit.currentStreak}d Streak
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[
+                              styles.progressPillBtn,
+                              {
+                                backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+                                borderColor: isDark ? '#334155' : '#C7D2FE',
+                              },
+                            ]}
+                            onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
+                            activeOpacity={0.7}
+                          >
+                            <Calendar size={12} color="#6366F1" />
+                            <Text style={styles.progressPillBtnText}>Progress</Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
 
@@ -992,25 +1008,8 @@ export const FriendsView: React.FC = () => {
                         </Text>
                       </View>
 
-                      {/* Interactive Actions Footer */}
+                      {/* Interactive Actions Footer (Nudge & Unfollow) */}
                       <View style={styles.mutualActionsRow}>
-                        <TouchableOpacity
-                          style={[
-                            styles.calendarActionBtn,
-                            {
-                              backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
-                              borderColor: isDark ? '#334155' : '#C7D2FE',
-                            },
-                          ]}
-                          onPress={() => setSelectedSharedHabitProgress({ friendHabit, myHabit, friend })}
-                          activeOpacity={0.7}
-                        >
-                          <Calendar size={13} color="#6366F1" />
-                          <Text style={styles.calendarActionBtnText}>
-                            Weekly Progress
-                          </Text>
-                        </TouchableOpacity>
-
                         {!friendDone && (
                           <TouchableOpacity
                             style={styles.nudgeBtn}
@@ -2430,6 +2429,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  mutualHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 0,
+  },
   sharedStreakBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2602,70 +2607,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
+    gap: 8,
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: 'rgba(124, 92, 255, 0.1)',
   },
-  calendarActionBtn: {
-    flex: 1,
-    height: 36,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    borderWidth: 1,
-    gap: 4,
-  },
-  calendarActionBtnText: {
-    color: '#6366F1',
-    fontSize: 11,
-    fontWeight: '800',
-  },
   nudgeBtn: {
-    flex: 1.2,
-    height: 36,
+    flex: 1,
+    height: 38,
     backgroundColor: 'rgba(245, 158, 11, 0.15)',
     borderColor: '#F59E0B',
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    gap: 4,
+    borderRadius: 12,
+    gap: 6,
   },
   nudgeBtnText: {
     color: '#F59E0B',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
   },
   unfollowBtn: {
-    height: 36,
-    paddingHorizontal: 9,
+    height: 38,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    gap: 4,
+    gap: 5,
   },
   unfollowBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
   },
   celebratedBadge: {
-    flex: 1.2,
-    height: 36,
+    flex: 1,
+    height: 38,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderRadius: 10,
-    gap: 4,
+    borderRadius: 12,
+    gap: 5,
   },
   celebratedBadgeText: {
     color: '#10B981',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '900',
   },
   habitsWrapper: {
@@ -3040,12 +3030,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '900',
-  },
-  mutualHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
   },
   progressPillBtn: {
     flexDirection: 'row',
