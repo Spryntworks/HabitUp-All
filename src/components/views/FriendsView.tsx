@@ -70,6 +70,8 @@ export const FriendsView: React.FC = () => {
     createSharedHabit,
     nudgeFriend,
     removeFriend,
+    toggleCompletion,
+    toggleFriendHabitCompletion,
     setActiveTab,
     theme,
     showToast,
@@ -899,7 +901,7 @@ export const FriendsView: React.FC = () => {
                       >
                         <View style={styles.todayCheckinRow}>
                           {/* You Status Card */}
-                          <View
+                          <TouchableOpacity
                             style={[
                               styles.userCheckinCard,
                               {
@@ -907,18 +909,25 @@ export const FriendsView: React.FC = () => {
                                 borderColor: myDone ? '#10B981' : isDark ? '#23324C' : '#CBD5E1',
                               },
                             ]}
+                            onPress={() => toggleCompletion(myHabit.id)}
+                            activeOpacity={0.75}
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{user?.avatar || '🌟'}</Text>
-                              <Text
-                                style={[
-                                  styles.checkinUserName,
-                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                You
-                              </Text>
+                              <View>
+                                <Text
+                                  style={[
+                                    styles.checkinUserName,
+                                    { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  You
+                                </Text>
+                                <Text style={styles.checkinHintText}>
+                                  {myDone ? 'Checked in ✓' : 'Tap to check in'}
+                                </Text>
+                              </View>
                             </View>
                             <View
                               style={[
@@ -942,10 +951,10 @@ export const FriendsView: React.FC = () => {
                                 </>
                               )}
                             </View>
-                          </View>
+                          </TouchableOpacity>
 
                           {/* Friend Status Card */}
-                          <View
+                          <TouchableOpacity
                             style={[
                               styles.userCheckinCard,
                               {
@@ -953,18 +962,25 @@ export const FriendsView: React.FC = () => {
                                 borderColor: friendDone ? '#7C5CFF' : isDark ? '#23324C' : '#CBD5E1',
                               },
                             ]}
+                            onPress={() => toggleFriendHabitCompletion(friend.id, friendHabit.id)}
+                            activeOpacity={0.75}
                           >
                             <View style={styles.checkinUserMeta}>
                               <Text style={styles.checkinAvatar}>{friend.avatar || '👤'}</Text>
-                              <Text
-                                style={[
-                                  styles.checkinUserName,
-                                  { color: isDark ? '#FFFFFF' : '#0F172A' },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {friendShortName}
-                              </Text>
+                              <View>
+                                <Text
+                                  style={[
+                                    styles.checkinUserName,
+                                    { color: isDark ? '#FFFFFF' : '#0F172A' },
+                                  ]}
+                                  numberOfLines={1}
+                                >
+                                  {friendShortName}
+                                </Text>
+                                <Text style={styles.checkinHintText}>
+                                  {friendDone ? 'Checked in ✓' : 'Tap to check in'}
+                                </Text>
+                              </View>
                             </View>
                             <View
                               style={[
@@ -988,7 +1004,7 @@ export const FriendsView: React.FC = () => {
                                 </>
                               )}
                             </View>
-                          </View>
+                          </TouchableOpacity>
                         </View>
 
                         {/* Motivational Accountability Caption */}
@@ -1446,11 +1462,15 @@ export const FriendsView: React.FC = () => {
 
       {/* 6B. DEDICATED CALENDAR PROGRESS MODAL */}
       {selectedSharedHabitProgress && (() => {
-        const { friendHabit, myHabit, friend } = selectedSharedHabitProgress;
-        const friendDisplayName = formatFriendDisplayName(friend).displayName;
-        const friendShortName = (friend.name || friend.username || 'Friend').trim().split(' ')[0];
-        const myWeekly = getMyHabitWeeklyHistory(myHabit.id);
-        const friendWeekly = friendHabit.weeklyHistory || [false, false, false, false, false, false, false];
+        const { friendHabit: snapFh, myHabit: snapMh, friend: snapF } = selectedSharedHabitProgress;
+        const liveFriend = friends.find((f) => f.id === snapF.id) || snapF;
+        const liveFriendHabit = liveFriend.habits?.find((h) => h.id === snapFh.id || h.name.toLowerCase() === snapFh.name.toLowerCase()) || snapFh;
+        const liveMyHabit = habits.find((h) => h.id === snapMh.id) || snapMh;
+
+        const friendDisplayName = formatFriendDisplayName(liveFriend).displayName;
+        const friendShortName = (liveFriend.name || liveFriend.username || 'Friend').trim().split(' ')[0];
+        const myWeekly = getMyHabitWeeklyHistory(liveMyHabit.id);
+        const friendWeekly = liveFriendHabit.weeklyHistory || [false, false, false, false, false, false, false];
         const myCount = myWeekly.filter(Boolean).length;
         const friendCount = friendWeekly.filter(Boolean).length;
 
@@ -1474,10 +1494,10 @@ export const FriendsView: React.FC = () => {
                     <View
                       style={[
                         styles.habitIconBoxLarge,
-                        { backgroundColor: friendHabit.color || '#7C5CFF' },
+                        { backgroundColor: liveFriendHabit.color || '#7C5CFF' },
                       ]}
                     >
-                      <IconRenderer name={friendHabit.icon} size={20} color="#FFFFFF" />
+                      <IconRenderer name={liveFriendHabit.icon} size={20} color="#FFFFFF" />
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text
@@ -1487,7 +1507,7 @@ export const FriendsView: React.FC = () => {
                         ]}
                         numberOfLines={1}
                       >
-                        {friendHabit.name}
+                        {liveFriendHabit.name}
                       </Text>
                       <Text
                         style={[
@@ -1526,7 +1546,7 @@ export const FriendsView: React.FC = () => {
                         { color: isDark ? '#FFFFFF' : '#0F172A' },
                       ]}
                     >
-                      {friendHabit.currentStreak}d
+                      {liveFriendHabit.currentStreak}d
                     </Text>
                     <Text
                       style={[
@@ -1570,7 +1590,7 @@ export const FriendsView: React.FC = () => {
                       },
                     ]}
                   >
-                    <Text style={{ fontSize: 16 }}>{friend.avatar || '👤'}</Text>
+                    <Text style={{ fontSize: 16 }}>{liveFriend.avatar || '👤'}</Text>
                     <Text style={[styles.modalStatValue, { color: '#7C5CFF' }]}>
                       {friendCount}/7
                     </Text>
@@ -3113,5 +3133,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
+  },
+  checkinHintText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#7C5CFF',
+    marginTop: 1,
   },
 });
