@@ -2959,7 +2959,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (soundEnabled) soundService.playCompletionChime();
       showToast(
-        `Follow request sent to @${cleanHandle}! Habits will unlock once they accept ⏳`,
+        serverResult?.message?.includes('active') || serverResult?.message?.includes('already')
+          ? `Follow request is active for @${cleanHandle}! Habits will unlock once they accept ⏳`
+          : `Follow request sent to @${cleanHandle}! Habits will unlock once they accept ⏳`,
         undefined,
         'success'
       );
@@ -3152,9 +3154,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const targetEmail = target?.email || '';
 
       // 1. Remove friend on server if online and authenticated
-      if (!isOffline && isAuthenticated && localApi.hasAuthToken() && friendId && !friendId.startsWith('friend-')) {
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
         try {
-          await localApi.removeFriendOnServer(friendId);
+          let serverIdToRemove = friendId;
+          if (!serverIdToRemove || serverIdToRemove.startsWith('friend-')) {
+            if (targetUsername) {
+              const profile = await localApi.fetchUserProfileByUsername(targetUsername);
+              if (profile?.id) serverIdToRemove = profile.id;
+            }
+          }
+          if (serverIdToRemove && !serverIdToRemove.startsWith('friend-')) {
+            await localApi.removeFriendOnServer(serverIdToRemove);
+          }
         } catch (e) {
           console.warn('removeFriendOnServer error:', e);
         }

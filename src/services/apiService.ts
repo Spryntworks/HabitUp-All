@@ -957,9 +957,25 @@ class ApiClient {
           to_username: res.data?.to_username || clean,
         };
       }
+
+      // If already requested or already friends on backend (409 Conflict), resolve target ID and return success
+      if (res.status === 409 || /already|exist/i.test(res.error || '')) {
+        let targetId: string | undefined;
+        try {
+          const profile = await this.fetchUserProfileByUsername(clean);
+          if (profile?.id) targetId = profile.id;
+        } catch {}
+
+        return {
+          success: true,
+          message: `Follow request is active for @${clean}!`,
+          to_user_id: targetId,
+          to_username: clean,
+        };
+      }
+
       let err = res.error || '';
       if (res.status === 404) err = `@${clean} was not found on HabitUp.`;
-      else if (res.status === 409) err = `Follow request already sent to @${clean} or already friends.`;
       else if (res.status === 400) err = err || 'Cannot send request to this user.';
       return {
         success: false,
