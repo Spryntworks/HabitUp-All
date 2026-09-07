@@ -37,7 +37,7 @@ import { getDetectedTimezone } from '../../constants/timezones';
 import { PasswordStrengthIndicator, getPasswordStrength } from '../common/PasswordStrengthIndicator';
 
 export const AuthView: React.FC = () => {
-  const { login, register, socialLogin, showToast, theme } = useHabit();
+  const { login, register, showToast, theme } = useHabit();
   const isDark = theme === 'dark';
 
   const [authMode, setAuthMode] = useState<'welcome' | 'signin' | 'signup' | 'forgot'>('welcome');
@@ -545,15 +545,6 @@ export const AuthView: React.FC = () => {
                   I already have an account • Log In
                 </Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.guestLinkBtn}
-                onPress={() => socialLogin('google')}
-              >
-                <Text style={[styles.guestLinkText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                  Continue as Guest / Offline
-                </Text>
-              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -561,19 +552,6 @@ export const AuthView: React.FC = () => {
         {/* AUTH FORMS (SIGN IN / SIGN UP / FORGOT PASSWORD) */}
         {authMode !== 'welcome' && (
           <>
-            {/* Top Back Navigation to Welcome Screen */}
-            <TouchableOpacity
-              style={styles.topBackNav}
-              onPress={() => {
-                setAuthMode('welcome');
-                setAuthError(null);
-              }}
-              activeOpacity={0.7}
-            >
-              <ArrowLeft size={16} color="#818CF8" />
-              <Text style={styles.topBackNavText}>Back to Welcome</Text>
-            </TouchableOpacity>
-
             {/* Header Branding */}
             <View style={styles.header}>
               <HabitUpLogo size="md" />
@@ -726,21 +704,6 @@ export const AuthView: React.FC = () => {
                       <ArrowRight size={18} color="#FFFFFF" />
                     </>
                   )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.guestBtn,
-                    {
-                      borderColor: isDark ? '#334155' : '#E2E8F0',
-                      backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
-                    },
-                  ]}
-                  onPress={() => socialLogin('google')}
-                >
-                  <Text style={[styles.guestBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    Continue as Guest / Offline
-                  </Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -913,21 +876,6 @@ export const AuthView: React.FC = () => {
                     </>
                   )}
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.guestBtn,
-                    {
-                      borderColor: isDark ? '#334155' : '#E2E8F0',
-                      backgroundColor: isDark ? '#131C2E' : '#F8FAFC',
-                    },
-                  ]}
-                  onPress={() => socialLogin('google')}
-                >
-                  <Text style={[styles.guestBtnText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    Continue as Guest / Offline
-                  </Text>
-                </TouchableOpacity>
               </View>
             )}
 
@@ -1096,20 +1044,6 @@ const styles = StyleSheet.create({
     padding: 24,
     paddingTop: 36,
     minHeight: '100%',
-  },
-  // Top Back Nav
-  topBackNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-    paddingVertical: 4,
-    alignSelf: 'flex-start',
-  },
-  topBackNavText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#818CF8',
   },
   // Welcome Container & Carousel Styles
   welcomeContainer: {
@@ -1344,14 +1278,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
-  guestLinkBtn: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  guestLinkText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
   // Header Branding
   header: {
     alignItems: 'center',
@@ -1496,18 +1422,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#818CF8',
-  },
-  guestBtn: {
-    paddingVertical: 13,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-  },
-  guestBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
   },
   usernameHeaderRow: {
     flexDirection: 'row',
