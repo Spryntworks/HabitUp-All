@@ -670,12 +670,36 @@ export const FriendsView: React.FC = () => {
         const myDisplayName = user?.name ? user.name.split(' ')[0] : 'You';
         const isPendingSent = friend.requestStatus === 'pending_sent';
 
-        // Separate habits into Shared/Adopted vs Not Adopted
+        // Separate habits into Shared/Adopted vs Not Adopted (Strictly 1 habit per unique name)
         const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
         const unadoptedHabits: FriendPublicHabit[] = [];
+        const seenHabitNames = new Set<string>();
 
         if (!isPendingSent && Array.isArray(friend.habits)) {
-          friend.habits.forEach((fh) => {
+          // Deduplicate friend habits first
+          const uniqueFriendHabits: FriendPublicHabit[] = [];
+          const nameMap = new Map<string, FriendPublicHabit>();
+          for (const fh of friend.habits) {
+            const k = (fh.name || '').trim().toLowerCase();
+            if (!k) continue;
+            if (!nameMap.has(k)) {
+              nameMap.set(k, fh);
+              uniqueFriendHabits.push(fh);
+            } else {
+              const ex = nameMap.get(k)!;
+              if ((fh.currentStreak || 0) > (ex.currentStreak || 0) || (fh.isCompletedToday && !ex.isCompletedToday)) {
+                nameMap.set(k, fh);
+                const idx = uniqueFriendHabits.findIndex((h) => (h.name || '').trim().toLowerCase() === k);
+                if (idx >= 0) uniqueFriendHabits[idx] = fh;
+              }
+            }
+          }
+
+          uniqueFriendHabits.forEach((fh) => {
+            const cleanName = (fh.name || '').trim().toLowerCase();
+            if (seenHabitNames.has(cleanName)) return;
+            seenHabitNames.add(cleanName);
+
             const myMatch = findMatchingMyHabit(fh, friend);
             if (myMatch) {
               sharedHabits.push({ friendHabit: fh, myHabit: myMatch });

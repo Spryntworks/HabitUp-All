@@ -1077,14 +1077,16 @@ class ApiClient {
     const defaultHabits = this.getStorage<Habit[]>('habitup_habits_usr_default', []);
 
     const combined = [...directHabits, ...emailHabits, ...defaultHabits];
-    const seen = new Set<string>();
-    return combined.filter((h) => {
-      if (!h || !h.id) return false;
-      const key = `${h.id}_${h.name}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    const seenName = new Set<string>();
+    const result: Habit[] = [];
+    for (const h of combined) {
+      if (!h || !h.id) continue;
+      const cleanName = (h.name || '').trim().toLowerCase();
+      if (!cleanName || seenName.has(cleanName)) continue;
+      seenName.add(cleanName);
+      result.push(h);
+    }
+    return result;
   }
 
   saveHabits(habits: Habit[], targetUserId?: string): void {

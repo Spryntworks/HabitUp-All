@@ -158,15 +158,80 @@ interface HabitContextType {
 const HabitContext = createContext<HabitContextType | null>(null);
 
 function deduplicateHabits(list: Habit[]): Habit[] {
-  const seen = new Set<string>();
-  const result: Habit[] = [];
+  if (!Array.isArray(list)) return [];
+  const nameMap = new Map<string, Habit>();
+
   for (const h of list) {
-    if (h && h.id && !seen.has(h.id)) {
-      seen.add(h.id);
-      result.push(h);
+    if (!h || !h.id) continue;
+    const cleanName = (h.name || '').trim().toLowerCase();
+    if (!cleanName) continue;
+
+    const existing = nameMap.get(cleanName);
+    if (!existing) {
+      nameMap.set(cleanName, { ...h });
+    } else {
+      // Merge into the best habit record
+      const existingIsActive = !existing.deleted_at && !existing.archived_at;
+      const currentIsActive = !h.deleted_at && !h.archived_at;
+
+      // Prefer the active habit over a deleted/archived one
+      const base = (!existingIsActive && currentIsActive) ? h : existing;
+      const other = (!existingIsActive && currentIsActive) ? existing : h;
+
+      const merged: Habit = {
+        ...base,
+        is_shared: base.is_shared || other.is_shared || false,
+        buddy_id: base.buddy_id || other.buddy_id,
+        buddy_name: base.buddy_name || other.buddy_name,
+        buddy_avatar: base.buddy_avatar || other.buddy_avatar,
+        description: base.description || other.description,
+        icon: base.icon || other.icon || 'Target',
+        color: base.color || other.color || '#7C5CFF',
+        reminder_time: base.reminder_time || other.reminder_time,
+        reminder_enabled: base.reminder_enabled || other.reminder_enabled,
+      };
+
+      nameMap.set(cleanName, merged);
     }
   }
-  return result;
+
+  return Array.from(nameMap.values());
+}
+
+export function deduplicateFriendHabits(list: FriendPublicHabit[]): FriendPublicHabit[] {
+  if (!Array.isArray(list)) return [];
+  const nameMap = new Map<string, FriendPublicHabit>();
+
+  for (const fh of list) {
+    if (!fh || !fh.name) continue;
+    const cleanName = fh.name.trim().toLowerCase();
+    if (!cleanName) continue;
+
+    const existing = nameMap.get(cleanName);
+    if (!existing) {
+      nameMap.set(cleanName, { ...fh });
+    } else {
+      const bestStreak = Math.max(existing.currentStreak || 0, fh.currentStreak || 0);
+      const isDone = existing.isCompletedToday || fh.isCompletedToday;
+      const weekly = (existing.weeklyHistory || [false, false, false, false, false, false, false]).map(
+        (val, idx) => val || (fh.weeklyHistory && fh.weeklyHistory[idx]) || false
+      );
+
+      nameMap.set(cleanName, {
+        ...existing,
+        currentStreak: bestStreak,
+        isCompletedToday: isDone,
+        weeklyHistory: weekly,
+        adoptersCount: Math.max(existing.adoptersCount || 1, fh.adoptersCount || 1),
+        description: existing.description || fh.description,
+        icon: existing.icon || fh.icon || 'Target',
+        color: existing.color || fh.color || '#7C5CFF',
+        reminder_time: existing.reminder_time || fh.reminder_time || '08:00',
+      });
+    }
+  }
+
+  return Array.from(nameMap.values());
 }
 
 function deduplicateCompletions(list: HabitCompletion[]): HabitCompletion[] {
@@ -655,7 +720,7 @@ export async function getFriendPublicHabits(
     const activeHabits = matchedUserHabits.filter((h) => !h.deleted_at && !h.archived_at);
 
     if (activeHabits.length > 0) {
-      return activeHabits.map((h) => {
+      const mapped = activeHabits.map((h) => {
         const isDoneToday = matchedUserCompletions.some(
           (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === todayStr
         );
@@ -682,17 +747,18 @@ export async function getFriendPublicHabits(
           weeklyHistory,
         };
       });
+      return deduplicateFriendHabits(mapped);
     }
 
     // 3. Fallback to existing habits if any
     if (existingHabits && existingHabits.length > 0) {
-      return existingHabits;
+      return deduplicateFriendHabits(existingHabits);
     }
 
     // 4. Default starter public habits
-    return getDefaultFriendStarterHabits(friendName || 'Buddy');
+    return deduplicateFriendHabits(getDefaultFriendStarterHabits(friendName || 'Buddy'));
   } catch {
-    return getDefaultFriendStarterHabits(friendName || 'Buddy');
+    return deduplicateFriendHabits(getDefaultFriendStarterHabits(friendName || 'Buddy'));
   }
 }
 
@@ -803,15 +869,26 @@ async function syncMutualDataForUser(
       const partnerId = partner.id;
 
       // Ensure currentUser has this shared habit in their habits
-      const hasMyHabit = updatedHabits.some(
+      const existingMyHabit = updatedHabits.find(
         (h) =>
           !h.deleted_at &&
           !h.archived_at &&
-          h.name.trim().toLowerCase() === cleanHabitName &&
-          (h.buddy_id === partnerId || (h.buddy_name && h.buddy_name.toLowerCase() === partnerDisplayName.toLowerCase()))
+          (h.name || '').trim().toLowerCase() === cleanHabitName
       );
 
-      if (!hasMyHabit) {
+      if (existingMyHabit) {
+        updatedHabits = updatedHabits.map((h) =>
+          h.id === existingMyHabit.id
+            ? {
+                ...h,
+                is_shared: true,
+                buddy_id: partnerId || h.buddy_id,
+                buddy_name: partnerDisplayName || h.buddy_name,
+                buddy_avatar: partner.avatar || h.buddy_avatar || '🤝',
+              }
+            : h
+        );
+      } else {
         const newHabit: Habit = {
           id: `hab-shared-${mh.id}-${currentUser.id}`,
           user_id: currentUser.id,
@@ -842,7 +919,7 @@ async function syncMutualDataForUser(
 
         if (isThisPartner) {
           const hasFriendHabit = f.habits.some(
-            (fh) => fh.name.trim().toLowerCase() === cleanHabitName
+            (fh) => (fh.name || '').trim().toLowerCase() === cleanHabitName
           );
           if (!hasFriendHabit) {
             const myNameShort = currentUser.name ? currentUser.name.split(' ')[0] : 'You';
@@ -862,18 +939,21 @@ async function syncMutualDataForUser(
             };
             return {
               ...f,
-              habits: [publicHabit, ...f.habits],
+              habits: deduplicateFriendHabits([publicHabit, ...f.habits]),
             };
           }
         }
-        return f;
+        return {
+          ...f,
+          habits: deduplicateFriendHabits(f.habits || []),
+        };
       });
     }
   });
 
   return {
     habits: deduplicateHabits(updatedHabits),
-    friends: updatedFriends,
+    friends: updatedFriends.map((f) => ({ ...f, habits: deduplicateFriendHabits(f.habits || []) })),
   };
 }
 
@@ -1384,6 +1464,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             } else if (catalogHabits.length > 0) {
               mappedHabits = catalogHabits;
             }
+
+            mappedHabits = deduplicateFriendHabits(mappedHabits);
 
             if (mappedHabits.length > 0) {
               const bestStreak = Math.max(
@@ -2071,11 +2153,47 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const createHabit = useCallback(
     (habitData: Omit<Habit, 'id' | 'user_id' | 'created_at' | 'updated_at'>): Habit => {
       const now = new Date().toISOString();
+      const cleanName = (habitData.name || '').trim().toLowerCase();
       const tempId = `hab-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
       const resolvedScheduledDays =
         habitData.frequency_type === 'daily' || !habitData.scheduled_days || habitData.scheduled_days.length === 0
           ? [0, 1, 2, 3, 4, 5, 6]
           : habitData.scheduled_days;
+
+      // Check if habit with same name already exists
+      const existing = habits.find(
+        (h) => !h.deleted_at && !h.archived_at && (h.name || '').trim().toLowerCase() === cleanName
+      );
+
+      if (existing) {
+        const merged: Habit = {
+          ...existing,
+          ...habitData,
+          scheduled_days: resolvedScheduledDays,
+          is_shared: habitData.is_shared || existing.is_shared || false,
+          buddy_id: habitData.buddy_id || existing.buddy_id,
+          buddy_name: habitData.buddy_name || existing.buddy_name,
+          buddy_avatar: habitData.buddy_avatar || existing.buddy_avatar,
+          updated_at: now,
+        };
+
+        setHabits((prev) => deduplicateHabits(prev.map((h) => (h.id === existing.id ? merged : h))));
+        showToast(`Habit "${merged.name}" updated!`, undefined, 'success');
+
+        if (merged.reminder_enabled && merged.reminder_time) {
+          notificationService.scheduleReminder(merged);
+        }
+
+        if (isOffline) {
+          addMutationToQueue(`/habits/${existing.id}`, 'PATCH', merged);
+        } else {
+          localApi.updateHabitOnServer(existing.id, merged).catch(() => {
+            addMutationToQueue(`/habits/${existing.id}`, 'PATCH', merged);
+          });
+        }
+
+        return merged;
+      }
 
       const newHabit: Habit = {
         ...habitData,
@@ -2665,7 +2783,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             };
             return {
               ...f,
-              habits: [newFriendHabit, ...f.habits.filter((h) => h.name.toLowerCase() !== habitName.toLowerCase())],
+              habits: deduplicateFriendHabits([
+                newFriendHabit,
+                ...f.habits.filter((h) => (h.name || '').trim().toLowerCase() !== habitName.trim().toLowerCase()),
+              ]),
             };
           }
           return f;
@@ -3178,6 +3299,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           targetName
         );
       }
+
+      partnerHabits = deduplicateFriendHabits(partnerHabits);
 
       setFriends((prev) => {
         let updated: FriendUser[];
