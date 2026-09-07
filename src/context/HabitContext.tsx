@@ -363,33 +363,49 @@ async function saveMutualSharedHabit(
   }
 }
 
-async function removeMutualRecords(userIdOrEmail: string, friendIdOrEmail: string): Promise<void> {
+async function removeMutualRecords(
+  userIdOrEmail: string,
+  friendIdOrEmail: string,
+  friendUsername?: string,
+  friendName?: string
+): Promise<void> {
   try {
-    const uKey = userIdOrEmail.toLowerCase();
-    const fKey = friendIdOrEmail.toLowerCase();
+    const uKey = (userIdOrEmail || '').toLowerCase();
+    const fKey = (friendIdOrEmail || '').toLowerCase();
+    const fUser = (friendUsername || '').replace(/^@/, '').toLowerCase();
+    const fName = (friendName || '').toLowerCase();
+
+    const isMatch = (ref: MutualUserRef) => {
+      if (!ref) return false;
+      const rId = (ref.id || '').toLowerCase();
+      const rEmail = (ref.email || '').toLowerCase();
+      const rUser = (ref.username || '').replace(/^@/, '').toLowerCase();
+      const rName = (ref.name || '').toLowerCase();
+
+      return (
+        (fKey && (rId === fKey || rEmail === fKey)) ||
+        (fUser && (rUser === fUser || rId.includes(fUser))) ||
+        (fName && rName === fName)
+      );
+    };
+
+    const isUser = (ref: MutualUserRef) => {
+      if (!ref) return false;
+      const rId = (ref.id || '').toLowerCase();
+      const rEmail = (ref.email || '').toLowerCase();
+      return uKey && (rId === uKey || rEmail === uKey);
+    };
 
     const connections = await getMutualConnections();
     const filteredConns = connections.filter((c) => {
-      const aId = (c.userA.id || '').toLowerCase();
-      const aEmail = (c.userA.email || '').toLowerCase();
-      const bId = (c.userB.id || '').toLowerCase();
-      const bEmail = (c.userB.email || '').toLowerCase();
-      const match =
-        ((aId === uKey || aEmail === uKey) && (bId === fKey || bEmail === fKey)) ||
-        ((aId === fKey || aEmail === fKey) && (bId === uKey || bEmail === uKey));
+      const match = (isUser(c.userA) && isMatch(c.userB)) || (isUser(c.userB) && isMatch(c.userA)) || isMatch(c.userA) || isMatch(c.userB);
       return !match;
     });
     await AsyncStorage.setItem('habitup_mutual_connections_v1', JSON.stringify(filteredConns));
 
     const habitsList = await getMutualSharedHabits();
     const filteredHabits = habitsList.filter((h) => {
-      const aId = (h.userA.id || '').toLowerCase();
-      const aEmail = (h.userA.email || '').toLowerCase();
-      const bId = (h.userB.id || '').toLowerCase();
-      const bEmail = (h.userB.email || '').toLowerCase();
-      const match =
-        ((aId === uKey || aEmail === uKey) && (bId === fKey || bEmail === fKey)) ||
-        ((aId === fKey || aEmail === fKey) && (bId === uKey || bEmail === uKey));
+      const match = (isUser(h.userA) && isMatch(h.userB)) || (isUser(h.userB) && isMatch(h.userA)) || isMatch(h.userA) || isMatch(h.userB);
       return !match;
     });
     await AsyncStorage.setItem('habitup_mutual_shared_habits_v1', JSON.stringify(filteredHabits));
@@ -1214,14 +1230,36 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!currentUser || isOffline || !isAuthenticated || !localApi.hasAuthToken()) return;
       try {
         const serverFriends = await localApi.fetchFriendsFromServer();
-        if (!Array.isArray(serverFriends) || serverFriends.length === 0) return;
+        if (!Array.isArray(serverFriends)) return;
 
         const myId = (currentUser.id || '').toLowerCase();
         const myUsername = (currentUser.username || '').replace(/^@/, '').toLowerCase();
 
-        setFriends((prevFriends) => {
-          let updatedList = [...prevFriends];
+        // Server friend IDs and usernames currently active on Railway
+        const serverFriendIds = new Set(
+          serverFriends.map((sf) => (sf.friend_id || sf.id || '').toLowerCase()).filter(Boolean)
+        );
+        const serverFriendUsernames = new Set(
+          serverFriends.map((sf) => (sf.username || '').replace(/^@/, '').toLowerCase()).filter(Boolean)
+        );
 
+        setFriends((prevFriends) => {
+          // 1. Filter: Keep only friends that:
+          //    a) are in serverFriends (accepted), OR
+          //    b) have requestStatus === 'pending_sent' (locally requested, awaiting server accept)
+          let updatedList = prevFriends.filter((f) => {
+            const fId = (f.id || '').toLowerCase();
+            const fUsername = (f.username || '').replace(/^@/, '').toLowerCase();
+            if (f.requestStatus === 'pending_sent') {
+              return true;
+            }
+            if (f.isFriend && f.requestStatus === 'accepted') {
+              return serverFriendIds.has(fId) || serverFriendUsernames.has(fUsername);
+            }
+            return false;
+          });
+
+          // 2. Add or update friends from server
           for (const sf of serverFriends) {
             const fId = sf.friend_id || sf.id;
             const fUsername = (sf.username || '').replace(/^@/, '').toLowerCase();
@@ -1268,7 +1306,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return updatedList;
         });
 
-        // Now fetch each accepted friend's habits from Railway backend
+        // 3. Fetch each accepted friend's habits from Railway backend
         for (const sf of serverFriends) {
           const fId = sf.friend_id || sf.id;
           if (!fId || fId === myId) continue;
@@ -3086,6 +3124,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     async (friendId: string) => {
       const target = friends.find((f) => f.id === friendId);
       const name = target ? formatFriendDisplayName(target).displayName : 'Friend';
+      const targetUsername = target?.username ? target.username.replace(/^@/, '') : '';
+      const targetEmail = target?.email || '';
 
       // 1. Remove friend on server if online and authenticated
       if (!isOffline && isAuthenticated && localApi.hasAuthToken() && friendId && !friendId.startsWith('friend-')) {
@@ -3096,29 +3136,61 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // 2. Remove friend from active friends
+      // 2. Clean up stored follow requests if any pending
+      try {
+        const stored = await getStoredFollowRequests();
+        const pendingForThis = stored.filter((r) => {
+          const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
+          const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
+          const toId = (r.toUserId || '').toLowerCase();
+          const fromId = (r.fromUserId || '').toLowerCase();
+          const fIdLow = (friendId || '').toLowerCase();
+          const match =
+            (targetUsername && toU === targetUsername.toLowerCase()) ||
+            (targetUsername && fromU === targetUsername.toLowerCase()) ||
+            toId === fIdLow ||
+            fromId === fIdLow;
+          if (match && !isOffline && isAuthenticated && localApi.hasAuthToken() && r.id) {
+            localApi.rejectFriendRequestOnServer(r.id).catch(() => {});
+          }
+          return match;
+        });
+
+        if (pendingForThis.length > 0) {
+          const remainingReqs = stored.filter((r) => !pendingForThis.some((pr) => pr.id === r.id));
+          await saveStoredFollowRequests(remainingReqs);
+        }
+      } catch {}
+
+      // 3. Remove friend completely from active friends state
       setFriends((prev) =>
-        prev.map((f) =>
-          f.id === friendId
-            ? { ...f, isFriend: false, requestStatus: 'none' }
-            : f
-        )
+        prev.filter((f) => {
+          if (f.id === friendId) return false;
+          if (targetUsername && f.username && f.username.replace(/^@/, '').toLowerCase() === targetUsername.toLowerCase()) {
+            return false;
+          }
+          return true;
+        })
       );
 
-      // 3. Remove mutual cross-account records
+      // 4. Remove mutual cross-account records from AsyncStorage
       if (user) {
-        removeMutualRecords(user.id, friendId);
-        if (user.email && target?.email) {
-          removeMutualRecords(user.email, target.email);
+        await removeMutualRecords(user.id, friendId, targetUsername, target?.name);
+        if (user.email) {
+          await removeMutualRecords(user.email, targetEmail || friendId, targetUsername, target?.name);
         }
       }
 
-      // 4. Remove all habits created with or adopted from this friend
+      // 5. Remove all habits created with or adopted from this friend
       const removedHabitIds: string[] = [];
       setHabits((prev) => {
         const remaining: Habit[] = [];
         for (const h of prev) {
-          if (h.buddy_id === friendId) {
+          if (
+            h.buddy_id === friendId ||
+            (targetUsername && h.buddy_name && h.buddy_name.toLowerCase() === targetUsername.toLowerCase()) ||
+            (target?.name && h.buddy_name && h.buddy_name.toLowerCase() === target.name.toLowerCase())
+          ) {
             removedHabitIds.push(h.id);
           } else {
             remaining.push(h);
@@ -3127,7 +3199,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return remaining;
       });
 
-      // 5. Remove completions for those removed habits
+      // 6. Remove completions for those removed habits
       if (removedHabitIds.length > 0) {
         const removedSet = new Set(removedHabitIds);
         setCompletions((prev) => prev.filter((c) => !removedSet.has(c.habit_id)));
@@ -3146,18 +3218,19 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (user) {
         syncFriendsWithBackend(user);
+        syncFollowRequests(user);
       }
 
       if (soundEnabled) soundService.playClickSound();
       showToast(
         removedHabitIds.length > 0
-          ? `Removed ${name} and ${removedHabitIds.length} shared habit${removedHabitIds.length === 1 ? '' : 's'}.`
-          : `Removed ${name} from habit buddies.`,
+          ? `Unfollowed ${name} and removed ${removedHabitIds.length} shared habit${removedHabitIds.length === 1 ? '' : 's'}.`
+          : `Unfollowed ${name}.`,
         undefined,
         'info'
       );
     },
-    [friends, soundEnabled, isOffline, isAuthenticated, addMutationToQueue, showToast, user, syncFriendsWithBackend]
+    [friends, soundEnabled, isOffline, isAuthenticated, addMutationToQueue, showToast, user, syncFriendsWithBackend, syncFollowRequests]
   );
 
   return (

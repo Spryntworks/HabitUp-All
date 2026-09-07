@@ -116,7 +116,9 @@ export const FriendsView: React.FC = () => {
 
   const connectedFriends = useMemo(() => {
     return friends.filter((f) => {
-      if (!f.isFriend && f.requestStatus === 'none') return false;
+      if (!f || !f.id) return false;
+      if (!f.isFriend && f.requestStatus !== 'pending_sent') return false;
+      if (f.requestStatus === 'none') return false;
       if (user?.id && f.id === user.id) return false;
       if (user?.email && f.email && f.email.toLowerCase() === user.email.toLowerCase()) return false;
       const myName = (user?.name || '').trim().toLowerCase();
@@ -1755,6 +1757,12 @@ export const FriendsView: React.FC = () => {
                 style={styles.confirmDeleteBtn}
                 onPress={() => {
                   if (friendToRemove) {
+                    const clean = (friendToRemove.username || '').replace(/^@/, '').toLowerCase();
+                    setFollowingMap((prev) => {
+                      const copy = { ...prev };
+                      delete copy[clean];
+                      return copy;
+                    });
                     removeFriend(friendToRemove.id);
                     setFriendToRemove(null);
                   }
@@ -1763,7 +1771,7 @@ export const FriendsView: React.FC = () => {
               >
                 <UserMinus size={14} color="#FFFFFF" strokeWidth={2.5} />
                 <Text style={styles.confirmDeleteBtnText}>
-                  {friendToRemove?.requestStatus === 'pending_sent' ? 'Cancel Request' : 'Remove'}
+                  {friendToRemove?.requestStatus === 'pending_sent' ? 'Cancel Request' : 'Unfollow'}
                 </Text>
               </TouchableOpacity>
             </View>
