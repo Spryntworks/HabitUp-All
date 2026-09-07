@@ -254,8 +254,16 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
+
     try {
-      let res = await fetch(url, { ...options, headers });
+      let res = await fetch(url, {
+        ...options,
+        headers,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+      if (timeoutId) clearTimeout(timeoutId);
 
       if (
         res.status === 401 &&
@@ -295,6 +303,7 @@ class ApiClient {
 
       return { ok: true, status: res.status, data: json };
     } catch (err: any) {
+      if (timeoutId) clearTimeout(timeoutId);
       return { ok: false, status: 0, error: err?.message || 'Network connection error' };
     }
   }

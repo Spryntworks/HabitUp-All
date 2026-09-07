@@ -10,6 +10,8 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useHabit } from '../../context/HabitContext';
 import { apiService } from '../../services/apiService';
 import {
@@ -38,6 +40,7 @@ import { PasswordStrengthIndicator, getPasswordStrength } from '../common/Passwo
 
 export const AuthView: React.FC = () => {
   const { login, register, showToast, theme } = useHabit();
+  const insets = useSafeAreaInsets();
   const isDark = theme === 'dark';
 
   const [authMode, setAuthMode] = useState<'welcome' | 'signin' | 'signup' | 'forgot'>('welcome');
@@ -381,25 +384,35 @@ export const AuthView: React.FC = () => {
     );
   };
 
+  const topPadding = Platform.OS === 'android' ? Math.max(insets.top, 28) : Math.max(insets.top, 24);
+  const bottomPadding = Math.max(insets.bottom, 16);
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1, backgroundColor: isDark ? '#080E1A' : '#F8FAFC' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContainer,
-          { backgroundColor: isDark ? '#080E1A' : '#F8FAFC' },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* OPTION A: WELCOME / ONBOARDING LANDING SCREEN */}
-        {authMode === 'welcome' && (
-          <View style={styles.welcomeContainer}>
-            {/* Top Navigation Bar with Logo & Skip */}
-            <View style={styles.welcomeTopBar}>
-              <HabitUpLogo size="sm" />
-              <TouchableOpacity
+      <StatusBar style={isDark ? 'light' : 'dark'} translucent />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[
+            styles.scrollContainer,
+            {
+              backgroundColor: isDark ? '#080E1A' : '#F8FAFC',
+              paddingTop: topPadding,
+              paddingBottom: bottomPadding,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* OPTION A: WELCOME / ONBOARDING LANDING SCREEN */}
+          {authMode === 'welcome' && (
+            <View style={styles.welcomeContainer}>
+              {/* Top Navigation Bar with Logo & Skip */}
+              <View style={styles.welcomeTopBar}>
+                <HabitUpLogo size="sm" />
+                <TouchableOpacity
                 style={[
                   styles.welcomeSkipBtn,
                   { backgroundColor: isDark ? '#131C2E' : '#E2E8F0' },
@@ -1041,9 +1054,8 @@ export const AuthView: React.FC = () => {
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    padding: 24,
-    paddingTop: 36,
-    minHeight: '100%',
+    paddingHorizontal: 24,
+    flexGrow: 1,
   },
   // Welcome Container & Carousel Styles
   welcomeContainer: {

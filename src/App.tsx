@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { HabitProvider, useHabit } from './context/HabitContext';
 import { requestNotificationPermission } from './services/notificationService';
 import { HabitUpLogo } from './components/common/HabitUpLogo';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { MobileShell } from './components/mobile/MobileShell';
 import { AuthView } from './components/views/AuthView';
 import { HomeView } from './components/views/HomeView';
@@ -22,14 +23,22 @@ import { NotificationBanner } from './components/common/NotificationBanner';
 
 const AppContent: React.FC = () => {
   const { activeTab, isAuthenticated, isAuthLoading } = useHabit();
+  const [safetyTimedOut, setSafetyTimedOut] = useState(false);
 
   useEffect(() => {
     // Request system notification permission immediately upon app startup
     requestNotificationPermission().catch(() => {});
+
+    // Safety fallback timer: guarantee app resolves loading screen within 2.5 seconds
+    const timer = setTimeout(() => {
+      setSafetyTimedOut(true);
+    }, 2500);
+
+    return () => clearTimeout(timer);
   }, []);
 
-  // Prevent flicker / visual glitch while restoring stored session
-  if (isAuthLoading) {
+  // Prevent flicker while restoring stored session, but never block indefinitely
+  if (isAuthLoading && !safetyTimedOut) {
     return (
       <View style={{ flex: 1, backgroundColor: '#0B1120', alignItems: 'center', justifyContent: 'center' }}>
         <HabitUpLogo size="md" themeMode="dark" />
@@ -68,9 +77,11 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <HabitProvider>
-        <AppContent />
-      </HabitProvider>
+      <ErrorBoundary>
+        <HabitProvider>
+          <AppContent />
+        </HabitProvider>
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }
