@@ -838,14 +838,29 @@ class ApiClient {
 
   async searchUsersByUsername(query: string): Promise<{ id: string; username: string; name?: string }[]> {
     const clean = query.trim().replace(/^@/, '');
-    if (!clean || clean.length < 2) return [];
+    if (!clean) return [];
     try {
-      const res = await this.request<{ results: Array<{ id: string; username: string; name?: string }> }>(
-        `/users/search?query=${encodeURIComponent(clean)}`
-      );
-      if (res.ok && Array.isArray(res.data?.results)) {
-        return res.data.results;
+      const results: Array<{ id: string; username: string; name?: string }> = [];
+      if (clean.length >= 3) {
+        const res = await this.request<{ results: Array<{ id: string; username: string; name?: string }> }>(
+          `/users/search?query=${encodeURIComponent(clean)}`
+        );
+        if (res.ok && Array.isArray(res.data?.results)) {
+          results.push(...res.data.results);
+        }
       }
+      // If query is < 3 chars or returned 0 results, try exact profile lookup
+      if (results.length === 0 && clean.length >= 1) {
+        const direct = await this.fetchUserProfileByUsername(clean);
+        if (direct && direct.id) {
+          results.push({
+            id: direct.id,
+            username: direct.username,
+            name: direct.username,
+          });
+        }
+      }
+      return results;
     } catch (err) {
       console.warn('searchUsersByUsername error:', err);
     }
@@ -868,22 +883,48 @@ class ApiClient {
     return null;
   }
 
-  async sendFriendRequestByUsername(username: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  async sendFriendRequestByUsername(username: string): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    request_id?: string;
+    from_user_id?: string;
+    to_user_id?: string;
+    to_username?: string;
+  }> {
     const clean = username.trim().replace(/^@/, '');
     if (!clean) {
       return { success: false, error: 'Username handle is required.' };
     }
     try {
-      const res = await this.request<{ message?: string; request_id?: string }>('/friends/request', {
+      const res = await this.request<{
+        message?: string;
+        request_id?: string;
+        from_user_id?: string;
+        to_user_id?: string;
+        to_username?: string;
+        status?: string;
+      }>('/friends/request', {
         method: 'POST',
         body: JSON.stringify({ username: clean }),
       });
       if (res.ok) {
-        return { success: true, message: res.data?.message || 'Follow request sent successfully!' };
+        return {
+          success: true,
+          message: res.data?.message || 'Follow request sent successfully!',
+          request_id: res.data?.request_id,
+          from_user_id: res.data?.from_user_id,
+          to_user_id: res.data?.to_user_id,
+          to_username: res.data?.to_username || clean,
+        };
       }
+      let err = res.error || '';
+      if (res.status === 404) err = `@${clean} was not found on HabitUp.`;
+      else if (res.status === 409) err = `Follow request already sent to @${clean} or already friends.`;
+      else if (res.status === 400) err = err || 'Cannot send request to this user.';
       return {
         success: false,
-        error: res.error || (res.status === 404 ? 'User not found.' : res.status === 409 ? 'Follow request already sent or already friends.' : 'Failed to send follow request.'),
+        error: err || 'Failed to send follow request.',
       };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Network error.' };
@@ -892,9 +933,10 @@ class ApiClient {
 
   async fetchPendingFriendRequests(): Promise<any[]> {
     try {
-      const res = await this.request<{ requests: any[] } | any[]>('/friends/requests');
+      const res = await this.request<{ pending_requests?: any[]; requests?: any[] } | any[]>('/friends/requests');
       if (res.ok && res.data) {
         if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray((res.data as any).pending_requests)) return (res.data as any).pending_requests;
         if (Array.isArray((res.data as any).requests)) return (res.data as any).requests;
       }
     } catch {
@@ -903,10 +945,10 @@ class ApiClient {
     return [];
   }
 
-  async acceptFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string }> {
+  async acceptFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string; friendship_id?: string }> {
     try {
-      const res = await this.request(`/friends/requests/${requestId}/accept`, { method: 'POST' });
-      return { success: res.ok, error: res.error };
+      const res = await this.request<{ friendship_id?: string }>(`/friends/requests/${requestId}/accept`, { method: 'POST' });
+      return { success: res.ok, error: res.error, friendship_id: res.data?.friendship_id };
     } catch (err: any) {
       return { success: false, error: err?.message };
     }
@@ -936,9 +978,10 @@ class ApiClient {
 
   async fetchFriendHabitsFromServer(friendId: string): Promise<BackendHabit[]> {
     try {
-      const res = await this.request<{ habits: BackendHabit[] }>(`/friends/${friendId}/habits`);
-      if (res.ok && Array.isArray(res.data?.habits)) {
-        return res.data.habits;
+      const res = await this.request<{ habits: BackendHabit[] } | BackendHabit[]>(`/friends/${friendId}/habits`);
+      if (res.ok && res.data) {
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray((res.data as any).habits)) return (res.data as any).habits;
       }
     } catch {
       // ignore

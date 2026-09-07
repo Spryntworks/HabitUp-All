@@ -1208,19 +1208,132 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [activeTab]);
 
+  // Sync backend friends and their live public habits
+  const syncFriendsWithBackend = useCallback(
+    async (currentUser: UserProfile | null) => {
+      if (!currentUser || isOffline || !isAuthenticated || !localApi.hasAuthToken()) return;
+      try {
+        const serverFriends = await localApi.fetchFriendsFromServer();
+        if (!Array.isArray(serverFriends) || serverFriends.length === 0) return;
+
+        const myId = (currentUser.id || '').toLowerCase();
+        const myUsername = (currentUser.username || '').replace(/^@/, '').toLowerCase();
+
+        setFriends((prevFriends) => {
+          let updatedList = [...prevFriends];
+
+          for (const sf of serverFriends) {
+            const fId = sf.friend_id || sf.id;
+            const fUsername = (sf.username || '').replace(/^@/, '').toLowerCase();
+            if (!fUsername || fId === myId || fUsername === myUsername) continue;
+
+            const fDisplayName = sf.name || (fUsername.charAt(0).toUpperCase() + fUsername.slice(1));
+            const usernameTag = `@${fUsername}`;
+
+            const existingIdx = updatedList.findIndex(
+              (f) =>
+                f.id === fId ||
+                (f.username && f.username.replace(/^@/, '').toLowerCase() === fUsername)
+            );
+
+            if (existingIdx >= 0) {
+              updatedList[existingIdx] = {
+                ...updatedList[existingIdx],
+                id: fId,
+                name: updatedList[existingIdx].name || fDisplayName,
+                username: usernameTag,
+                isFriend: true,
+                requestStatus: 'accepted',
+                currentStreak: sf.best_streak !== undefined ? sf.best_streak : updatedList[existingIdx].currentStreak,
+                totalCompletions: sf.total_habits !== undefined ? sf.total_habits : updatedList[existingIdx].totalCompletions,
+              };
+            } else {
+              updatedList.push({
+                id: fId,
+                name: fDisplayName,
+                username: usernameTag,
+                email: `${fUsername}@gmail.com`,
+                avatar: '🤝',
+                bio: 'Habit buddy on HabitUp! Building streaks together.',
+                plantStage: '🌱 Fresh Seedling (Lvl 1)',
+                currentStreak: sf.best_streak || 0,
+                totalCompletions: sf.total_habits || 0,
+                isFriend: true,
+                requestStatus: 'accepted',
+                habits: [],
+              });
+            }
+          }
+
+          return updatedList;
+        });
+
+        // Now fetch each accepted friend's habits from Railway backend
+        for (const sf of serverFriends) {
+          const fId = sf.friend_id || sf.id;
+          if (!fId || fId === myId) continue;
+          try {
+            const backendHabits = await localApi.fetchFriendHabitsFromServer(fId);
+            if (Array.isArray(backendHabits)) {
+              const mappedHabits: FriendPublicHabit[] = backendHabits
+                .filter((bh) => !bh.deleted_at && !bh.archived_at)
+                .map((bh) => {
+                  const freq = bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days';
+                  const scheduled_days = Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6];
+                  return {
+                    id: bh.id,
+                    name: bh.name,
+                    description: bh.description || undefined,
+                    icon: bh.icon || 'Target',
+                    color: bh.color || '#7C5CFF',
+                    frequency_type: freq,
+                    scheduled_days,
+                    reminder_time: '08:00',
+                    currentStreak: bh.streak || 0,
+                    isCompletedToday: false,
+                    adoptersCount: 1,
+                    weeklyHistory: [false, false, false, false, false, false, false],
+                  };
+                });
+
+              setFriends((prevFriends) =>
+                prevFriends.map((f) => {
+                  if (
+                    f.id === fId ||
+                    (f.username && f.username.replace(/^@/, '').toLowerCase() === (sf.username || '').replace(/^@/, '').toLowerCase())
+                  ) {
+                    return {
+                      ...f,
+                      habits: mappedHabits.length > 0 ? mappedHabits : f.habits,
+                    };
+                  }
+                  return f;
+                })
+              );
+            }
+          } catch {}
+        }
+      } catch (err) {
+        console.warn('syncFriendsWithBackend error:', err);
+      }
+    },
+    [isOffline, isAuthenticated]
+  );
+
   // Sync incoming follow requests from local storage and backend
   const syncFollowRequests = useCallback(
     async (currentUser: UserProfile | null) => {
       if (!currentUser) return;
       try {
-        const myUsername =
+        const myUsername = (
           currentUser.username ||
           (currentUser.name
             ? `@${currentUser.name.toLowerCase().replace(/[^a-z0-9]/g, '')}`
-            : '');
-        const myCleanHandle = myUsername.replace(/^@/, '').toLowerCase();
+            : '')
+        ).replace(/^@/, '').toLowerCase();
+        const myCleanHandle = myUsername;
         const myEmail = (currentUser.email || '').toLowerCase();
-        const myId = currentUser.id || '';
+        const myId = (currentUser.id || '').toLowerCase();
 
         // 1. Fetch locally stored follow requests
         const stored = await getStoredFollowRequests();
@@ -1236,37 +1349,54 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // Merge server & local requests
         const combined: FollowRequestItem[] = [...stored];
         for (const sr of serverRequests) {
-          const exists = combined.some(
+          const sReqId = sr.request_id || sr.id;
+          const sFromUserId = sr.from_user_id || sr.fromUserId || sr.senderId || sr.user_id;
+          const sFromUsername = sr.from_username || sr.fromUsername || sr.senderUsername || (sr.username ? `@${sr.username}` : '@friend');
+          const sCleanFromUser = sFromUsername.replace(/^@/, '');
+          const sFromName = sr.from_name || sr.fromName || sr.name || (sCleanFromUser.charAt(0).toUpperCase() + sCleanFromUser.slice(1)) || 'Friend';
+          const sCreatedAt = sr.created_at || sr.createdAt || new Date().toISOString();
+          const sTotalHabits = sr.total_habits !== undefined ? sr.total_habits : 0;
+          const sBestStreak = sr.best_streak !== undefined ? sr.best_streak : 0;
+
+          const existsIdx = combined.findIndex(
             (r) =>
-              r.id === sr.id ||
-              (r.fromUserId === sr.fromUserId && r.toUserId === sr.toUserId)
+              r.id === sReqId ||
+              (r.fromUserId === sFromUserId && r.status === 'pending')
           );
-          if (!exists) {
-            combined.push({
-              id: sr.id || `req-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              fromUserId: sr.fromUserId || sr.senderId || sr.user_id,
-              fromName: sr.fromName || sr.senderName || sr.name || 'Friend',
-              fromUsername:
-                sr.fromUsername ||
-                sr.senderUsername ||
-                `@${(sr.fromName || 'friend').toLowerCase().replace(/[^a-z0-9]/g, '')}`,
-              fromAvatar: sr.fromAvatar || sr.senderAvatar || '🤝',
-              toUserId: sr.toUserId || myId,
-              toUsername: sr.toUsername || myUsername,
-              status: 'pending',
-              createdAt: sr.createdAt || new Date().toISOString(),
-            });
+
+          const reqItem: FollowRequestItem = {
+            id: sReqId || `req-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            fromUserId: sFromUserId || `friend-${sCleanFromUser}`,
+            fromName: sFromName,
+            fromUsername: sFromUsername.startsWith('@') ? sFromUsername : `@${sFromUsername}`,
+            fromAvatar: sr.fromAvatar || sr.senderAvatar || '🤝',
+            toUserId: currentUser.id,
+            toUsername: `@${myCleanHandle}`,
+            status: 'pending',
+            createdAt: sCreatedAt,
+            totalHabits: sTotalHabits,
+            bestStreak: sBestStreak,
+          };
+
+          if (existsIdx >= 0) {
+            combined[existsIdx] = reqItem;
+          } else {
+            combined.unshift(reqItem);
           }
         }
 
         // Filter incoming requests addressed to current user
         const pendingForMe = combined.filter((r) => {
           if (r.status !== 'pending') return false;
+          // Server requests fetched via /friends/requests are inherently addressed to the authenticated user!
+          if (serverRequests.some((sr) => (sr.request_id && sr.request_id === r.id) || (sr.id && sr.id === r.id))) {
+            return true;
+          }
           const toHandle = (r.toUsername || '').replace(/^@/, '').toLowerCase();
           const toId = (r.toUserId || '').toLowerCase();
           return (
             (toHandle && (toHandle === myCleanHandle || (myEmail && toHandle === myEmail))) ||
-            (toId && myId && (toId === myId.toLowerCase() || toId.includes(myCleanHandle)))
+            (toId && myId && (toId === myId || toId.includes(myCleanHandle)))
           );
         });
 
@@ -1278,20 +1408,26 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [isOffline, isAuthenticated]
   );
 
-  // Poll for incoming follow requests and delivery updates
+  // Poll for incoming follow requests and friends updates
   useEffect(() => {
     if (user) {
       syncFollowRequests(user);
+      if (activeTab === 'friends') {
+        syncFriendsWithBackend(user);
+      }
     }
-  }, [user, activeTab, syncFollowRequests]);
+  }, [user, activeTab, syncFollowRequests, syncFriendsWithBackend]);
 
   useEffect(() => {
     if (!user) return;
     const interval = setInterval(() => {
       syncFollowRequests(user);
+      if (activeTab === 'friends' && isAuthenticated && !isOffline) {
+        syncFriendsWithBackend(user);
+      }
     }, 4000);
     return () => clearInterval(interval);
-  }, [user, syncFollowRequests]);
+  }, [user, activeTab, isAuthenticated, isOffline, syncFollowRequests, syncFriendsWithBackend]);
 
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {
@@ -2677,11 +2813,23 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return { success: true, message: 'Request already pending' };
       }
 
-      // 3. Send to server if online
-      if (!isOffline && isAuthenticated) {
+      // 3. Send to server if online & authenticated
+      let serverResult: {
+        success: boolean;
+        message?: string;
+        error?: string;
+        request_id?: string;
+        to_user_id?: string;
+      } | null = null;
+
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
         try {
-          await localApi.sendFriendRequestByUsername(cleanHandle);
-        } catch (e) {
+          serverResult = await localApi.sendFriendRequestByUsername(cleanHandle);
+          if (!serverResult.success) {
+            showToast(serverResult.error || `Could not send request to @${cleanHandle}`, undefined, 'warning');
+            return { success: false, error: serverResult.error };
+          }
+        } catch (e: any) {
           console.warn('Backend sendFriendRequestByUsername error:', e);
         }
       }
@@ -2695,9 +2843,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       else if (cleanHandle === 'sarah') displayName = 'Sarah';
       else if (cleanHandle === 'john') displayName = 'John';
 
+      const targetFriendId =
+        serverResult?.to_user_id ||
+        existingFriend?.id ||
+        `friend-${cleanHandle}-${Date.now()}`;
+
       // 5. Create friend entry with requestStatus: 'pending_sent' (Habits are LOCKED until accepted)
       const pendingBuddy: FriendUser = {
-        id: existingFriend?.id || `friend-${cleanHandle}-${Date.now()}`,
+        id: targetFriendId,
         name: displayName,
         username: `@${cleanHandle}`,
         email: `${cleanHandle}@gmail.com`,
@@ -2723,19 +2876,24 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // 6. Record in stored follow requests
       const stored = await getStoredFollowRequests();
       const newReq: FollowRequestItem = {
-        id: `req-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        id: serverResult?.request_id || `req-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
         fromUserId: user?.id || 'usr_default',
         fromName: user?.name || 'You',
         fromUsername:
           user?.username ||
           (user?.name ? `@${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}` : '@user'),
         fromAvatar: user?.avatar || '🌟',
-        toUserId: pendingBuddy.id,
+        toUserId: targetFriendId,
         toUsername: `@${cleanHandle}`,
         status: 'pending',
         createdAt: new Date().toISOString(),
       };
       await saveStoredFollowRequests([newReq, ...stored]);
+
+      if (user) {
+        syncFollowRequests(user);
+        syncFriendsWithBackend(user);
+      }
 
       if (soundEnabled) soundService.playCompletionChime();
       showToast(
@@ -2745,13 +2903,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
       return { success: true };
     },
-    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast]
+    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast, syncFollowRequests, syncFriendsWithBackend]
   );
 
   const acceptFollowRequest = useCallback(
     async (requestId: string, friendUsername?: string) => {
       // 1. Send accept to server if online
-      if (!isOffline && isAuthenticated) {
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
         try {
           await localApi.acceptFriendRequestOnServer(requestId);
         } catch (e) {
@@ -2779,11 +2937,39 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const targetAvatar = req?.fromAvatar || '🤝';
       const targetId = req?.fromUserId || `friend-${targetClean}-${Date.now()}`;
 
-      const partnerHabits = await getFriendPublicHabits(
-        targetId,
-        `${targetClean}@gmail.com`,
-        targetName
-      );
+      // 5. Fetch partner habits from server if available
+      let partnerHabits: FriendPublicHabit[] = [];
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken() && req?.fromUserId) {
+        try {
+          const backendHabits = await localApi.fetchFriendHabitsFromServer(req.fromUserId);
+          if (Array.isArray(backendHabits) && backendHabits.length > 0) {
+            partnerHabits = backendHabits
+              .filter((bh) => !bh.deleted_at && !bh.archived_at)
+              .map((bh) => ({
+                id: bh.id,
+                name: bh.name,
+                description: bh.description || undefined,
+                icon: bh.icon || 'Target',
+                color: bh.color || '#7C5CFF',
+                frequency_type: bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days',
+                scheduled_days: Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6],
+                reminder_time: '08:00',
+                currentStreak: bh.streak || 0,
+                isCompletedToday: false,
+                adoptersCount: 1,
+                weeklyHistory: [false, false, false, false, false, false, false],
+              }));
+          }
+        } catch {}
+      }
+
+      if (partnerHabits.length === 0) {
+        partnerHabits = await getFriendPublicHabits(
+          targetId,
+          `${targetClean}@gmail.com`,
+          targetName
+        );
+      }
 
       setFriends((prev) => {
         const existing = prev.find(
@@ -2807,8 +2993,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             avatar: targetAvatar,
             bio: 'Habit buddy on HabitUp! Building streaks together.',
             plantStage: '🌱 Fresh Seedling (Lvl 1)',
-            currentStreak: req?.bestStreak || 3,
-            totalCompletions: req?.totalHabits || 5,
+            currentStreak: req?.bestStreak || 0,
+            totalCompletions: req?.totalHabits || 0,
             isFriend: true,
             requestStatus: 'accepted',
             habits: partnerHabits,
@@ -2817,7 +3003,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       });
 
-      // 5. Save cross-account mutual connection
+      // 6. Save cross-account mutual connection
       const currentUserRef: MutualUserRef = {
         id: user?.id || 'usr_default',
         name: user?.name || 'User',
@@ -2836,6 +3022,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
       saveMutualConnection(currentUserRef, buddyUserRef);
 
+      if (user) {
+        syncFriendsWithBackend(user);
+        syncFollowRequests(user);
+      }
+
       if (soundEnabled) soundService.playCompletionChime();
       showToast(
         `Accepted follow request from @${targetClean}! You can now view and follow each other's habits 🤝`,
@@ -2843,12 +3034,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         'success'
       );
     },
-    [isOffline, isAuthenticated, user, soundEnabled, showToast]
+    [isOffline, isAuthenticated, user, soundEnabled, showToast, syncFriendsWithBackend, syncFollowRequests]
   );
 
   const declineFollowRequest = useCallback(
     async (requestId: string) => {
-      if (!isOffline && isAuthenticated) {
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
         try {
           await localApi.rejectFriendRequestOnServer(requestId);
         } catch (e) {
@@ -2861,10 +3052,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await saveStoredFollowRequests(updatedStored);
 
       setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      if (user) {
+        syncFollowRequests(user);
+      }
       if (soundEnabled) soundService.playClickSound();
       showToast('Declined follow request.', undefined, 'info');
     },
-    [isOffline, isAuthenticated, soundEnabled, showToast]
+    [isOffline, isAuthenticated, soundEnabled, showToast, user, syncFollowRequests]
   );
 
   const unfollowFriendHabit = useCallback(
@@ -2889,11 +3083,20 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const removeFriend = useCallback(
-    (friendId: string) => {
+    async (friendId: string) => {
       const target = friends.find((f) => f.id === friendId);
       const name = target ? formatFriendDisplayName(target).displayName : 'Friend';
 
-      // 1. Remove friend from active friends
+      // 1. Remove friend on server if online and authenticated
+      if (!isOffline && isAuthenticated && localApi.hasAuthToken() && friendId && !friendId.startsWith('friend-')) {
+        try {
+          await localApi.removeFriendOnServer(friendId);
+        } catch (e) {
+          console.warn('removeFriendOnServer error:', e);
+        }
+      }
+
+      // 2. Remove friend from active friends
       setFriends((prev) =>
         prev.map((f) =>
           f.id === friendId
@@ -2902,7 +3105,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         )
       );
 
-      // 2. Remove mutual cross-account records
+      // 3. Remove mutual cross-account records
       if (user) {
         removeMutualRecords(user.id, friendId);
         if (user.email && target?.email) {
@@ -2910,7 +3113,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // 2. Remove all habits created with or adopted from this friend
+      // 4. Remove all habits created with or adopted from this friend
       const removedHabitIds: string[] = [];
       setHabits((prev) => {
         const remaining: Habit[] = [];
@@ -2924,7 +3127,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return remaining;
       });
 
-      // 3. Remove completions for those removed habits
+      // 5. Remove completions for those removed habits
       if (removedHabitIds.length > 0) {
         const removedSet = new Set(removedHabitIds);
         setCompletions((prev) => prev.filter((c) => !removedSet.has(c.habit_id)));
@@ -2941,6 +3144,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         });
       }
 
+      if (user) {
+        syncFriendsWithBackend(user);
+      }
+
       if (soundEnabled) soundService.playClickSound();
       showToast(
         removedHabitIds.length > 0
@@ -2950,7 +3157,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         'info'
       );
     },
-    [friends, soundEnabled, isOffline, addMutationToQueue, showToast]
+    [friends, soundEnabled, isOffline, isAuthenticated, addMutationToQueue, showToast, user, syncFriendsWithBackend]
   );
 
   return (

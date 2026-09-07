@@ -219,7 +219,7 @@ export const FriendsView: React.FC = () => {
       return fUser === clean;
     });
     if (existing) {
-      if (existing.isFriend) return 'following';
+      if (existing.isFriend && existing.requestStatus === 'accepted') return 'following';
       if (existing.requestStatus === 'pending_sent') return 'requested';
       if (existing.requestStatus === 'pending_received') return 'requested';
     }
