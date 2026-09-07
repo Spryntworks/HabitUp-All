@@ -115,18 +115,24 @@ export const FriendsView: React.FC = () => {
   }, [user]);
 
   const connectedFriends = useMemo(() => {
+    const myId = (user?.id || '').toLowerCase();
+    const myEmail = (user?.email || '').trim().toLowerCase();
+    const myUsername = (user?.username || '').replace(/^@/, '').trim().toLowerCase();
+
     return friends.filter((f) => {
       if (!f || !f.id) return false;
       if (!f.isFriend && f.requestStatus !== 'pending_sent') return false;
       if (f.requestStatus === 'none') return false;
-      if (user?.id && f.id === user.id) return false;
-      if (user?.email && f.email && f.email.toLowerCase() === user.email.toLowerCase()) return false;
-      const myName = (user?.name || '').trim().toLowerCase();
-      const fName = (f.name || '').trim().toLowerCase();
-      const myHandle = myName.replace(/[^a-z0-9]/g, '');
-      const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
-      if (myHandle && fHandle && myHandle === fHandle) return false;
-      if (myName && fName && myName === fName) return false;
+
+      const fId = (f.id || '').toLowerCase();
+      const fEmail = (f.email || '').trim().toLowerCase();
+      const fUsername = (f.username || '').replace(/^@/, '').trim().toLowerCase();
+
+      // Exclude only the exact current user
+      if (myId && fId === myId) return false;
+      if (myEmail && fEmail && fEmail === myEmail) return false;
+      if (myUsername && fUsername && fUsername === myUsername) return false;
+
       return true;
     });
   }, [friends, user]);

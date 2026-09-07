@@ -973,15 +973,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         // Exclude any friend records that represent the current user
         if (activeUser) {
+          const myId = (activeUser.id || '').toLowerCase();
+          const myEmail = (activeUser.email || '').trim().toLowerCase();
+          const myUsername = (activeUser.username || '').replace(/^@/, '').trim().toLowerCase();
+
           loadedFriends = loadedFriends.filter((f) => {
-            if (f.id === activeUser.id) return false;
-            if (activeUser.email && f.email && f.email.toLowerCase() === activeUser.email.toLowerCase()) return false;
-            const myName = (activeUser.name || '').trim().toLowerCase();
-            const fName = (f.name || '').trim().toLowerCase();
-            const myHandle = myName.replace(/[^a-z0-9]/g, '');
-            const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
-            if (myHandle && fHandle && myHandle === fHandle) return false;
-            if (myName && fName && myName === fName) return false;
+            const fId = (f.id || '').toLowerCase();
+            const fEmail = (f.email || '').trim().toLowerCase();
+            const fUsername = (f.username || '').replace(/^@/, '').trim().toLowerCase();
+
+            if (myId && fId === myId) return false;
+            if (myEmail && fEmail && fEmail === myEmail) return false;
+            if (myUsername && fUsername && fUsername === myUsername) return false;
             return true;
           });
         }
@@ -1244,40 +1247,27 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
 
         setFriends((prevFriends) => {
-          // 1. Filter: Keep only friends that:
-          //    a) are in serverFriends (accepted), OR
-          //    b) have requestStatus === 'pending_sent' (locally requested, awaiting server accept)
-          let updatedList = prevFriends.filter((f) => {
-            const fId = (f.id || '').toLowerCase();
-            const fUsername = (f.username || '').replace(/^@/, '').toLowerCase();
-            if (f.requestStatus === 'pending_sent') {
-              return true;
-            }
-            if (f.isFriend && f.requestStatus === 'accepted') {
-              return serverFriendIds.has(fId) || serverFriendUsernames.has(fUsername);
-            }
-            return false;
-          });
+          const updatedList = [...prevFriends];
 
-          // 2. Add or update friends from server
+          // Add or update friends from server
           for (const sf of serverFriends) {
             const fId = sf.friend_id || sf.id;
             const fUsername = (sf.username || '').replace(/^@/, '').toLowerCase();
-            if (!fUsername || fId === myId || fUsername === myUsername) continue;
+            if (!fUsername || (fId && fId.toLowerCase() === myId) || fUsername === myUsername) continue;
 
             const fDisplayName = sf.name || (fUsername.charAt(0).toUpperCase() + fUsername.slice(1));
             const usernameTag = `@${fUsername}`;
 
             const existingIdx = updatedList.findIndex(
               (f) =>
-                f.id === fId ||
+                (fId && (f.id || '').toLowerCase() === fId.toLowerCase()) ||
                 (f.username && f.username.replace(/^@/, '').toLowerCase() === fUsername)
             );
 
             if (existingIdx >= 0) {
               updatedList[existingIdx] = {
                 ...updatedList[existingIdx],
-                id: fId,
+                id: fId || updatedList[existingIdx].id,
                 name: updatedList[existingIdx].name || fDisplayName,
                 username: usernameTag,
                 isFriend: true,
@@ -1287,7 +1277,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               };
             } else {
               updatedList.push({
-                id: fId,
+                id: fId || `friend-${fUsername}`,
                 name: fDisplayName,
                 username: usernameTag,
                 email: `${fUsername}@gmail.com`,
@@ -1648,15 +1638,18 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
 
     // Filter out any self records
+    const myId = (targetUser.id || '').toLowerCase();
+    const myEmail = (targetUser.email || '').trim().toLowerCase();
+    const myUsername = (targetUser.username || '').replace(/^@/, '').trim().toLowerCase();
+
     userFriends = userFriends.filter((f) => {
-      if (f.id === targetUser.id) return false;
-      if (targetUser.email && f.email && f.email.toLowerCase() === targetUser.email.toLowerCase()) return false;
-      const myName = (targetUser.name || '').trim().toLowerCase();
-      const fName = (f.name || '').trim().toLowerCase();
-      const myHandle = myName.replace(/[^a-z0-9]/g, '');
-      const fHandle = (f.username || '').replace(/^@/, '').toLowerCase();
-      if (myHandle && fHandle && myHandle === fHandle) return false;
-      if (myName && fName && myName === fName) return false;
+      const fId = (f.id || '').toLowerCase();
+      const fEmail = (f.email || '').trim().toLowerCase();
+      const fUsername = (f.username || '').replace(/^@/, '').trim().toLowerCase();
+
+      if (myId && fId === myId) return false;
+      if (myEmail && fEmail && fEmail === myEmail) return false;
+      if (myUsername && fUsername && fUsername === myUsername) return false;
       return true;
     });
 
@@ -3036,16 +3029,23 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       setFriends((prev) => {
+        let updated: FriendUser[];
         const existing = prev.find(
           (f) =>
-            f.id === targetId ||
+            (targetId && (f.id || '').toLowerCase() === targetId.toLowerCase()) ||
             f.username.toLowerCase() === targetUsername ||
             f.username.toLowerCase() === `@${targetClean}`
         );
         if (existing) {
-          return prev.map((f) =>
+          updated = prev.map((f) =>
             f.id === existing.id
-              ? { ...f, isFriend: true, requestStatus: 'accepted', habits: partnerHabits }
+              ? {
+                  ...f,
+                  id: targetId || f.id,
+                  isFriend: true,
+                  requestStatus: 'accepted',
+                  habits: partnerHabits.length > 0 ? partnerHabits : f.habits,
+                }
               : f
           );
         } else {
@@ -3063,8 +3063,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             requestStatus: 'accepted',
             habits: partnerHabits,
           };
-          return [newFriend, ...prev];
+          updated = [newFriend, ...prev];
         }
+
+        if (user?.id) {
+          AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(updated)).catch(() => {});
+        }
+        return updated;
       });
 
       // 6. Save cross-account mutual connection
