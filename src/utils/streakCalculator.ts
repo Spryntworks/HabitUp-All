@@ -192,10 +192,23 @@ export function calculateHabitStats(
     rateCursor.setDate(rateCursor.getDate() + 1);
   }
 
+  // 4. Server streak fallback if completions history is sparse
+  const serverStreak = (habit as any).streak || (habit as any).current_streak || 0;
+  const serverBestStreak = (habit as any).best_streak || (habit as any).longest_streak || serverStreak;
+  if (currentStreak === 0 && serverStreak > 0) {
+    currentStreak = serverStreak;
+  }
+  if (longestStreak < currentStreak) {
+    longestStreak = currentStreak;
+  }
+  if (longestStreak === 0 && serverBestStreak > 0) {
+    longestStreak = serverBestStreak;
+  }
+
   const completionRate =
     scheduledDaysCount > 0
       ? Math.round((completedDaysCount / scheduledDaysCount) * 100)
-      : habitCompletions.length > 0
+      : habitCompletions.length > 0 || serverStreak > 0
       ? 100
       : 0;
 
@@ -204,7 +217,7 @@ export function calculateHabitStats(
     currentStreak,
     longestStreak,
     completionRate,
-    totalCompletions: habitCompletions.length,
+    totalCompletions: Math.max(habitCompletions.length, currentStreak),
     isCompletedToday,
     isScheduledToday,
     historyMap,

@@ -990,6 +990,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [incomingRequests, setIncomingRequests] = useState<FollowRequestItem[]>([]);
 
   const isInitialDataLoaded = useRef(false);
+  const isLoggingOut = useRef(false);
 
   // Load initial settings & restore previous data from backend on startup
   useEffect(() => {
@@ -1098,15 +1099,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
           } catch {}
         }
-        if (currentUid !== 'usr_default') {
-          const defaultHabitsStr = await AsyncStorage.getItem('habitup_habits_usr_default');
-          if (defaultHabitsStr) {
-            try {
-              const parsed = JSON.parse(defaultHabitsStr);
-              if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
-            } catch {}
-          }
-        }
         if (activeUser?.email) {
           const emailUid = getUserIdFromEmail(activeUser.email);
           if (emailUid !== currentUid && emailUid !== 'usr_default') {
@@ -1119,15 +1111,19 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
           }
         }
+        if (loadedHabits.length === 0 && currentUid === 'usr_default') {
+          const defaultHabitsStr = await AsyncStorage.getItem('habitup_habits_usr_default');
+          if (defaultHabitsStr) {
+            try {
+              const parsed = JSON.parse(defaultHabitsStr);
+              if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+            } catch {}
+          }
+        }
 
         if (loadedHabits.length === 0) {
           const memHabits = localApi.getHabits(currentUid, activeUser?.email);
           if (memHabits.length > 0) loadedHabits.push(...memHabits);
-        }
-
-        const cleanHabits = deduplicateHabits(loadedHabits);
-        if (cleanHabits.length > 0) {
-          setHabits(cleanHabits);
         }
 
         // Restore completions
@@ -1139,7 +1135,19 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
           } catch {}
         }
-        if (currentUid !== 'usr_default') {
+        if (activeUser?.email) {
+          const emailUid = getUserIdFromEmail(activeUser.email);
+          if (emailUid !== currentUid && emailUid !== 'usr_default') {
+            const emailCompStr = await AsyncStorage.getItem(`habitup_completions_${emailUid}`);
+            if (emailCompStr) {
+              try {
+                const parsed = JSON.parse(emailCompStr);
+                if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
+              } catch {}
+            }
+          }
+        }
+        if (loadedCompletions.length === 0 && currentUid === 'usr_default') {
           const defaultCompStr = await AsyncStorage.getItem('habitup_completions_usr_default');
           if (defaultCompStr) {
             try {
@@ -1152,7 +1160,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const memCompletions = localApi.getCompletions(currentUid, activeUser?.email);
           if (memCompletions.length > 0) loadedCompletions.push(...memCompletions);
         }
-        const cleanCompletions = deduplicateCompletions(loadedCompletions);
+
+        let cleanHabits = deduplicateHabits(loadedHabits);
+        let cleanCompletions = deduplicateCompletions(loadedCompletions);
+
+        if (cleanHabits.length > 0) {
+          setHabits(cleanHabits);
+        }
         if (cleanCompletions.length > 0) {
           setCompletions(cleanCompletions);
         }
@@ -1176,14 +1190,63 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               setIsAuthenticated(false);
               AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
             }
-            const serverHabits = await localApi.fetchHabitsFromServer();
+            const [serverHabits, stats] = await Promise.all([
+              localApi.fetchHabitsFromServer(),
+              localApi.fetchStatsFromServer().catch(() => null),
+            ]);
+
             if (serverHabits && serverHabits.length > 0) {
-              setHabits(deduplicateHabits(serverHabits));
-              const serverCompletions = await localApi.fetchCompletionsFromServer(serverHabits);
+              let combinedHabits = deduplicateHabits([...cleanHabits, ...serverHabits]);
+              if (stats?.habits && Array.isArray(stats.habits)) {
+                combinedHabits = combinedHabits.map((h) => {
+                  const matched = stats.habits.find((sh) => sh.id === h.id || sh.name.toLowerCase() === h.name.toLowerCase());
+                  if (matched) {
+                    return {
+                      ...h,
+                      streak: Math.max((h as any).streak || 0, matched.current_streak || 0),
+                    };
+                  }
+                  return h;
+                });
+              }
+              cleanHabits = combinedHabits;
+              setHabits(cleanHabits);
+              localApi.saveHabits(cleanHabits, currentUid);
+
+              const serverCompletions = await localApi.fetchCompletionsFromServer(cleanHabits);
               if (serverCompletions && serverCompletions.length > 0) {
-                setCompletions((prev) => deduplicateCompletions([...prev, ...serverCompletions]));
+                cleanCompletions = deduplicateCompletions([...cleanCompletions, ...serverCompletions]);
               }
             }
+
+            // Reconstruct streak completion dates if any active streak is missing local dates
+            const today = new Date();
+            for (const h of cleanHabits) {
+              const streak = (h as any).streak || 0;
+              if (streak > 0) {
+                for (let i = 0; i < streak; i++) {
+                  const d = new Date(today);
+                  d.setDate(today.getDate() - i);
+                  const dateKey = formatDateKey(d);
+                  const already = cleanCompletions.some(
+                    (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === dateKey
+                  );
+                  if (!already) {
+                    cleanCompletions.push({
+                      id: `comp-streak-${h.id}-${dateKey}`,
+                      habit_id: h.id,
+                      user_id: currentUid,
+                      completion_date: dateKey,
+                      completed_at: `${dateKey}T12:00:00.000Z`,
+                    });
+                  }
+                }
+              }
+            }
+
+            cleanCompletions = deduplicateCompletions(cleanCompletions);
+            setCompletions(cleanCompletions);
+            localApi.saveCompletions(cleanCompletions, currentUid);
           } catch {
             // offline fallback already loaded
           }
@@ -1226,34 +1289,38 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'archived'>('all');
 
-  // Persistence side-effects (only persist once initial bootstrap data is loaded)
+  // Persistence side-effects (only persist once initial bootstrap data is loaded and user is authenticated and not logging out)
   useEffect(() => {
-    if (isInitialDataLoaded.current && user?.id) {
-      localApi.saveHabits(habits, user.id);
-      if (user.email) {
-        const emailUid = getUserIdFromEmail(user.email);
-        localApi.saveHabits(habits, emailUid);
+    if (isInitialDataLoaded.current && user?.id && isAuthenticated && !isLoggingOut.current) {
+      if (habits.length > 0 || user.id !== 'usr_default') {
+        localApi.saveHabits(habits, user.id);
+        if (user.email) {
+          const emailUid = getUserIdFromEmail(user.email);
+          localApi.saveHabits(habits, emailUid);
+        }
+        publishUserHabits(user, habits, completions);
       }
-      publishUserHabits(user, habits, completions);
     }
-  }, [habits, user?.id, user?.email]);
+  }, [habits, user?.id, user?.email, isAuthenticated]);
 
   useEffect(() => {
-    if (isInitialDataLoaded.current && user?.id) {
-      localApi.saveCompletions(completions, user.id);
-      if (user.email) {
-        const emailUid = getUserIdFromEmail(user.email);
-        localApi.saveCompletions(completions, emailUid);
+    if (isInitialDataLoaded.current && user?.id && isAuthenticated && !isLoggingOut.current) {
+      if (completions.length > 0 || user.id !== 'usr_default') {
+        localApi.saveCompletions(completions, user.id);
+        if (user.email) {
+          const emailUid = getUserIdFromEmail(user.email);
+          localApi.saveCompletions(completions, emailUid);
+        }
+        publishUserHabits(user, habits, completions);
       }
-      publishUserHabits(user, habits, completions);
     }
-  }, [completions, user?.id, user?.email]);
+  }, [completions, user?.id, user?.email, isAuthenticated]);
 
   useEffect(() => {
-    if (isInitialDataLoaded.current && user?.id) {
+    if (isInitialDataLoaded.current && user?.id && isAuthenticated && !isLoggingOut.current) {
       localApi.saveUser(user, user.id);
     }
-  }, [user]);
+  }, [user, isAuthenticated]);
 
   useEffect(() => {
     if (isInitialDataLoaded.current && user?.id) {
@@ -1769,37 +1836,136 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [soundEnabled, hapticsEnabled]);
 
   const switchAccountData = useCallback(async (targetUser: UserProfile) => {
+    isLoggingOut.current = false;
     const uid = targetUser.id;
     localApi.setCurrentUserId(uid);
     localApi.saveUser(targetUser, uid);
     AsyncStorage.setItem('habitup_current_user_id', JSON.stringify(uid)).catch(() => {});
     AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(targetUser)).catch(() => {});
 
-    // 1. Check local storage first with fallback to email key
-    let loadedHabits = deduplicateHabits(localApi.getHabits(uid, targetUser.email));
-    let loadedCompletions = deduplicateCompletions(localApi.getCompletions(uid, targetUser.email));
-
-    // 2. Fetch latest habits & completions from backend server
-    try {
-      const serverHabits = await localApi.fetchHabitsFromServer();
-      if (serverHabits && serverHabits.length > 0) {
-        loadedHabits = deduplicateHabits(serverHabits);
+    // 1. Check local storage directly from AsyncStorage and memory cache
+    let loadedHabits: Habit[] = [];
+    const directHabitsStr = await AsyncStorage.getItem(`habitup_habits_${uid}`);
+    if (directHabitsStr) {
+      try {
+        const parsed = JSON.parse(directHabitsStr);
+        if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+      } catch {}
+    }
+    if (targetUser.email) {
+      const emailUid = getUserIdFromEmail(targetUser.email);
+      if (emailUid !== uid) {
+        const emailHabitsStr = await AsyncStorage.getItem(`habitup_habits_${emailUid}`);
+        if (emailHabitsStr) {
+          try {
+            const parsed = JSON.parse(emailHabitsStr);
+            if (Array.isArray(parsed) && parsed.length > 0) loadedHabits.push(...parsed);
+          } catch {}
+        }
       }
-      const serverCompletions = await localApi.fetchCompletionsFromServer(loadedHabits);
-      if (serverCompletions && serverCompletions.length > 0) {
-        loadedCompletions = deduplicateCompletions([...loadedCompletions, ...serverCompletions]);
+    }
+    if (loadedHabits.length === 0) {
+      const memHabits = localApi.getHabits(uid, targetUser.email);
+      if (memHabits.length > 0) loadedHabits.push(...memHabits);
+    }
+
+    // 2. Load completions directly from AsyncStorage and memory cache
+    let loadedCompletions: HabitCompletion[] = [];
+    const directCompStr = await AsyncStorage.getItem(`habitup_completions_${uid}`);
+    if (directCompStr) {
+      try {
+        const parsed = JSON.parse(directCompStr);
+        if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
+      } catch {}
+    }
+    if (targetUser.email) {
+      const emailUid = getUserIdFromEmail(targetUser.email);
+      if (emailUid !== uid) {
+        const emailCompStr = await AsyncStorage.getItem(`habitup_completions_${emailUid}`);
+        if (emailCompStr) {
+          try {
+            const parsed = JSON.parse(emailCompStr);
+            if (Array.isArray(parsed) && parsed.length > 0) loadedCompletions.push(...parsed);
+          } catch {}
+        }
+      }
+    }
+    if (loadedCompletions.length === 0) {
+      const memCompletions = localApi.getCompletions(uid, targetUser.email);
+      if (memCompletions.length > 0) loadedCompletions.push(...memCompletions);
+    }
+
+    let cleanHabits = deduplicateHabits(loadedHabits);
+    let cleanCompletions = deduplicateCompletions(loadedCompletions);
+
+    // 3. Fetch latest habits, completions & stats from backend server
+    try {
+      const [serverHabits, stats] = await Promise.all([
+        localApi.fetchHabitsFromServer(),
+        localApi.fetchStatsFromServer().catch(() => null),
+      ]);
+
+      if (serverHabits && serverHabits.length > 0) {
+        let combinedHabits = deduplicateHabits([...cleanHabits, ...serverHabits]);
+        if (stats?.habits && Array.isArray(stats.habits)) {
+          combinedHabits = combinedHabits.map((h) => {
+            const matched = stats.habits.find((sh) => sh.id === h.id || sh.name.toLowerCase() === h.name.toLowerCase());
+            if (matched) {
+              return {
+                ...h,
+                streak: Math.max((h as any).streak || 0, matched.current_streak || 0),
+              };
+            }
+            return h;
+          });
+        }
+        cleanHabits = combinedHabits;
+
+        const serverCompletions = await localApi.fetchCompletionsFromServer(cleanHabits);
+        if (serverCompletions && serverCompletions.length > 0) {
+          cleanCompletions = deduplicateCompletions([...cleanCompletions, ...serverCompletions]);
+        }
       }
     } catch {
       // offline fallback
     }
 
-    localApi.saveHabits(loadedHabits, uid);
-    localApi.saveCompletions(loadedCompletions, uid);
+    // Reconstruct streak completion dates if any active streak is missing local dates
+    const today = new Date();
+    for (const h of cleanHabits) {
+      const streak = (h as any).streak || 0;
+      if (streak > 0) {
+        for (let i = 0; i < streak; i++) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          const dateKey = formatDateKey(d);
+          const already = cleanCompletions.some(
+            (c) => c.habit_id === h.id && (c.completion_date || '').split('T')[0] === dateKey
+          );
+          if (!already) {
+            cleanCompletions.push({
+              id: `comp-streak-${h.id}-${dateKey}`,
+              habit_id: h.id,
+              user_id: uid,
+              completion_date: dateKey,
+              completed_at: `${dateKey}T12:00:00.000Z`,
+            });
+          }
+        }
+      }
+    }
+
+    cleanHabits = deduplicateHabits(cleanHabits);
+    cleanCompletions = deduplicateCompletions(cleanCompletions);
+
+    localApi.saveHabits(cleanHabits, uid);
+    localApi.saveCompletions(cleanCompletions, uid);
     if (targetUser.email) {
       const emailUid = getUserIdFromEmail(targetUser.email);
-      localApi.saveHabits(loadedHabits, emailUid);
-      localApi.saveCompletions(loadedCompletions, emailUid);
+      localApi.saveHabits(cleanHabits, emailUid);
+      localApi.saveCompletions(cleanCompletions, emailUid);
     }
+    publishUserHabits(targetUser, cleanHabits, cleanCompletions);
 
     // Restore user-specific friends and feed
     let userFriends: FriendUser[] = [];
@@ -1837,20 +2003,20 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {}
 
     // Sync mutual cross-account friends and shared habits for targetUser
-    const synced = await syncMutualDataForUser(targetUser, loadedHabits, userFriends);
-    loadedHabits = synced.habits;
+    const synced = await syncMutualDataForUser(targetUser, cleanHabits, userFriends);
+    cleanHabits = synced.habits;
     userFriends = synced.friends;
-    localApi.saveHabits(loadedHabits, uid);
+    localApi.saveHabits(cleanHabits, uid);
     if (targetUser.email) {
-      localApi.saveHabits(loadedHabits, getUserIdFromEmail(targetUser.email));
+      localApi.saveHabits(cleanHabits, getUserIdFromEmail(targetUser.email));
     }
 
     const loadedSessions = localApi.getSessions(uid);
     const loadedQueue = localApi.getSyncQueue(uid);
 
     setUser(targetUser);
-    setHabits(loadedHabits);
-    setCompletions(loadedCompletions);
+    setHabits(cleanHabits);
+    setCompletions(cleanCompletions);
     setFriends(userFriends);
     setSocialFeed(userFeed);
     setSessions(loadedSessions);
@@ -1990,23 +2156,46 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   );
 
   const logout = useCallback(() => {
-    if (user?.id) {
-      localApi.saveHabits(habits, user.id);
-      localApi.saveCompletions(completions, user.id);
-      if (user.email) {
-        const emailUid = getUserIdFromEmail(user.email);
-        localApi.saveHabits(habits, emailUid);
-        localApi.saveCompletions(completions, emailUid);
+    isLoggingOut.current = true;
+    try {
+      // 1. Permanently save current user's habits & completions before signing out
+      if (user?.id && user.id !== 'usr_default') {
+        localApi.saveHabits(habits, user.id);
+        localApi.saveCompletions(completions, user.id);
+        if (user.email) {
+          const emailUid = getUserIdFromEmail(user.email);
+          localApi.saveHabits(habits, emailUid);
+          localApi.saveCompletions(completions, emailUid);
+        }
+        localApi.saveUser(user, user.id);
+        publishUserHabits(user, habits, completions);
       }
-      localApi.saveUser(user, user.id);
+
+      // 2. Clear authentication and session
+      setIsAuthenticated(false);
+      AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
+      AsyncStorage.removeItem('habitup_current_user_v1').catch(() => {});
+      localApi.clearTokens();
+      localApi.logoutUser().catch(() => {});
+
+      // 3. Reset in-memory state to clean default user
+      const defaultUser = createDefaultUserProfile('User', '');
+      defaultUser.id = 'usr_default';
+      localApi.setCurrentUserId('usr_default');
+      setUser(defaultUser);
+      setHabits([]);
+      setCompletions([]);
+      setFriends(INITIAL_FRIENDS);
+      setSocialFeed(INITIAL_FEED);
+      setSessions(localApi.getSessions('usr_default'));
+      setSyncQueue([]);
+
+      showToast('You have been signed out.', undefined, 'info');
+    } finally {
+      setTimeout(() => {
+        isLoggingOut.current = false;
+      }, 500);
     }
-    setIsAuthenticated(false);
-    AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
-    AsyncStorage.removeItem('habitup_current_user_v1').catch(() => {});
-    setHabits([]);
-    setCompletions([]);
-    localApi.logoutUser().catch(() => {});
-    showToast('You have been signed out.', undefined, 'info');
   }, [user, habits, completions, showToast]);
 
   const deleteAccount = useCallback(
@@ -2034,7 +2223,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setFriends([]);
       setSocialFeed([]);
       setIsAuthenticated(false);
-      setUser(null);
+      const defaultUser = createDefaultUserProfile('User', '');
+      defaultUser.id = 'usr_default';
+      localApi.setCurrentUserId('usr_default');
+      setUser(defaultUser);
 
       AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
       AsyncStorage.removeItem('habitup_current_user_v1').catch(() => {});
@@ -2112,7 +2304,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (isOffline) {
             addMutationToQueue(`/habits/${habitId}/completions/${targetDate}`, 'DELETE', null);
           } else {
-            localApi.removeCompletion(habitId, targetDate).catch(() => {
+            localApi.removeCompletion(habitId, targetDate).then((res) => {
+              if (res?.streak !== undefined) {
+                setHabits((prevH) =>
+                  prevH.map((h) => (h.id === habitId ? { ...h, streak: res.streak } as any : h))
+                );
+              }
+            }).catch(() => {
               addMutationToQueue(`/habits/${habitId}/completions/${targetDate}`, 'DELETE', null);
             });
           }
@@ -2135,7 +2333,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (isOffline) {
             addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
           } else {
-            localApi.addCompletion(habitId, targetDate).catch(() => {
+            localApi.addCompletion(habitId, targetDate).then((res) => {
+              if (res?.streak !== undefined) {
+                setHabits((prevH) =>
+                  prevH.map((h) => (h.id === habitId ? { ...h, streak: res.streak } as any : h))
+                );
+              }
+            }).catch(() => {
               addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
             });
           }

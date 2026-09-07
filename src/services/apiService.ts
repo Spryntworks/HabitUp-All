@@ -837,24 +837,52 @@ class ApiClient {
     try {
       await Promise.all(
         habits.map(async (habit) => {
+          let hasFetchedDirect = false;
           try {
-            const res = await this.request<{ completions: any[] }>(`/habits/${habit.id}/completions`);
-            if (res.ok && Array.isArray(res.data?.completions)) {
-              res.data.completions.forEach((c) => {
-                const dateKey = (c.completed_on || c.completion_date || '').split('T')[0];
-                if (dateKey) {
-                  allCompletions.push({
-                    id: c.id || `comp-${habit.id}-${dateKey}`,
-                    habit_id: c.habit_id || habit.id,
-                    user_id: c.user_id || this.currentUserId,
-                    completion_date: dateKey,
-                    completed_at: c.completed_at || `${dateKey}T12:00:00.000Z`,
-                  });
-                }
-              });
+            const res = await this.request<{ completions?: any[]; data?: any[] }>(`/habits/${habit.id}/completions`);
+            if (res.ok && res.data) {
+              const list = Array.isArray(res.data) ? res.data : (res.data.completions || res.data.data || []);
+              if (Array.isArray(list) && list.length > 0) {
+                hasFetchedDirect = true;
+                list.forEach((c) => {
+                  const dateKey = (c.completed_on || c.completion_date || c.date || '').split('T')[0];
+                  if (dateKey) {
+                    allCompletions.push({
+                      id: c.id || `comp-${habit.id}-${dateKey}`,
+                      habit_id: c.habit_id || habit.id,
+                      user_id: c.user_id || this.currentUserId,
+                      completion_date: dateKey,
+                      completed_at: c.completed_at || `${dateKey}T12:00:00.000Z`,
+                    });
+                  }
+                });
+              }
             }
           } catch {
             // ignore per habit
+          }
+
+          // If direct endpoint didn't return completions, reconstruct from active streak
+          if (!hasFetchedDirect) {
+            const streak = (habit as any).streak || (habit as any).current_streak || 0;
+            if (streak > 0) {
+              const today = new Date();
+              for (let i = 0; i < streak; i++) {
+                const d = new Date(today);
+                d.setDate(today.getDate() - i);
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const dateKey = `${y}-${m}-${day}`;
+                allCompletions.push({
+                  id: `comp-streak-${habit.id}-${dateKey}`,
+                  habit_id: habit.id,
+                  user_id: this.currentUserId,
+                  completion_date: dateKey,
+                  completed_at: `${dateKey}T12:00:00.000Z`,
+                });
+              }
+            }
           }
         })
       );
@@ -1074,9 +1102,13 @@ class ApiClient {
         emailHabits = this.getStorage<Habit[]>(`habitup_habits_${emailUid}`, []);
       }
     }
-    const defaultHabits = this.getStorage<Habit[]>('habitup_habits_usr_default', []);
+    const defaultHabits = uid === 'usr_default' ? this.getStorage<Habit[]>('habitup_habits_usr_default', []) : [];
 
-    const combined = [...directHabits, ...emailHabits, ...defaultHabits];
+    const combined =
+      directHabits.length > 0 || emailHabits.length > 0
+        ? [...directHabits, ...emailHabits]
+        : [...defaultHabits];
+
     const seenName = new Set<string>();
     const result: Habit[] = [];
     for (const h of combined) {
@@ -1104,9 +1136,13 @@ class ApiClient {
         emailCompletions = this.getStorage<HabitCompletion[]>(`habitup_completions_${emailUid}`, []);
       }
     }
-    const defaultCompletions = this.getStorage<HabitCompletion[]>('habitup_completions_usr_default', []);
+    const defaultCompletions = uid === 'usr_default' ? this.getStorage<HabitCompletion[]>('habitup_completions_usr_default', []) : [];
 
-    const combined = [...directCompletions, ...emailCompletions, ...defaultCompletions];
+    const combined =
+      directCompletions.length > 0 || emailCompletions.length > 0
+        ? [...directCompletions, ...emailCompletions]
+        : [...defaultCompletions];
+
     const seen = new Set<string>();
     return combined.filter((c) => {
       if (!c || !c.habit_id) return false;
