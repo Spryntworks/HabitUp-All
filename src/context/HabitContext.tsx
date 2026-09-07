@@ -1426,10 +1426,19 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // Filter incoming requests addressed to current user
         const pendingForMe = combined.filter((r) => {
           if (r.status !== 'pending') return false;
+
+          const fromHandle = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
+          const fromId = (r.fromUserId || '').toLowerCase();
+          // Never display a request sent BY me as an incoming request to me
+          if ((myCleanHandle && fromHandle === myCleanHandle) || (myId && fromId === myId)) {
+            return false;
+          }
+
           // Server requests fetched via /friends/requests are inherently addressed to the authenticated user!
           if (serverRequests.some((sr) => (sr.request_id && sr.request_id === r.id) || (sr.id && sr.id === r.id))) {
             return true;
           }
+
           const toHandle = (r.toUsername || '').replace(/^@/, '').toLowerCase();
           const toId = (r.toUserId || '').toLowerCase();
           return (
@@ -1685,7 +1694,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Deliver any queued nudges targeting this newly logged-in account
     checkAndDeliverPendingNudges(targetUser);
-  }, [checkAndDeliverPendingNudges]);
+
+    // Immediately sync incoming follow requests and backend friends for this target user
+    syncFollowRequests(targetUser);
+    syncFriendsWithBackend(targetUser);
+  }, [checkAndDeliverPendingNudges, syncFollowRequests, syncFriendsWithBackend]);
 
   const login = useCallback(
     async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
@@ -1791,6 +1804,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setUser(newUser);
       setHabits([]);
       setCompletions([]);
+      setFriends([]);
+      setSocialFeed([]);
       setSessions(localApi.getSessions(uid));
       setSyncQueue([]);
       setIsAuthenticated(true);
@@ -1798,10 +1813,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActiveTab('home');
       setIsOnboardingModalOpen(true);
 
+      syncFollowRequests(newUser);
+      syncFriendsWithBackend(newUser);
+
       showToast(`Welcome, @${newUser.username || cleanUsername}! Let's set up your habits.`, undefined, 'success');
       return { success: true };
     },
-    [showToast, setActiveTab, setIsOnboardingModalOpen]
+    [showToast, setActiveTab, setIsOnboardingModalOpen, syncFollowRequests, syncFriendsWithBackend]
   );
 
   const logout = useCallback(() => {
@@ -2860,7 +2878,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         to_user_id?: string;
       } | null = null;
 
-      if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
+      if (!isOffline) {
+        if (!isAuthenticated || !localApi.hasAuthToken()) {
+          showToast(`Please sign in or register to send follow requests to @${cleanHandle} 🤝`, undefined, 'warning');
+          setIsAuthSessionModalOpen(true);
+          return { success: false, error: 'Authentication required' };
+        }
+
         try {
           serverResult = await localApi.sendFriendRequestByUsername(cleanHandle);
           if (!serverResult.success) {
@@ -2941,7 +2965,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
       return { success: true };
     },
-    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast, syncFollowRequests, syncFriendsWithBackend]
+    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast, syncFollowRequests, syncFriendsWithBackend, setIsAuthSessionModalOpen]
   );
 
   const acceptFollowRequest = useCallback(

@@ -83,8 +83,12 @@ class ApiClient {
 
   constructor() {
     this.currentUserId = this.getStorage<string>('habitup_current_user_id', 'usr_default');
-    this.accessToken = this.getStorage<string | null>('habitup_access_token', null);
-    this.refreshToken = this.getStorage<string | null>('habitup_refresh_token', null);
+    this.accessToken =
+      this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) ||
+      this.getStorage<string | null>('habitup_access_token', null);
+    this.refreshToken =
+      this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) ||
+      this.getStorage<string | null>('habitup_refresh_token', null);
     this.initAsync();
   }
 
@@ -99,8 +103,12 @@ class ApiClient {
       }
       const uid = this.getStorage<string>('habitup_current_user_id', 'usr_default');
       this.currentUserId = uid;
-      this.accessToken = this.getStorage<string | null>('habitup_access_token', null);
-      this.refreshToken = this.getStorage<string | null>('habitup_refresh_token', null);
+      this.accessToken =
+        this.getStorage<string | null>(`habitup_access_token_${uid}`, null) ||
+        this.getStorage<string | null>('habitup_access_token', null);
+      this.refreshToken =
+        this.getStorage<string | null>(`habitup_refresh_token_${uid}`, null) ||
+        this.getStorage<string | null>('habitup_refresh_token', null);
     } catch {
       // ignore
     }
@@ -113,6 +121,19 @@ class ApiClient {
   setCurrentUserId(userId: string): void {
     this.currentUserId = userId;
     this.setStorage('habitup_current_user_id', userId);
+    
+    // Automatically load this user's specific access and refresh tokens
+    const userAccess = this.getStorage<string | null>(`habitup_access_token_${userId}`, null);
+    const userRefresh = this.getStorage<string | null>(`habitup_refresh_token_${userId}`, null);
+    if (userAccess) {
+      this.accessToken = userAccess;
+      this.refreshToken = userRefresh;
+      this.setStorage('habitup_access_token', userAccess);
+      if (userRefresh) this.setStorage('habitup_refresh_token', userRefresh);
+    } else if (userId === 'usr_default') {
+      this.accessToken = null;
+      this.refreshToken = null;
+    }
   }
 
   getTokens(): { accessToken: string | null; refreshToken: string | null } {
@@ -126,16 +147,30 @@ class ApiClient {
     return !!(this.accessToken || this.refreshToken);
   }
 
-  setTokens(accessToken: string | null, refreshToken?: string | null): void {
+  setTokens(accessToken: string | null, refreshToken?: string | null, targetUserId?: string): void {
+    const uid = targetUserId || this.currentUserId;
     this.accessToken = accessToken;
     this.setStorage('habitup_access_token', accessToken);
+    if (uid && uid !== 'usr_default') {
+      this.setStorage(`habitup_access_token_${uid}`, accessToken);
+    }
     if (refreshToken !== undefined) {
       this.refreshToken = refreshToken;
       this.setStorage('habitup_refresh_token', refreshToken);
+      if (uid && uid !== 'usr_default') {
+        this.setStorage(`habitup_refresh_token_${uid}`, refreshToken);
+      }
     }
   }
 
-  clearTokens(): void {
+  clearTokens(targetUserId?: string): void {
+    const uid = targetUserId || this.currentUserId;
+    if (uid && uid !== 'usr_default') {
+      delete memoryStore[`habitup_access_token_${uid}`];
+      delete memoryStore[`habitup_refresh_token_${uid}`];
+      AsyncStorage.removeItem(`habitup_access_token_${uid}`).catch(() => {});
+      AsyncStorage.removeItem(`habitup_refresh_token_${uid}`).catch(() => {});
+    }
     this.accessToken = null;
     this.refreshToken = null;
     delete memoryStore['habitup_access_token'];
@@ -144,6 +179,10 @@ class ApiClient {
       try {
         window.localStorage.removeItem('habitup_access_token');
         window.localStorage.removeItem('habitup_refresh_token');
+        if (uid && uid !== 'usr_default') {
+          window.localStorage.removeItem(`habitup_access_token_${uid}`);
+          window.localStorage.removeItem(`habitup_refresh_token_${uid}`);
+        }
       } catch {}
     }
     AsyncStorage.removeItem('habitup_access_token').catch(() => {});
@@ -340,7 +379,7 @@ class ApiClient {
         username: res.data.user.username || cleanUsername,
       };
       this.setCurrentUserId(user.id);
-      this.setTokens(res.data.accessToken, res.data.refreshToken);
+      this.setTokens(res.data.accessToken, res.data.refreshToken, user.id);
       this.saveUser(user, user.id);
       return { success: true, user, accessToken: res.data.accessToken };
     }
@@ -419,7 +458,7 @@ class ApiClient {
       if (res.ok && res.data?.user) {
         const user = res.data.user;
         this.setCurrentUserId(user.id);
-        this.setTokens(res.data.accessToken, res.data.refreshToken);
+        this.setTokens(res.data.accessToken, res.data.refreshToken, user.id);
         this.saveUser(user, user.id);
         return { success: true, user, accessToken: res.data.accessToken };
       }
