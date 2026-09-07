@@ -239,6 +239,7 @@ export const FriendsView: React.FC = () => {
     const cleanName = fh.name.trim().toLowerCase();
     const fId = (friend.id || '').toLowerCase();
     const fName = (friend.name || '').trim().toLowerCase();
+    const fUsername = (friend.username || '').replace(/^@/, '').trim().toLowerCase();
     const fEmail = (friend.email || '').trim().toLowerCase();
     return habits.find(
       (h) =>
@@ -246,9 +247,18 @@ export const FriendsView: React.FC = () => {
         !h.archived_at &&
         h.is_shared &&
         h.name.trim().toLowerCase() === cleanName &&
-        ((h.buddy_id && h.buddy_id.toLowerCase() === fId) ||
-          (h.buddy_name && (h.buddy_name.toLowerCase() === fName || fName.includes(h.buddy_name.toLowerCase()) || h.buddy_name.toLowerCase().includes(fName))) ||
-          (fEmail && h.buddy_id && h.buddy_id.toLowerCase() === fEmail))
+        ((h.buddy_id && (
+          h.buddy_id.toLowerCase() === fId ||
+          (fUsername && h.buddy_id.toLowerCase().includes(fUsername)) ||
+          (fEmail && h.buddy_id.toLowerCase() === fEmail)
+        )) ||
+          (h.buddy_name && (
+            h.buddy_name.toLowerCase() === fName ||
+            (fUsername && h.buddy_name.toLowerCase() === fUsername) ||
+            fName.includes(h.buddy_name.toLowerCase()) ||
+            h.buddy_name.toLowerCase().includes(fName)
+          )) ||
+          (!h.buddy_id && !h.buddy_name))
     );
   };
 

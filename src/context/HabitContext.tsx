@@ -1237,6 +1237,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         const myId = (currentUser.id || '').toLowerCase();
         const myUsername = (currentUser.username || '').replace(/^@/, '').toLowerCase();
+        const todayStr = formatDateKey(new Date());
+        const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
         // Server friend IDs and usernames currently active on Railway
         const serverFriendIds = new Set(
@@ -1296,18 +1298,74 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return updatedList;
         });
 
-        // 3. Fetch each accepted friend's habits from Railway backend
+        // 3. Fetch each accepted friend's habits & live stats from Railway backend
         for (const sf of serverFriends) {
           const fId = sf.friend_id || sf.id;
           if (!fId || fId === myId) continue;
           try {
-            const backendHabits = await localApi.fetchFriendHabitsFromServer(fId);
-            if (Array.isArray(backendHabits)) {
-              const mappedHabits: FriendPublicHabit[] = backendHabits
+            const [backendHabits, friendStats, catalogHabits] = await Promise.all([
+              localApi.fetchFriendHabitsFromServer(fId),
+              localApi.fetchFriendStatsFromServer(fId, 'week'),
+              getFriendPublicHabits(fId, sf.email, sf.name),
+            ]);
+
+            let mappedHabits: FriendPublicHabit[] = [];
+
+            if (Array.isArray(backendHabits) && backendHabits.length > 0) {
+              mappedHabits = backendHabits
                 .filter((bh) => !bh.deleted_at && !bh.archived_at)
                 .map((bh) => {
                   const freq = bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days';
                   const scheduled_days = Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6];
+
+                  const catMatch = catalogHabits.find(
+                    (ch) =>
+                      ch.id === bh.id ||
+                      ch.id === `fh-${bh.id}` ||
+                      ch.name.trim().toLowerCase() === bh.name.trim().toLowerCase()
+                  );
+
+                  const statMatch = friendStats?.habits?.find(
+                    (sh: any) =>
+                      sh.id === bh.id ||
+                      (sh.name && sh.name.trim().toLowerCase() === bh.name.trim().toLowerCase())
+                  );
+
+                  const streak = Math.max(
+                    bh.streak || 0,
+                    statMatch?.current_streak || 0,
+                    catMatch?.currentStreak || 0
+                  );
+
+                  let isCompletedToday = false;
+                  if (catMatch && typeof catMatch.isCompletedToday === 'boolean') {
+                    isCompletedToday = catMatch.isCompletedToday;
+                  } else if (statMatch && (statMatch.is_completed_today !== undefined || statMatch.completed_today !== undefined)) {
+                    isCompletedToday = !!(statMatch.is_completed_today ?? statMatch.completed_today);
+                  } else if ((bh as any).is_completed_today !== undefined || (bh as any).completed_today !== undefined) {
+                    isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
+                  } else if ((bh as any).last_completed_at) {
+                    isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
+                  } else if (streak > 0) {
+                    isCompletedToday = true;
+                  }
+
+                  let weeklyHistory = [false, false, false, false, false, false, false];
+                  if (catMatch && Array.isArray(catMatch.weeklyHistory) && catMatch.weeklyHistory.some(Boolean)) {
+                    weeklyHistory = catMatch.weeklyHistory;
+                  } else {
+                    if (isCompletedToday) {
+                      weeklyHistory[todayIndex] = true;
+                      for (let i = 1; i < streak && todayIndex - i >= 0; i++) {
+                        weeklyHistory[todayIndex - i] = true;
+                      }
+                    } else if (streak > 0) {
+                      for (let i = 1; i <= streak && todayIndex - i >= 0; i++) {
+                        weeklyHistory[todayIndex - i] = true;
+                      }
+                    }
+                  }
+
                   return {
                     id: bh.id,
                     name: bh.name,
@@ -1317,12 +1375,26 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     frequency_type: freq,
                     scheduled_days,
                     reminder_time: '08:00',
-                    currentStreak: bh.streak || 0,
-                    isCompletedToday: false,
+                    currentStreak: streak,
+                    isCompletedToday,
                     adoptersCount: 1,
-                    weeklyHistory: [false, false, false, false, false, false, false],
+                    weeklyHistory,
                   };
                 });
+            } else if (catalogHabits.length > 0) {
+              mappedHabits = catalogHabits;
+            }
+
+            if (mappedHabits.length > 0) {
+              const bestStreak = Math.max(
+                sf.best_streak || 0,
+                ...mappedHabits.map((h) => h.currentStreak || 0)
+              );
+              const totalCompletions = Math.max(
+                sf.total_habits || 0,
+                friendStats?.total_completions || 0,
+                mappedHabits.length
+              );
 
               setFriends((prevFriends) =>
                 prevFriends.map((f) => {
@@ -1332,7 +1404,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   ) {
                     return {
                       ...f,
-                      habits: mappedHabits.length > 0 ? mappedHabits : f.habits,
+                      currentStreak: bestStreak,
+                      totalCompletions,
+                      habits: mappedHabits,
                     };
                   }
                   return f;
@@ -1459,12 +1533,30 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!user) return;
     const interval = setInterval(() => {
       syncFollowRequests(user);
-      if (activeTab === 'friends' && isAuthenticated && !isOffline) {
+      if (isAuthenticated && !isOffline) {
         syncFriendsWithBackend(user);
       }
     }, 4000);
     return () => clearInterval(interval);
-  }, [user, activeTab, isAuthenticated, isOffline, syncFollowRequests, syncFriendsWithBackend]);
+  }, [user, isAuthenticated, isOffline, syncFollowRequests, syncFriendsWithBackend]);
+
+  // Instantaneous cross-tab and cross-window sync listener
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return;
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === 'habitup_public_habits_catalog_v1' ||
+        e.key === 'habitup_social_friends_v1' ||
+        e.key?.startsWith('habitup_completions_') ||
+        e.key?.startsWith('habitup_habits_')
+      ) {
+        syncFriendsWithBackend(user);
+        syncFollowRequests(user);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [user, syncFriendsWithBackend, syncFollowRequests]);
 
   const showToast = useCallback(
     (message: string, undoAction?: () => void, type: 'success' | 'info' | 'warning' = 'info') => {
@@ -1942,6 +2034,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               addMutationToQueue(`/habits/${habitId}/completions/${targetDate}`, 'DELETE', null);
             });
           }
+          if (user?.id) {
+            publishUserHabits(user, habits, updated);
+          }
           showToast('Marked uncompleted', undefined, 'info');
           return updated;
         } else {
@@ -1953,6 +2048,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             completion_date: targetDate,
             completed_at: new Date().toISOString(),
           };
+          const updated = deduplicateCompletions([...prev, newCompletion]);
           triggerCelebration();
           if (isOffline) {
             addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
@@ -1961,12 +2057,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               addMutationToQueue(`/habits/${habitId}/completions`, 'POST', { completion_date: targetDate });
             });
           }
+          if (user?.id) {
+            publishUserHabits(user, habits, updated);
+          }
           showToast('Habit completed! 🎉 Keep going!', undefined, 'success');
-          return deduplicateCompletions([...prev, newCompletion]);
+          return updated;
         }
       });
     },
-    [selectedDate, user?.id, hapticsEnabled, isOffline, triggerCelebration, showToast, addMutationToQueue]
+    [selectedDate, user, habits, hapticsEnabled, isOffline, triggerCelebration, showToast, addMutationToQueue]
   );
 
   const createHabit = useCallback(
@@ -2998,24 +3097,76 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       let partnerHabits: FriendPublicHabit[] = [];
       if (!isOffline && isAuthenticated && localApi.hasAuthToken() && req?.fromUserId) {
         try {
-          const backendHabits = await localApi.fetchFriendHabitsFromServer(req.fromUserId);
+          const [backendHabits, friendStats, catalogHabits] = await Promise.all([
+            localApi.fetchFriendHabitsFromServer(req.fromUserId),
+            localApi.fetchFriendStatsFromServer(req.fromUserId, 'week'),
+            getFriendPublicHabits(req.fromUserId, `${targetClean}@gmail.com`, targetName),
+          ]);
+
           if (Array.isArray(backendHabits) && backendHabits.length > 0) {
+            const todayIndex = (new Date().getDay() + 6) % 7;
+            const todayStr = formatDateKey(new Date());
+
             partnerHabits = backendHabits
               .filter((bh) => !bh.deleted_at && !bh.archived_at)
-              .map((bh) => ({
-                id: bh.id,
-                name: bh.name,
-                description: bh.description || undefined,
-                icon: bh.icon || 'Target',
-                color: bh.color || '#7C5CFF',
-                frequency_type: bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days',
-                scheduled_days: Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6],
-                reminder_time: '08:00',
-                currentStreak: bh.streak || 0,
-                isCompletedToday: false,
-                adoptersCount: 1,
-                weeklyHistory: [false, false, false, false, false, false, false],
-              }));
+              .map((bh) => {
+                const catMatch = catalogHabits.find(
+                  (ch) =>
+                    ch.id === bh.id ||
+                    ch.id === `fh-${bh.id}` ||
+                    ch.name.trim().toLowerCase() === bh.name.trim().toLowerCase()
+                );
+                const statMatch = friendStats?.habits?.find(
+                  (sh: any) =>
+                    sh.id === bh.id ||
+                    (sh.name && sh.name.trim().toLowerCase() === bh.name.trim().toLowerCase())
+                );
+                const streak = Math.max(bh.streak || 0, statMatch?.current_streak || 0, catMatch?.currentStreak || 0);
+
+                let isCompletedToday = false;
+                if (catMatch && typeof catMatch.isCompletedToday === 'boolean') {
+                  isCompletedToday = catMatch.isCompletedToday;
+                } else if (statMatch && (statMatch.is_completed_today !== undefined || statMatch.completed_today !== undefined)) {
+                  isCompletedToday = !!(statMatch.is_completed_today ?? statMatch.completed_today);
+                } else if ((bh as any).is_completed_today !== undefined || (bh as any).completed_today !== undefined) {
+                  isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
+                } else if ((bh as any).last_completed_at) {
+                  isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
+                } else if (streak > 0) {
+                  isCompletedToday = true;
+                }
+
+                let weeklyHistory = [false, false, false, false, false, false, false];
+                if (catMatch && Array.isArray(catMatch.weeklyHistory) && catMatch.weeklyHistory.some(Boolean)) {
+                  weeklyHistory = catMatch.weeklyHistory;
+                } else if (isCompletedToday) {
+                  weeklyHistory[todayIndex] = true;
+                  for (let i = 1; i < streak && todayIndex - i >= 0; i++) {
+                    weeklyHistory[todayIndex - i] = true;
+                  }
+                } else if (streak > 0) {
+                  for (let i = 1; i <= streak && todayIndex - i >= 0; i++) {
+                    weeklyHistory[todayIndex - i] = true;
+                  }
+                }
+
+                return {
+                  id: bh.id,
+                  name: bh.name,
+                  description: bh.description || undefined,
+                  icon: bh.icon || 'Target',
+                  color: bh.color || '#7C5CFF',
+                  frequency_type: bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days',
+                  scheduled_days: Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6],
+                  reminder_time: '08:00',
+                  currentStreak: streak,
+                  isCompletedToday,
+                  adoptersCount: 1,
+                  weeklyHistory,
+                };
+              });
+          } else if (catalogHabits.length > 0) {
+            partnerHabits = catalogHabits;
           }
         } catch {}
       }
