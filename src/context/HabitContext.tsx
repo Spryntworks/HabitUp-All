@@ -528,7 +528,7 @@ export function getDefaultFriendStarterHabits(friendName: string): FriendPublicH
         scheduled_days: [0, 1, 2, 3, 4, 5, 6],
         reminder_time: '07:00',
         currentStreak: 3,
-        isCompletedToday: true,
+        isCompletedToday: false,
         adoptersCount: 2,
         weeklyHistory: [true, true, true, false, false, false, false],
       },
@@ -573,7 +573,7 @@ export function getDefaultFriendStarterHabits(friendName: string): FriendPublicH
         scheduled_days: [0, 1, 2, 3, 4, 5, 6],
         reminder_time: '21:00',
         currentStreak: 6,
-        isCompletedToday: true,
+        isCompletedToday: false,
         adoptersCount: 3,
         weeklyHistory: [true, true, true, true, true, true, false],
       },
@@ -618,7 +618,7 @@ export function getDefaultFriendStarterHabits(friendName: string): FriendPublicH
       scheduled_days: [0, 1, 2, 3, 4, 5, 6],
       reminder_time: '21:00',
       currentStreak: 5,
-      isCompletedToday: true,
+      isCompletedToday: false,
       adoptersCount: 3,
       weeklyHistory: [true, true, true, true, true, false, false],
     },
@@ -647,21 +647,24 @@ export async function publishUserHabits(
   if (!user || !user.id) return;
   try {
     const raw = await AsyncStorage.getItem('habitup_public_habits_catalog_v1');
-    const catalog: Record<string, { habits: Habit[]; completions: HabitCompletion[]; updatedAt: string }> = raw
+    const catalog: Record<string, { userId: string; habits: Habit[]; completions: HabitCompletion[]; updatedAt: string }> = raw
       ? JSON.parse(raw)
       : {};
 
     const cleanHabits = habits.filter((h) => !h.deleted_at && !h.archived_at);
     const entry = {
+      userId: user.id,
       habits: cleanHabits,
       completions,
       updatedAt: new Date().toISOString(),
     };
 
     if (user.id) catalog[user.id.toLowerCase()] = entry;
-    if (user.email) catalog[user.email.toLowerCase()] = entry;
-    const nameKey = (user.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (nameKey) catalog[nameKey] = entry;
+    if (user.email && user.email.includes('@')) catalog[user.email.toLowerCase().trim()] = entry;
+    if (user.username) {
+      const cleanUsername = user.username.replace(/^@/, '').toLowerCase().trim();
+      if (cleanUsername) catalog[`username_${cleanUsername}`] = entry;
+    }
 
     await AsyncStorage.setItem('habitup_public_habits_catalog_v1', JSON.stringify(catalog));
   } catch (e) {
@@ -673,32 +676,48 @@ export async function getFriendPublicHabits(
   friendId: string,
   friendEmail?: string,
   friendName?: string,
-  existingHabits?: FriendPublicHabit[]
+  existingHabits?: FriendPublicHabit[],
+  excludeUserId?: string,
+  excludeEmail?: string,
+  excludeUsername?: string
 ): Promise<FriendPublicHabit[]> {
   try {
     const todayStr = formatDateKey(new Date());
     const weekDays = getWeekDays(new Date());
 
+    const cleanFriendId = (friendId || '').trim().toLowerCase();
+    const cleanFriendEmail = (friendEmail || '').trim().toLowerCase();
+    const cleanFriendName = (friendName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const cleanExcludeId = (excludeUserId || '').trim().toLowerCase();
+    const cleanExcludeEmail = (excludeEmail || '').trim().toLowerCase();
+    const cleanExcludeUsername = (excludeUsername || '').replace(/^@/, '').trim().toLowerCase();
+
     // 1. Check catalog
     const catalogRaw = await AsyncStorage.getItem('habitup_public_habits_catalog_v1');
-    const catalog: Record<string, { habits: Habit[]; completions: HabitCompletion[] }> = catalogRaw
+    const catalog: Record<string, { userId?: string; habits: Habit[]; completions: HabitCompletion[] }> = catalogRaw
       ? JSON.parse(catalogRaw)
       : {};
-
-    const friendKeyId = (friendId || '').toLowerCase();
-    const friendKeyEmail = (friendEmail || '').toLowerCase();
-    const friendKeyName = (friendName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
     let matchedUserHabits: Habit[] = [];
     let matchedUserCompletions: HabitCompletion[] = [];
 
     for (const [key, val] of Object.entries(catalog)) {
       const lowerKey = key.toLowerCase();
-      if (
-        lowerKey === friendKeyId ||
-        (friendKeyEmail && lowerKey === friendKeyEmail) ||
-        (friendKeyName && (lowerKey.includes(friendKeyName) || friendKeyName.includes(lowerKey)))
-      ) {
+      const valUserId = (val?.userId || '').toLowerCase();
+
+      // STRICT ISOLATION: Never match the current/excluded user
+      if (cleanExcludeId && (valUserId === cleanExcludeId || lowerKey === cleanExcludeId)) continue;
+      if (cleanExcludeEmail && lowerKey === cleanExcludeEmail) continue;
+      if (cleanExcludeUsername && lowerKey === `username_${cleanExcludeUsername}`) continue;
+
+      // Exact matching for friend
+      const isMatch =
+        (cleanFriendId && (lowerKey === cleanFriendId || valUserId === cleanFriendId)) ||
+        (cleanFriendEmail && lowerKey === cleanFriendEmail) ||
+        (cleanFriendName && lowerKey === `username_${cleanFriendName}`);
+
+      if (isMatch) {
         if (Array.isArray(val.habits) && val.habits.length > 0) {
           matchedUserHabits = val.habits;
           matchedUserCompletions = val.completions || [];
@@ -707,8 +726,13 @@ export async function getFriendPublicHabits(
       }
     }
 
-    // 2. If not found in catalog, check localApi storage
-    if (matchedUserHabits.length === 0) {
+    // 2. If not found in catalog, check localApi storage ONLY if friendId/friendEmail is provided and not current user
+    if (
+      matchedUserHabits.length === 0 &&
+      cleanFriendId &&
+      cleanFriendId !== 'usr_default' &&
+      cleanFriendId !== cleanExcludeId
+    ) {
       const storageHabits = localApi.getHabits(friendId, friendEmail);
       if (storageHabits && storageHabits.length > 0) {
         matchedUserHabits = storageHabits;
@@ -730,7 +754,7 @@ export async function getFriendPublicHabits(
           )
         );
         const stats = calculateHabitStats(h, matchedUserCompletions);
-        const currentStreak = Math.max(stats.currentStreak, isDoneToday ? 1 : 0);
+        const currentStreak = Math.max(stats.currentStreak, 0);
 
         return {
           id: `fh-${h.id}`,
@@ -755,10 +779,19 @@ export async function getFriendPublicHabits(
       return deduplicateFriendHabits(existingHabits);
     }
 
-    // 4. Default starter public habits
-    return deduplicateFriendHabits(getDefaultFriendStarterHabits(friendName || 'Buddy'));
+    // 4. Default starter public habits (pending by default)
+    const defaults = getDefaultFriendStarterHabits(friendName || 'Buddy').map((dh) => ({
+      ...dh,
+      isCompletedToday: false,
+    }));
+    return deduplicateFriendHabits(defaults);
   } catch {
-    return deduplicateFriendHabits(getDefaultFriendStarterHabits(friendName || 'Buddy'));
+    return deduplicateFriendHabits(
+      getDefaultFriendStarterHabits(friendName || 'Buddy').map((dh) => ({
+        ...dh,
+        isCompletedToday: false,
+      }))
+    );
   }
 }
 
@@ -816,7 +849,10 @@ async function syncMutualDataForUser(
         pId,
         pEmail,
         pName,
-        alreadyFriendIdx >= 0 ? updatedFriends[alreadyFriendIdx].habits : undefined
+        alreadyFriendIdx >= 0 ? updatedFriends[alreadyFriendIdx].habits : undefined,
+        myId,
+        myEmail,
+        currentUser.username
       );
 
       if (alreadyFriendIdx >= 0) {
@@ -850,7 +886,7 @@ async function syncMutualDataForUser(
   for (let i = 0; i < updatedFriends.length; i++) {
     const f = updatedFriends[i];
     if (!f.habits || f.habits.length === 0) {
-      f.habits = await getFriendPublicHabits(f.id, f.email, f.name, f.habits);
+      f.habits = await getFriendPublicHabits(f.id, f.email, f.name, f.habits, myId, myEmail, currentUser.username);
     }
   }
 
@@ -1453,7 +1489,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const [backendHabits, friendStats, catalogHabits] = await Promise.all([
               localApi.fetchFriendHabitsFromServer(fId),
               localApi.fetchFriendStatsFromServer(fId, 'week'),
-              getFriendPublicHabits(fId, sf.email, sf.name),
+              getFriendPublicHabits(fId, sf.email, sf.name, undefined, myId, currentUser.email, myUsername),
             ]);
 
             let mappedHabits: FriendPublicHabit[] = [];
@@ -1493,8 +1529,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
                   } else if ((bh as any).last_completed_at) {
                     isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
-                  } else if (streak > 0) {
-                    isCompletedToday = true;
                   }
 
                   let weeklyHistory = [false, false, false, false, false, false, false];
@@ -3189,7 +3223,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
 
       if (match) {
-        const partnerHabits = await getFriendPublicHabits(match.id, match.email, match.name, match.habits);
+        const partnerHabits = await getFriendPublicHabits(
+          match.id,
+          match.email,
+          match.name,
+          match.habits,
+          user?.id,
+          user?.email,
+          user?.username
+        );
         setFriends((prev) =>
           prev.map((f) =>
             f.id === match.id ? { ...f, isFriend: true, requestStatus: 'accepted', habits: partnerHabits } : f
@@ -3210,7 +3252,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const partnerHabits = await getFriendPublicHabits(
           `friend-${extractedHandle.toLowerCase()}`,
           `${extractedHandle.toLowerCase()}@gmail.com`,
-          displayName
+          displayName,
+          undefined,
+          user?.id,
+          user?.email,
+          user?.username
         );
 
         const newBuddy: FriendUser = {
@@ -3425,7 +3471,15 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const [backendHabits, friendStats, catalogHabits] = await Promise.all([
             localApi.fetchFriendHabitsFromServer(req.fromUserId),
             localApi.fetchFriendStatsFromServer(req.fromUserId, 'week'),
-            getFriendPublicHabits(req.fromUserId, `${targetClean}@gmail.com`, targetName),
+            getFriendPublicHabits(
+              req.fromUserId,
+              `${targetClean}@gmail.com`,
+              targetName,
+              undefined,
+              user?.id,
+              user?.email,
+              user?.username
+            ),
           ]);
 
           if (Array.isArray(backendHabits) && backendHabits.length > 0) {
@@ -3457,8 +3511,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
                 } else if ((bh as any).last_completed_at) {
                   isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
-                } else if (streak > 0) {
-                  isCompletedToday = true;
                 }
 
                 let weeklyHistory = [false, false, false, false, false, false, false];
@@ -3500,7 +3552,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         partnerHabits = await getFriendPublicHabits(
           targetId,
           `${targetClean}@gmail.com`,
-          targetName
+          targetName,
+          undefined,
+          user?.id,
+          user?.email,
+          user?.username
         );
       }
 
