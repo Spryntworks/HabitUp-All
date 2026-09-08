@@ -154,6 +154,11 @@ interface HabitContextType {
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
   removeFriend: (friendId: string) => void;
+
+  // A/B Testing & Experiments
+  friendsEnabled: boolean;
+  experimentVariant: string | null;
+  recordFriendsExposure: () => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | null>(null);
@@ -1026,6 +1031,42 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [socialFeed, setSocialFeed] = useState<SocialFeedActivity[]>(INITIAL_FEED);
   const [incomingRequests, setIncomingRequests] = useState<FollowRequestItem[]>([]);
 
+  // A/B Experiment State (friends_feature_v1)
+  const [friendsEnabled, setFriendsEnabled] = useState<boolean>(true);
+  const [experimentVariant, setExperimentVariant] = useState<string | null>(null);
+
+  const syncExperimentState = useCallback(async () => {
+    try {
+      // 1. Check cached experiment
+      const cached = await AsyncStorage.getItem('habitup_exp_friends_feature_v1');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed.friendsEnabled === 'boolean') {
+            setFriendsEnabled(parsed.friendsEnabled);
+            setExperimentVariant(parsed.variant || null);
+          }
+        } catch {}
+      }
+
+      // 2. Fetch live experiment from backend
+      const exp = await localApi.getExperiment('friends_feature_v1');
+      if (exp) {
+        setFriendsEnabled(exp.friendsEnabled);
+        setExperimentVariant(exp.variant);
+        AsyncStorage.setItem('habitup_exp_friends_feature_v1', JSON.stringify(exp)).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('syncExperimentState error:', e);
+    }
+  }, []);
+
+  const recordFriendsExposure = useCallback(async () => {
+    try {
+      await localApi.recordExperimentExposure('friends_feature_v1');
+    } catch {}
+  }, []);
+
   const isInitialDataLoaded = useRef(false);
   const isLoggingOut = useRef(false);
 
@@ -1306,6 +1347,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
           checkAndDeliverPendingNudges(activeUser);
         }
+
+        // 6. Sync A/B experiment variant
+        syncExperimentState().catch(() => {});
       } catch (err) {
         console.warn('Bootstrap error:', err);
       } finally {
@@ -1321,7 +1365,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     AsyncStorage.getItem('habitup_notifications_enabled_v1').then((val) => {
       if (val !== null) setNotificationsEnabled(JSON.parse(val));
     });
-  }, []);
+  }, [syncExperimentState]);
+
+  // Safety: If friends feature is disabled by A/B experiment (Variant A), redirect friends tab to streaks
+  useEffect(() => {
+    if (!friendsEnabled && (activeTab === 'friends' || activeTab === 'habits')) {
+      setActiveTab('streaks');
+    }
+  }, [friendsEnabled, activeTab]);
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'paused' | 'archived'>('all');
@@ -2077,7 +2128,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Immediately sync incoming follow requests and backend friends for this target user
     syncFollowRequests(targetUser);
     syncFriendsWithBackend(targetUser);
-  }, [checkAndDeliverPendingNudges, syncFollowRequests, syncFriendsWithBackend]);
+    syncExperimentState().catch(() => {});
+  }, [checkAndDeliverPendingNudges, syncFollowRequests, syncFriendsWithBackend, syncExperimentState]);
 
   const login = useCallback(
     async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
@@ -2194,11 +2246,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       syncFollowRequests(newUser);
       syncFriendsWithBackend(newUser);
+      syncExperimentState().catch(() => {});
 
       showToast(`Welcome, @${newUser.username || cleanUsername}! Let's set up your habits.`, undefined, 'success');
       return { success: true };
     },
-    [showToast, setActiveTab, setIsOnboardingModalOpen, syncFollowRequests, syncFriendsWithBackend]
+    [showToast, setActiveTab, setIsOnboardingModalOpen, syncFollowRequests, syncFriendsWithBackend, syncExperimentState]
   );
 
   const logout = useCallback(() => {
@@ -3911,6 +3964,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         sendFriendRequest,
         acceptFriendRequest,
         removeFriend,
+        friendsEnabled,
+        experimentVariant,
+        recordFriendsExposure,
       }}
     >
       {children}

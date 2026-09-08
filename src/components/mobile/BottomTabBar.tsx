@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
-import { Home, Users, BarChart2, Calendar, Plus } from 'lucide-react-native';
+import { Home, Users, BarChart2, Calendar, Plus, Flame } from 'lucide-react-native';
 
 export const BottomTabBar: React.FC = () => {
-  const { activeTab, setActiveTab, setIsCreateModalOpen, theme } = useHabit();
+  const { activeTab, setActiveTab, setIsCreateModalOpen, theme, friendsEnabled } = useHabit();
   const isDark = theme === 'dark';
 
   return (
@@ -39,27 +39,50 @@ export const BottomTabBar: React.FC = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* 2. Friends Tab */}
-      <TouchableOpacity
-        onPress={() => setActiveTab('friends')}
-        style={styles.tabButton}
-        activeOpacity={0.7}
-      >
-        <Users
-          size={22}
-          color={activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
-          strokeWidth={activeTab === 'friends' ? 2.5 : 1.8}
-        />
-        <Text
-          style={[
-            styles.tabLabel,
-            { color: activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
-            activeTab === 'friends' && styles.activeTabLabel,
-          ]}
+      {/* 2. Friends Tab (Variant B) or Streaks Tab (Variant A) */}
+      {friendsEnabled ? (
+        <TouchableOpacity
+          onPress={() => setActiveTab('friends')}
+          style={styles.tabButton}
+          activeOpacity={0.7}
         >
-          Friends
-        </Text>
-      </TouchableOpacity>
+          <Users
+            size={22}
+            color={activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+            strokeWidth={activeTab === 'friends' ? 2.5 : 1.8}
+          />
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8' },
+              activeTab === 'friends' && styles.activeTabLabel,
+            ]}
+          >
+            Friends
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          onPress={() => setActiveTab('streaks')}
+          style={styles.tabButton}
+          activeOpacity={0.7}
+        >
+          <Flame
+            size={22}
+            color={activeTab === 'streaks' ? '#F59E0B' : isDark ? '#64748B' : '#94A3B8'}
+            strokeWidth={activeTab === 'streaks' ? 2.5 : 1.8}
+          />
+          <Text
+            style={[
+              styles.tabLabel,
+              { color: activeTab === 'streaks' ? '#F59E0B' : isDark ? '#64748B' : '#94A3B8' },
+              activeTab === 'streaks' && styles.activeTabLabel,
+            ]}
+          >
+            Streaks
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* 3. Center Floating Elevated Plus Button */}
       <View style={styles.floatingCenterWrapper}>

@@ -1219,6 +1219,55 @@ class ApiClient {
     this.saveSessions(this.getSessions(uid), uid);
     this.saveSyncQueue([], uid);
   }
+
+  // --- A/B TESTING & EXPERIMENT METHODS ---
+
+  async getExperiment(name: string): Promise<{
+    experiment: string;
+    experimentId: string | null;
+    variant: string | null;
+    friendsEnabled: boolean;
+    assigned: boolean;
+    active?: boolean;
+    preExisting?: boolean;
+  }> {
+    try {
+      const res = await this.request<any>(`/experiments/${encodeURIComponent(name)}`, {
+        method: 'GET',
+      });
+      if (res.ok && res.data) {
+        return {
+          experiment: res.data.experiment || name,
+          experimentId: res.data.experimentId || null,
+          variant: res.data.variant || null,
+          friendsEnabled: res.data.friendsEnabled !== false,
+          assigned: !!res.data.assigned,
+          active: res.data.active !== false,
+          preExisting: !!res.data.preExisting,
+        };
+      }
+    } catch (e) {
+      console.warn('getExperiment error:', e);
+    }
+    return {
+      experiment: name,
+      experimentId: null,
+      variant: null,
+      friendsEnabled: true,
+      assigned: false,
+    };
+  }
+
+  async recordExperimentExposure(name: string): Promise<boolean> {
+    try {
+      const res = await this.request<{ ok: boolean }>(`/experiments/${encodeURIComponent(name)}/exposure`, {
+        method: 'POST',
+      });
+      return res.ok && !!res.data?.ok;
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const apiService = new ApiClient();

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -73,11 +73,16 @@ export const FriendsView: React.FC = () => {
     setActiveTab,
     theme,
     showToast,
+    recordFriendsExposure,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
+
+  useEffect(() => {
+    recordFriendsExposure().catch(() => {});
+  }, [recordFriendsExposure]);
 
   // Search by username state
   const [searchQuery, setSearchQuery] = useState<string>('');
