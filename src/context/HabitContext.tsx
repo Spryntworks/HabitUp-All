@@ -290,9 +290,11 @@ export interface FriendNudgeRecord {
   senderId: string;
   senderName: string;
   senderUsername?: string;
+  senderEmail?: string;
   senderAvatar?: string;
   recipientId: string;
   recipientName?: string;
+  recipientUsername?: string;
   recipientEmail?: string;
   habitName: string;
   habitIcon?: string;
@@ -685,7 +687,8 @@ export async function getFriendPublicHabits(
   existingHabits?: FriendPublicHabit[],
   excludeUserId?: string,
   excludeEmail?: string,
-  excludeUsername?: string
+  excludeUsername?: string,
+  friendUsername?: string
 ): Promise<FriendPublicHabit[]> {
   try {
     const todayStr = formatDateKey(new Date());
@@ -694,6 +697,7 @@ export async function getFriendPublicHabits(
     const cleanFriendId = (friendId || '').trim().toLowerCase();
     const cleanFriendEmail = (friendEmail || '').trim().toLowerCase();
     const cleanFriendName = (friendName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cleanFriendUsername = (friendUsername || '').replace(/^@/, '').trim().toLowerCase();
 
     const cleanExcludeId = (excludeUserId || '').trim().toLowerCase();
     const cleanExcludeEmail = (excludeEmail || '').trim().toLowerCase();
@@ -721,7 +725,8 @@ export async function getFriendPublicHabits(
       const isMatch =
         (cleanFriendId && (lowerKey === cleanFriendId || valUserId === cleanFriendId)) ||
         (cleanFriendEmail && lowerKey === cleanFriendEmail) ||
-        (cleanFriendName && lowerKey === `username_${cleanFriendName}`);
+        (cleanFriendName && lowerKey === `username_${cleanFriendName}`) ||
+        (cleanFriendUsername && (lowerKey === `username_${cleanFriendUsername}` || lowerKey === cleanFriendUsername));
 
       if (isMatch) {
         if (Array.isArray(val.habits) && val.habits.length > 0) {
@@ -1581,6 +1586,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
                   } else if ((bh as any).last_completed_at) {
                     isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
+                  } else if (streak > 0) {
+                    isCompletedToday = true;
                   }
 
                   let weeklyHistory = [false, false, false, false, false, false, false];
@@ -1821,7 +1828,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const checkAndDeliverPendingNudges = useCallback(
     async (currentUser: UserProfile | null) => {
-      if (!currentUser || !currentUser.id) return;
+      if (!currentUser || !currentUser.id || currentUser.id === 'usr_default') return;
       try {
         const nudges = await getPendingNudges();
         if (!nudges || nudges.length === 0) return;
@@ -1829,7 +1836,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const myId = (currentUser.id || '').toLowerCase();
         const myEmail = (currentUser.email || '').toLowerCase();
         const myName = (currentUser.name || '').trim().toLowerCase();
-        const myNameFirst = myName.split(' ')[0] || '';
+        const myUsername = (currentUser.username || '').replace(/^@/, '').trim().toLowerCase();
         const myCleanHandle = myName.replace(/[^a-z0-9]/g, '');
 
         let hasUpdates = false;
@@ -1842,12 +1849,17 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
 
           const sendId = (nudge.senderId || '').toLowerCase();
+          const sendEmail = (nudge.senderEmail || '').toLowerCase();
+          const sendUsername = (nudge.senderUsername || '').replace(/^@/, '').toLowerCase();
           const sendName = (nudge.senderName || '').trim().toLowerCase();
+
           const isSender =
             (sendId && myId && sendId === myId) ||
-            (sendName && myName && (sendName === myName || sendName === myNameFirst));
+            (sendEmail && myEmail && sendEmail === myEmail) ||
+            (sendUsername && myUsername && sendUsername === myUsername) ||
+            (sendName && myName && sendName === myName);
 
-          // The sender shouldn't deliver to themselves
+          // The sender MUST NEVER deliver to themselves
           if (isSender) {
             updatedNudges.push(nudge);
             continue;
@@ -1855,16 +1867,16 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
           const recId = (nudge.recipientId || '').toLowerCase();
           const recEmail = (nudge.recipientEmail || '').toLowerCase();
+          const recUsername = (nudge.recipientUsername || '').replace(/^@/, '').toLowerCase();
           const recName = (nudge.recipientName || '').trim().toLowerCase();
-          const recNameFirst = recName.split(' ')[0] || '';
-          const recCleanHandle = recName.replace(/[^a-z0-9]/g, '');
 
-          // Check if current user is the recipient
+          // Check if current user is the intended recipient
           const isRecipient =
-            (recId && myId && (recId === myId || recId.includes(myId) || myId.includes(recId))) ||
-            (recEmail && myEmail && (recEmail === myEmail || recEmail.includes(myEmail) || myEmail.includes(recEmail))) ||
-            (recName && myName && (recName === myName || recName.includes(myName) || myName.includes(recName) || (recNameFirst && recNameFirst === myNameFirst) || (myCleanHandle && recCleanHandle && (myCleanHandle === recCleanHandle || myCleanHandle.includes(recCleanHandle) || recCleanHandle.includes(myCleanHandle))))) ||
-            (recId && myNameFirst && (recId.includes(myNameFirst) || (myCleanHandle && recId.includes(myCleanHandle))));
+            (recId && myId && recId === myId) ||
+            (recEmail && myEmail && recEmail === myEmail) ||
+            (recUsername && myUsername && recUsername === myUsername) ||
+            (recName && myName && recName === myName) ||
+            (recId && (recId === `friend-${myCleanHandle}` || recId === `friend-${myUsername}`));
 
           if (isRecipient) {
             nudge.delivered = true;
@@ -3145,8 +3157,10 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         senderName: user?.name || mySenderName,
         senderUsername: mySenderUsername,
         senderAvatar: mySenderAvatar,
+        senderEmail: user?.email || '',
         recipientId: friend?.id || friendId,
         recipientName: friend?.name || friendName,
+        recipientUsername: friend?.username || '',
         recipientEmail: friend?.email || '',
         habitName,
         habitIcon,
@@ -3576,6 +3590,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
                 } else if ((bh as any).last_completed_at) {
                   isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
+                } else if (streak > 0) {
+                  isCompletedToday = true;
                 }
 
                 let weeklyHistory = [false, false, false, false, false, false, false];
