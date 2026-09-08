@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Habit,
@@ -63,7 +64,7 @@ export interface BackendStats {
 // In-Memory Synchronous Cache layer backing AsyncStorage
 const memoryStore: Record<string, string> = {};
 
-if (typeof window !== 'undefined' && window.localStorage) {
+if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.localStorage !== 'undefined') {
   try {
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);

@@ -20,26 +20,34 @@ export interface InAppNotification {
 
 // 1. Configure foreground presentation on native
 if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-    }),
-  });
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+      }),
+    });
+  } catch (err) {
+    console.warn('Could not set notification handler:', err);
+  }
 }
 
 // 2. Configure Android Notification Channel
 if (Platform.OS === 'android') {
-  Notifications.setNotificationChannelAsync('habit-reminders', {
-    name: 'Habit Reminders',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#7C5CFF',
-    sound: 'default',
-    enableVibrate: true,
-    showBadge: true,
-  }).catch((err) => console.warn('Could not set Android notification channel:', err));
+  try {
+    Notifications.setNotificationChannelAsync('habit-reminders', {
+      name: 'Habit Reminders',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#7C5CFF',
+      sound: 'default',
+      enableVibrate: true,
+      showBadge: true,
+    }).catch((err) => console.warn('Could not set Android notification channel:', err));
+  } catch (err) {
+    console.warn('Error configuring Android notification channel:', err);
+  }
 }
 
 export function playWebAudioChime() {

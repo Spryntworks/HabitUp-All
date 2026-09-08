@@ -7,6 +7,7 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
+import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -1723,9 +1724,16 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => clearInterval(interval);
   }, [user, isAuthenticated, isOffline, syncFollowRequests, syncFriendsWithBackend]);
 
-  // Instantaneous cross-tab and cross-window sync listener
+  // Instantaneous cross-tab and cross-window sync listener (Web only)
   useEffect(() => {
-    if (typeof window === 'undefined' || !user) return;
+    if (
+      Platform.OS !== 'web' ||
+      typeof window === 'undefined' ||
+      typeof window.addEventListener !== 'function' ||
+      !user
+    ) {
+      return;
+    }
     const handleStorageChange = (e: StorageEvent) => {
       if (
         e.key === 'habitup_public_habits_catalog_v1' ||
@@ -1738,7 +1746,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    return () => {
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener('storage', handleStorageChange);
+      }
+    };
   }, [user, syncFriendsWithBackend, syncFollowRequests]);
 
   const showToast = useCallback(

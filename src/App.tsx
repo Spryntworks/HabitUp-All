@@ -76,12 +76,12 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
+    <ErrorBoundary>
+      <SafeAreaProvider>
         <HabitProvider>
           <AppContent />
         </HabitProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }

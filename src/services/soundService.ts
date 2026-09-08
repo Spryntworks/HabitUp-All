@@ -57,7 +57,7 @@ class SoundService {
   }
 
   private playWebChime(): void {
-    if (typeof window === 'undefined') return;
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     try {
       const AudioContextClass =
         window.AudioContext || (window as any).webkitAudioContext;
