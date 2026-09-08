@@ -1092,6 +1092,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             currentUid = savedUidRaw;
           }
         }
+
+        // Initialize ApiClient storage & restore tokens for currentUid
+        await localApi.initStorage(currentUid);
         localApi.setCurrentUserId(currentUid);
 
         // 2. Restore persistent User Profile
@@ -1115,6 +1118,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setUser(activeUser);
           currentUid = activeUser.id;
           localApi.setCurrentUserId(currentUid);
+          await localApi.initStorage(currentUid);
         }
 
         // Restore persistent Friends and Activity Feed per user
@@ -1259,22 +1263,32 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // 4. Check Auth state
         const authVal = await AsyncStorage.getItem('habitup_is_authenticated_v1');
-        const isAuth = authVal ? JSON.parse(authVal) : false;
+        let isAuth = false;
+        if (authVal) {
+          try {
+            isAuth = JSON.parse(authVal);
+          } catch {
+            isAuth = authVal === 'true';
+          }
+        }
 
-        if (isAuth && localApi.hasAuthToken()) {
+        const hasValidUser = !!(activeUser && activeUser.id && activeUser.id !== 'usr_default');
+        const hasTokens = localApi.hasAuthToken();
+
+        if (isAuth || (hasValidUser && (hasTokens || activeUser?.email))) {
           setIsAuthenticated(true);
+          AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(true)).catch(() => {});
+
           try {
             const me = await localApi.fetchMe();
-            if (me) {
+            if (me && me.id) {
               setUser(me);
               localApi.saveUser(me, me.id);
               AsyncStorage.setItem('habitup_current_user_v1', JSON.stringify(me)).catch(() => {});
-            } else {
-              setIsAuthenticated(false);
-              AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
             }
+
             const [serverHabits, stats] = await Promise.all([
-              localApi.fetchHabitsFromServer(),
+              localApi.fetchHabitsFromServer().catch(() => null),
               localApi.fetchStatsFromServer().catch(() => null),
             ]);
 
@@ -1330,14 +1344,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             cleanCompletions = deduplicateCompletions(cleanCompletions);
             setCompletions(cleanCompletions);
             localApi.saveCompletions(cleanCompletions, currentUid);
-          } catch {
-            // offline fallback already loaded
+          } catch (e) {
+            // Offline fallback: keep cached session and habits intact without throwing back to login
+            console.log('Online habit sync skipped (offline or network delay):', e);
           }
         } else {
           setIsAuthenticated(false);
-          if (isAuth && !localApi.hasAuthToken()) {
-            AsyncStorage.setItem('habitup_is_authenticated_v1', JSON.stringify(false)).catch(() => {});
-          }
         }
 
         // 5. Sync mutual cross-account friends and shared habits

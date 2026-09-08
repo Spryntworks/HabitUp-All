@@ -90,11 +90,12 @@ class ApiClient {
     this.refreshToken =
       this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) ||
       this.getStorage<string | null>('habitup_refresh_token', null);
-    this.initAsync();
+    this.initStorage().catch(() => {});
   }
 
-  private async initAsync() {
+  public async initStorage(targetUserId?: string): Promise<{ accessToken: string | null; refreshToken: string | null }> {
     try {
+      // 1. Load all keys into memoryStore
       const keys = await AsyncStorage.getAllKeys();
       if (keys && keys.length > 0) {
         for (const k of keys) {
@@ -102,16 +103,73 @@ class ApiClient {
           if (val !== null) memoryStore[k] = val;
         }
       }
-      const uid = this.getStorage<string>('habitup_current_user_id', 'usr_default');
-      this.currentUserId = uid;
-      this.accessToken =
-        this.getStorage<string | null>(`habitup_access_token_${uid}`, null) ||
-        this.getStorage<string | null>('habitup_access_token', null);
-      this.refreshToken =
-        this.getStorage<string | null>(`habitup_refresh_token_${uid}`, null) ||
-        this.getStorage<string | null>('habitup_refresh_token', null);
-    } catch {
-      // ignore
+
+      // 2. Resolve User ID
+      let uid = targetUserId;
+      if (!uid || uid === 'usr_default') {
+        const savedUidRaw = await AsyncStorage.getItem('habitup_current_user_id');
+        if (savedUidRaw) {
+          try {
+            uid = JSON.parse(savedUidRaw);
+          } catch {
+            uid = savedUidRaw;
+          }
+        }
+      }
+      this.currentUserId = uid || 'usr_default';
+
+      // 3. Load tokens for this user or global fallback
+      let access: string | null = null;
+      let refresh: string | null = null;
+
+      if (this.currentUserId && this.currentUserId !== 'usr_default') {
+        access = await AsyncStorage.getItem(`habitup_access_token_${this.currentUserId}`);
+        refresh = await AsyncStorage.getItem(`habitup_refresh_token_${this.currentUserId}`);
+      }
+
+      if (!access) access = await AsyncStorage.getItem('habitup_access_token');
+      if (!refresh) refresh = await AsyncStorage.getItem('habitup_refresh_token');
+
+      // Unwrap JSON if needed
+      if (access) {
+        try {
+          const parsed = JSON.parse(access);
+          if (typeof parsed === 'string') access = parsed;
+        } catch {}
+      }
+      if (refresh) {
+        try {
+          const parsed = JSON.parse(refresh);
+          if (typeof parsed === 'string') refresh = parsed;
+        } catch {}
+      }
+
+      this.accessToken = access || null;
+      this.refreshToken = refresh || null;
+
+      if (this.accessToken) {
+        memoryStore['habitup_access_token'] = JSON.stringify(this.accessToken);
+        if (this.currentUserId && this.currentUserId !== 'usr_default') {
+          memoryStore[`habitup_access_token_${this.currentUserId}`] = JSON.stringify(this.accessToken);
+        }
+      }
+      if (this.refreshToken) {
+        memoryStore['habitup_refresh_token'] = JSON.stringify(this.refreshToken);
+        if (this.currentUserId && this.currentUserId !== 'usr_default') {
+          memoryStore[`habitup_refresh_token_${this.currentUserId}`] = JSON.stringify(this.refreshToken);
+        }
+      }
+
+      return {
+        accessToken: this.accessToken,
+        refreshToken: this.refreshToken,
+      };
+    } catch (e) {
+      console.warn('ApiClient initStorage warning:', e);
+      return {
+        accessToken: this.accessToken,
+        refreshToken: this.refreshToken,
+      };
     }
   }
 
