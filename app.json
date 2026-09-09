@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "HabitUp",
-    "slug": "habitup-tracker",
+    "slug": "habitup-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -32,6 +32,11 @@
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e1daf393-2cc0-496e-bed2-c77daa57aeb1"
+      }
     }
   }
 }
