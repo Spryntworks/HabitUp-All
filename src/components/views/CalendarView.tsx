@@ -225,7 +225,8 @@ export const CalendarView: React.FC = () => {
                       ]}
                     >
                       <LinearGradient
-                        colors={['#10B981', '#F59E0B']}
+                        colors={['#10B981', '#10B981', '#EF4444', '#EF4444']}
+                        locations={[0, 0.5, 0.5, 1]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={[
@@ -306,7 +307,8 @@ export const CalendarView: React.FC = () => {
 
         <View style={styles.legendItem}>
           <LinearGradient
-            colors={['#10B981', '#F59E0B']}
+            colors={['#10B981', '#10B981', '#EF4444', '#EF4444']}
+            locations={[0, 0.5, 0.5, 1]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.legendDot}
@@ -544,9 +546,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   nodePartial: {
-    shadowColor: '#F59E0B',
+    shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
     shadowRadius: 4,
     elevation: 3,
   },
