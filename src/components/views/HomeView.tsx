@@ -49,23 +49,76 @@ export const HomeView: React.FC = () => {
       <DateStrip />
       <TodayProgressCard />
 
-      {/* Habits Section Header */}
+      {/* Habits Section Header & Filter Tabs */}
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-          {selectedDate === new Date().toISOString().split('T')[0]
-            ? "Today's Habits"
-            : `Habits for ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', weekday: 'short' }).format(selectedDateTime)}`}
-        </Text>
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' },
-          ]}
-        >
-          <Text style={[styles.badgeText, { color: isDark ? '#CBD5E1' : '#334155' }]}>
-            {filteredHabits.length} habits
+        <View style={styles.sectionTitleRow}>
+          <Text style={[styles.sectionTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+            {selectedDate === new Date().toISOString().split('T')[0]
+              ? "Today's Habits"
+              : `Habits for ${new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', weekday: 'short' }).format(selectedDateTime)}`}
           </Text>
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: isDark ? 'rgba(124, 92, 255, 0.16)' : 'rgba(124, 92, 255, 0.1)' },
+            ]}
+          >
+            <Text style={[styles.badgeText, { color: isDark ? '#A78BFA' : '#7C5CFF' }]}>
+              {filteredHabits.length}
+            </Text>
+          </View>
         </View>
+
+        {/* Filter Pills */}
+        {scheduledHabits.length > 0 && (
+          <View style={styles.filterRow}>
+            {(['all', 'pending', 'completed'] as const).map((mode) => {
+              const isActive = filterMode === mode;
+              const label = mode === 'all' ? 'All' : mode === 'pending' ? 'Pending' : 'Done';
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  onPress={() => setFilterMode(mode)}
+                  style={[
+                    styles.filterChip,
+                    {
+                      backgroundColor: isActive
+                        ? isDark
+                          ? '#7C5CFF'
+                          : '#7C5CFF'
+                        : isDark
+                        ? '#141D2E'
+                        : '#F1F5F9',
+                      borderColor: isActive
+                        ? '#7C5CFF'
+                        : isDark
+                        ? 'rgba(255, 255, 255, 0.08)'
+                        : '#E2E8F0',
+                    },
+                    isActive && styles.activeFilterChip,
+                  ]}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      {
+                        color: isActive
+                          ? '#FFFFFF'
+                          : isDark
+                          ? '#94A3B8'
+                          : '#64748B',
+                        fontWeight: isActive ? '700' : '600',
+                      },
+                    ]}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {/* Habit List */}
@@ -79,8 +132,8 @@ export const HomeView: React.FC = () => {
             style={[
               styles.emptyBox,
               {
-                backgroundColor: isDark ? '#162032' : '#FFFFFF',
-                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
               },
             ]}
           >
@@ -98,8 +151,9 @@ export const HomeView: React.FC = () => {
               <TouchableOpacity
                 style={[styles.templateBtn, { backgroundColor: '#7C5CFF', borderColor: '#7C5CFF' }]}
                 onPress={() => setIsOnboardingModalOpen(true)}
+                activeOpacity={0.8}
               >
-                <Sparkles size={16} color="#FFFFFF" />
+                <Sparkles size={15} color="#FFFFFF" />
                 <Text style={[styles.templateBtnText, { color: '#FFFFFF' }]}>
                   Browse Templates
                 </Text>
@@ -109,13 +163,14 @@ export const HomeView: React.FC = () => {
                   styles.addBtn,
                   {
                     backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#CBD5E1',
                     borderWidth: 1,
                   },
                 ]}
                 onPress={() => setIsCreateModalOpen(true)}
+                activeOpacity={0.8}
               >
-                <Plus size={16} color={isDark ? '#F8FAFC' : '#0F172A'} />
+                <Plus size={15} color={isDark ? '#F8FAFC' : '#0F172A'} />
                 <Text style={[styles.addBtnText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
                   Custom Habit
                 </Text>
@@ -127,8 +182,8 @@ export const HomeView: React.FC = () => {
             style={[
               styles.emptyBox,
               {
-                backgroundColor: isDark ? '#162032' : '#FFFFFF',
-                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
               },
             ]}
           >
@@ -138,13 +193,15 @@ export const HomeView: React.FC = () => {
             <Text style={[styles.emptyTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
               {filterMode === 'completed'
                 ? 'No habits completed yet'
+                : filterMode === 'pending'
+                ? 'All pending habits completed!'
                 : scheduledHabits.length === 0
                 ? 'No habits scheduled for today'
                 : 'All scheduled habits completed!'}
             </Text>
             <Text style={[styles.emptySubtitle, { color: isDark ? '#94A3B8' : '#64748B' }]}>
               {scheduledHabits.length === 0
-                ? 'Enjoy your rest day or add a habit.'
+                ? 'Enjoy your rest day or add a new habit.'
                 : 'Great job maintaining consistency today!'}
             </Text>
 
@@ -152,8 +209,9 @@ export const HomeView: React.FC = () => {
               <TouchableOpacity
                 style={styles.addBtn}
                 onPress={() => setIsCreateModalOpen(true)}
+                activeOpacity={0.8}
               >
-                <Plus size={16} color="#FFFFFF" />
+                <Plus size={15} color="#FFFFFF" />
                 <Text style={styles.addBtnText}>Add Habit</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -161,12 +219,13 @@ export const HomeView: React.FC = () => {
                   styles.templateBtn,
                   {
                     backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
-                    borderColor: isDark ? '#334155' : '#CBD5E1',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#CBD5E1',
                   },
                 ]}
                 onPress={() => setIsOnboardingModalOpen(true)}
+                activeOpacity={0.8}
               >
-                <Sparkles size={16} color="#7C5CFF" />
+                <Sparkles size={15} color="#7C5CFF" />
                 <Text style={[styles.templateBtnText, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>
                   Templates
                 </Text>
@@ -184,28 +243,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
   sectionHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 10,
+  },
+  sectionTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 8,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   badge: {
-    paddingHorizontal: 8,
+    paddingHorizontal: 9,
     paddingVertical: 3,
     borderRadius: 12,
   },
   badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  activeFilterChip: {
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  filterChipText: {
+    fontSize: 12,
   },
   listContainer: {
     paddingBottom: 16,
@@ -218,6 +302,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 2,
   },
   emptyIconCircle: {
     width: 48,
@@ -229,29 +318,37 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   emptyTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 12,
+    fontWeight: '500',
     marginTop: 4,
     textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 12,
   },
   emptyActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginTop: 16,
+    marginTop: 18,
   },
   addBtn: {
     backgroundColor: '#7C5CFF',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 14,
     gap: 6,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   addBtnText: {
     color: '#FFFFFF',
@@ -261,9 +358,9 @@ const styles = StyleSheet.create({
   templateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 14,
     borderWidth: 1,
     gap: 6,
   },

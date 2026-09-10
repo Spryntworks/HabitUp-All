@@ -39,17 +39,31 @@ export const DateStrip: React.FC = () => {
             {monthYearLabel}
           </Text>
           {selectedDate !== todayKey && (
-            <TouchableOpacity onPress={jumpToToday} style={styles.todayPill}>
+            <TouchableOpacity onPress={jumpToToday} style={styles.todayPill} activeOpacity={0.7}>
               <Text style={styles.todayPillText}>Back to Today</Text>
             </TouchableOpacity>
           )}
         </View>
 
         <View style={styles.navGroup}>
-          <TouchableOpacity onPress={() => changeWeek(-7)} style={styles.navBtn}>
+          <TouchableOpacity
+            onPress={() => changeWeek(-7)}
+            style={[
+              styles.navBtn,
+              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)' },
+            ]}
+            activeOpacity={0.7}
+          >
             <ChevronLeft size={16} color={isDark ? '#94A3B8' : '#64748B'} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => changeWeek(7)} style={styles.navBtn}>
+          <TouchableOpacity
+            onPress={() => changeWeek(7)}
+            style={[
+              styles.navBtn,
+              { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)' },
+            ]}
+            activeOpacity={0.7}
+          >
             <ChevronRight size={16} color={isDark ? '#94A3B8' : '#64748B'} />
           </TouchableOpacity>
         </View>
@@ -87,23 +101,24 @@ export const DateStrip: React.FC = () => {
                       ? '#1E293B'
                       : '#EDE9FE'
                     : isDark
-                    ? '#0F172A'
+                    ? '#141D2E'
                     : '#FFFFFF',
                   borderColor: isSelected
                     ? '#7C5CFF'
                     : isToday
                     ? '#7C5CFF'
                     : isDark
-                    ? '#1E293B'
+                    ? 'rgba(255, 255, 255, 0.08)'
                     : '#E2E8F0',
                 },
+                isSelected && styles.selectedDayPill,
               ]}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
               <Text
                 style={[
                   styles.dayName,
-                  { color: isSelected ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B' },
+                  { color: isSelected ? '#E0E7FF' : isDark ? '#94A3B8' : '#64748B' },
                 ]}
               >
                 {item.dayName}
@@ -150,7 +165,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   monthGroup: {
     flexDirection: 'row',
@@ -161,12 +176,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   todayPill: {
     backgroundColor: 'rgba(124, 92, 255, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 12,
   },
   todayPillText: {
@@ -177,11 +192,11 @@ const styles = StyleSheet.create({
   navGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   navBtn: {
-    padding: 4,
-    borderRadius: 8,
+    padding: 6,
+    borderRadius: 10,
   },
   daysRow: {
     flexDirection: 'row',
@@ -196,9 +211,17 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
   },
+  selectedDayPill: {
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
+  },
   dayName: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   dayNumber: {
     fontSize: 15,

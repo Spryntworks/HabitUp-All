@@ -62,12 +62,24 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
       style={[
         styles.card,
         {
-          backgroundColor: isDark ? '#162032' : '#FFFFFF',
-          borderColor: isDark ? '#1E293B' : '#E2E8F0',
+          backgroundColor: isCompleted
+            ? isDark
+              ? 'rgba(16, 185, 129, 0.08)'
+              : 'rgba(236, 253, 245, 0.95)'
+            : isDark
+            ? '#121B2D'
+            : '#FFFFFF',
+          borderColor: isCompleted
+            ? isDark
+              ? 'rgba(16, 185, 129, 0.28)'
+              : 'rgba(16, 185, 129, 0.35)'
+            : isDark
+            ? 'rgba(255, 255, 255, 0.07)'
+            : '#E2E8F0',
         },
       ]}
       onPress={() => setSelectedHabitForDetail(habit)}
-      activeOpacity={0.8}
+      activeOpacity={0.88}
     >
       <View style={styles.contentRow}>
         {/* Habit Icon */}
@@ -75,7 +87,8 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
           style={[
             styles.iconCircle,
             {
-              backgroundColor: habit.color || '#FF5A79',
+              backgroundColor: habit.color || '#7C5CFF',
+              opacity: isCompleted ? 0.9 : 1,
             },
           ]}
         >
@@ -88,16 +101,25 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
             <Text
               style={[
                 styles.title,
-                { color: isDark ? '#FFFFFF' : '#0F172A' },
+                {
+                  color: isCompleted
+                    ? isDark
+                      ? '#94A3B8'
+                      : '#475569'
+                    : isDark
+                    ? '#FFFFFF'
+                    : '#0F172A',
+                  textDecorationLine: isCompleted ? 'line-through' : 'none',
+                },
               ]}
               numberOfLines={1}
             >
               {habit.name}
             </Text>
             {stats.currentStreak > 0 && (
-              <View style={styles.streakBadge}>
-                <Flame size={13} color="#F59E0B" fill="#F59E0B" />
-                <Text style={styles.streakCount}>{stats.currentStreak}</Text>
+              <View style={[styles.streakBadge, { backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7' }]}>
+                <Flame size={12} color="#F59E0B" fill="#F59E0B" />
+                <Text style={styles.streakCount}>{stats.currentStreak}d</Text>
               </View>
             )}
             {isPaused && (
@@ -123,7 +145,7 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
             <Text
               style={[
                 styles.subtitle,
-                { color: isDark ? '#94A3B8' : '#64748B' },
+                { color: isDark ? '#64748B' : '#94A3B8' },
               ]}
               numberOfLines={1}
             >
@@ -137,9 +159,9 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
           <TouchableOpacity
             style={styles.moreBtn}
             onPress={() => setShowMenu(true)}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <MoreVertical size={16} color={isDark ? '#94A3B8' : '#64748B'} />
+            <MoreVertical size={16} color={isDark ? '#64748B' : '#94A3B8'} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -154,7 +176,7 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
             onPress={handleCheckClick}
             activeOpacity={0.7}
           >
-            {isCompleted && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+            {isCompleted && <Check size={16} color="#FFFFFF" strokeWidth={3} />}
           </TouchableOpacity>
         </View>
       </View>
@@ -231,16 +253,17 @@ export const HabitCard: React.FC<HabitCardProps> = ({ habit }) => {
 
 const styles = StyleSheet.create({
   card: {
-    marginHorizontal: 20,
-    marginVertical: 5,
-    padding: 12,
-    borderRadius: 20,
+    marginHorizontal: 16,
+    marginVertical: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 22,
     borderWidth: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   contentRow: {
     flexDirection: 'row',
@@ -250,7 +273,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -264,7 +287,8 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 15,
-    fontWeight: '800',
+    fontWeight: '700',
+    letterSpacing: -0.2,
     flexShrink: 1,
   },
   badgePaused: {
@@ -305,49 +329,61 @@ const styles = StyleSheet.create({
   subRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    marginTop: 3,
     gap: 8,
   },
   subtitle: {
     fontSize: 12,
     fontWeight: '500',
+    letterSpacing: -0.1,
     flexShrink: 1,
   },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   streakCount: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: '#F59E0B',
   },
   actionsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 6,
   },
   moreBtn: {
-    padding: 6,
+    padding: 8,
+    borderRadius: 8,
   },
   checkbox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#22D3A8',
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   checkboxUncheckedDark: {
     borderWidth: 2,
-    borderColor: '#475569',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
   checkboxUncheckedLight: {
     borderWidth: 2,
     borderColor: '#CBD5E1',
+    backgroundColor: '#F8FAFC',
   },
   menuOverlay: {
     flex: 1,

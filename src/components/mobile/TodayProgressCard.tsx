@@ -51,8 +51,8 @@ export const TodayProgressCard: React.FC = () => {
       style={[
         styles.card,
         {
-          backgroundColor: isDark ? '#162032' : '#FFFFFF',
-          borderColor: isDark ? '#1E293B' : '#E2E8F0',
+          backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+          borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
         },
       ]}
     >
@@ -76,12 +76,28 @@ export const TodayProgressCard: React.FC = () => {
           <View style={styles.countRow}>
             <Text style={[styles.countMain, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
               {completedCount}
-              <Text style={{ color: isDark ? '#64748B' : '#94A3B8', fontSize: 20 }}>
+              <Text style={{ color: isDark ? '#475569' : '#94A3B8', fontSize: 20, fontWeight: '700' }}>
                 /{totalCount}
               </Text>
             </Text>
-            <View style={styles.percentBadge}>
-              <Text style={styles.percentText}>{progressPercent}%</Text>
+            <View
+              style={[
+                styles.percentBadge,
+                {
+                  backgroundColor: isPerfectDay
+                    ? isDark ? 'rgba(16, 185, 129, 0.22)' : '#D1FAE5'
+                    : isDark ? 'rgba(124, 92, 255, 0.18)' : '#EDE9FE',
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.percentText,
+                  { color: isPerfectDay ? '#10B981' : isDark ? '#A78BFA' : '#7C5CFF' },
+                ]}
+              >
+                {progressPercent}%
+              </Text>
             </View>
           </View>
 
@@ -90,7 +106,7 @@ export const TodayProgressCard: React.FC = () => {
               ? 'Ready to grow? 🌱 Add your first habit!'
               : totalCount - completedCount === 0
               ? 'All habits completed! 🌟'
-              : `${totalCount - completedCount} habit${totalCount - completedCount === 1 ? '' : 's'} left`}
+              : `${totalCount - completedCount} habit${totalCount - completedCount === 1 ? '' : 's'} remaining`}
           </Text>
 
           {/* Plant Garden Button */}
@@ -99,11 +115,12 @@ export const TodayProgressCard: React.FC = () => {
               style={[
                 styles.plantPill,
                 {
-                  backgroundColor: isDark ? 'rgba(6, 78, 59, 0.4)' : 'rgba(209, 250, 229, 0.8)',
-                  borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.3)',
+                  backgroundColor: isDark ? 'rgba(6, 78, 59, 0.35)' : 'rgba(209, 250, 229, 0.7)',
+                  borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.25)',
                 },
               ]}
               onPress={() => setIsPlantGardenModalOpen(true)}
+              activeOpacity={0.7}
             >
               <Sprout size={12} color="#10B981" />
               <Text style={[styles.plantPillText, { color: isDark ? '#6EE7B7' : '#065F46' }]}>
@@ -120,14 +137,14 @@ export const TodayProgressCard: React.FC = () => {
           onPress={() => setIsPlantGardenModalOpen(true)}
           activeOpacity={0.8}
         >
-          <Svg width={90} height={90} viewBox="0 0 100 100">
+          <Svg width={92} height={92} viewBox="0 0 100 100">
             {/* Background Track Circle */}
             <Circle
               cx="50"
               cy="50"
               r={radius}
               fill="none"
-              stroke={isDark ? '#1F293D' : '#F1F5F9'}
+              stroke={isDark ? '#1E293B' : '#F1F5F9'}
               strokeWidth={strokeWidth}
             />
 
@@ -137,7 +154,7 @@ export const TodayProgressCard: React.FC = () => {
               cy="50"
               r={radius}
               fill="none"
-              stroke="#10B981"
+              stroke={isPerfectDay ? '#10B981' : '#7C5CFF'}
               strokeWidth={strokeWidth}
               strokeDasharray={`${circumference} ${circumference}`}
               strokeDashoffset={strokeDashoffset}
@@ -170,13 +187,13 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: 20,
     marginVertical: 8,
-    padding: 16,
-    borderRadius: 24,
+    padding: 18,
+    borderRadius: 22,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowRadius: 10,
     elevation: 3,
   },
   contentRow: {
@@ -186,7 +203,7 @@ const styles = StyleSheet.create({
   },
   leftInfo: {
     flex: 1,
-    paddingRight: 10,
+    paddingRight: 12,
   },
   titleRow: {
     flexDirection: 'row',
@@ -196,7 +213,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.6,
   },
   perfectBadge: {
     flexDirection: 'row',
@@ -219,19 +236,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   countMain: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   percentBadge: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   percentText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#10B981',
   },
   subtitle: {
     fontSize: 12,
@@ -242,20 +258,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    marginTop: 8,
+    marginTop: 10,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 4,
+    gap: 5,
   },
   plantPillText: {
     fontSize: 11,
     fontWeight: '700',
   },
   gaugeContainer: {
-    width: 90,
-    height: 90,
+    width: 92,
+    height: 92,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
