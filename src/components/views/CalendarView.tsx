@@ -84,14 +84,21 @@ export const CalendarView: React.FC = () => {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: isDark ? '#080E1A' : '#F8FAFC' }]}
+      style={[styles.container, { backgroundColor: isDark ? '#0B1120' : '#F8FAFC' }]}
       contentContainerStyle={styles.contentContainer}
     >
       {/* Top Header: [ < ] Calendar */}
       <View style={styles.topHeader}>
         <TouchableOpacity
           onPress={() => setActiveTab('home')}
-          style={styles.backButton}
+          style={[
+            styles.backButton,
+            {
+              backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+            },
+          ]}
+          activeOpacity={0.7}
         >
           <ChevronLeft size={22} color={isDark ? '#E2E8F0' : '#0F172A'} />
         </TouchableOpacity>
@@ -100,14 +107,21 @@ export const CalendarView: React.FC = () => {
           Calendar
         </Text>
 
-        <View style={{ width: 34 }} />
+        <View style={{ width: 38 }} />
       </View>
 
       {/* Month Navigator Header */}
       <View style={styles.monthNavRow}>
         <TouchableOpacity
           onPress={() => changeMonth(-1)}
-          style={[styles.monthNavBtn, { backgroundColor: isDark ? '#131C2E' : '#F1F5F9' }]}
+          style={[
+            styles.monthNavBtn,
+            {
+              backgroundColor: isDark ? '#141D2E' : '#F1F5F9',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+            },
+          ]}
+          activeOpacity={0.7}
         >
           <ChevronLeft size={18} color={isDark ? '#94A3B8' : '#64748B'} />
         </TouchableOpacity>
@@ -121,7 +135,14 @@ export const CalendarView: React.FC = () => {
 
         <TouchableOpacity
           onPress={() => changeMonth(1)}
-          style={[styles.monthNavBtn, { backgroundColor: isDark ? '#131C2E' : '#F1F5F9' }]}
+          style={[
+            styles.monthNavBtn,
+            {
+              backgroundColor: isDark ? '#141D2E' : '#F1F5F9',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+            },
+          ]}
+          activeOpacity={0.7}
         >
           <ChevronRight size={18} color={isDark ? '#94A3B8' : '#64748B'} />
         </TouchableOpacity>
@@ -199,21 +220,29 @@ export const CalendarView: React.FC = () => {
                       onPress={() => setSelectedCalendarDay(item.key)}
                       style={[
                         styles.calNodeWrapper,
-                        isCurrentToday && [
-                          styles.todayRing,
-                          { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
-                        ],
-                        isSelected && !isCurrentToday && styles.selectedRing,
+                        isCurrentToday && styles.todayRing,
+                        isSelected && styles.selectedRing,
                       ]}
                     >
                       <LinearGradient
-                        colors={['#22D3A8', '#22D3A8', '#FF4D6D', '#FF4D6D']}
-                        locations={[0, 0.5, 0.5, 1]}
+                        colors={['#10B981', '#F59E0B']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={[styles.calNode, styles.nodePartial]}
+                        style={[
+                          styles.calNode,
+                          styles.nodePartial,
+                          !item.isCurrentMonth && styles.nodeInactiveMonth,
+                        ]}
                       >
-                        <Text style={[styles.calNodeText, { color: '#FFFFFF', fontWeight: '900' }]}>
+                        <Text
+                          style={[
+                            styles.calNodeText,
+                            {
+                              color: nodeTextColor,
+                              fontWeight: isSelected || isCurrentToday ? '900' : '700',
+                            },
+                          ]}
+                        >
                           {item.dayNumber}
                         </Text>
                       </LinearGradient>
@@ -226,28 +255,24 @@ export const CalendarView: React.FC = () => {
                 <View key={item.key} style={styles.dayCol}>
                   <TouchableOpacity
                     activeOpacity={0.8}
+                    onPress={() => setSelectedCalendarDay(item.key)}
                     style={[
                       styles.calNodeWrapper,
-                      isCurrentToday && [
-                        styles.todayRing,
-                        { backgroundColor: isDark ? '#131C2E' : '#F5F3FF' },
-                      ],
-                      isSelected && !isCurrentToday && styles.selectedRing,
+                      isCurrentToday && styles.todayRing,
+                      isSelected && styles.selectedRing,
                     ]}
-                    onPress={() => setSelectedCalendarDay(item.key)}
                   >
                     <View
                       style={[
                         styles.calNode,
-                        !item.isCurrentMonth && {
-                          backgroundColor: 'transparent',
+                        nodeType === 'completed' && styles.nodeCompleted,
+                        nodeType === 'missed' && styles.nodeMissed,
+                        nodeType === 'pending' && {
+                          backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+                          borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+                          borderWidth: 1,
                         },
-                        item.isCurrentMonth && nodeType === 'completed' && styles.nodeCompleted,
-                        item.isCurrentMonth && nodeType === 'missed' && styles.nodeMissed,
-                        item.isCurrentMonth &&
-                          nodeType === 'pending' && {
-                            backgroundColor: isDark ? '#162032' : '#F1F5F9',
-                          },
+                        !item.isCurrentMonth && styles.nodeInactiveMonth,
                       ]}
                     >
                       <Text
@@ -255,8 +280,7 @@ export const CalendarView: React.FC = () => {
                           styles.calNodeText,
                           {
                             color: nodeTextColor,
-                            fontWeight:
-                              nodeType !== 'pending' || isCurrentToday || isSelected ? '800' : '600',
+                            fontWeight: isSelected || isCurrentToday ? '900' : '700',
                           },
                         ]}
                       >
@@ -271,19 +295,18 @@ export const CalendarView: React.FC = () => {
         ))}
       </View>
 
-      {/* Legend Row matching Image */}
+      {/* Status Legend */}
       <View style={styles.legendRow}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#22D3A8' }]} />
+          <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
           <Text style={[styles.legendText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Completed
+            All Done
           </Text>
         </View>
 
         <View style={styles.legendItem}>
           <LinearGradient
-            colors={['#22D3A8', '#22D3A8', '#FF4D6D', '#FF4D6D']}
-            locations={[0, 0.5, 0.5, 1]}
+            colors={['#10B981', '#F59E0B']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.legendDot}
@@ -294,21 +317,14 @@ export const CalendarView: React.FC = () => {
         </View>
 
         <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#FF4D6D' }]} />
+          <View style={[styles.legendDot, { backgroundColor: '#EF4444' }]} />
           <Text style={[styles.legendText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
             Missed
           </Text>
         </View>
-
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: isDark ? '#1E293B' : '#CBD5E1' }]} />
-          <Text style={[styles.legendText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-            Pending
-          </Text>
-        </View>
       </View>
 
-      {/* Selected Day Header Section */}
+      {/* Selected Day Details Section */}
       <View style={styles.selectedDaySection}>
         <View style={styles.selectedDayHeader}>
           <Text style={[styles.selectedDayTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
@@ -322,113 +338,85 @@ export const CalendarView: React.FC = () => {
         </View>
 
         <Text style={[styles.selectedDaySub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-          {completedDayCount} of {totalDayCount} habits completed ({dayProgressPercent}%)
+          {totalDayCount === 0
+            ? 'No habits scheduled for this day'
+            : `${completedDayCount} of ${totalDayCount} completed (${dayProgressPercent}%)`}
         </Text>
 
-        {/* Progress Bar with Dynamic Color */}
-        <View style={[styles.progressBarBg, { backgroundColor: isDark ? '#131C2E' : '#E2E8F0' }]}>
-          <View
-            style={[
-              styles.progressBarFill,
-              {
-                width: `${dayProgressPercent}%`,
-                backgroundColor:
-                  dayProgressPercent === 100
-                    ? '#22D3A8'
-                    : dayProgressPercent > 0
-                    ? '#F59E0B'
-                    : '#FF4D6D',
-              },
-            ]}
-          />
-        </View>
-      </View>
-
-      {/* Habits List for Selected Day (Reflects home check-ins) */}
-      <View style={styles.habitsListContainer}>
-        {displayHabitsForDay.map((habit) => {
-          const isDone = completions.some(
-            (c) => c.habit_id === habit.id && c.completion_date === selectedCalendarDay
-          );
-
-          return (
+        {totalDayCount > 0 && (
+          <View style={[styles.progressBarBg, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
             <View
-              key={habit.id}
               style={[
-                styles.habitItemCard,
+                styles.progressBarFill,
                 {
-                  backgroundColor: isDone
-                    ? isDark
-                      ? 'rgba(16, 185, 129, 0.12)'
-                      : '#ECFDF5'
-                    : isDark
-                    ? '#131C2E'
-                    : '#FFFFFF',
-                  borderColor: isDone
-                    ? isDark
-                      ? 'rgba(34, 211, 168, 0.4)'
-                      : '#A7F3D0'
-                    : isDark
-                    ? '#1E293B'
-                    : '#E2E8F0',
+                  width: `${dayProgressPercent}%`,
+                  backgroundColor: dayProgressPercent === 100 ? '#10B981' : '#7C5CFF',
                 },
               ]}
-            >
-              <View style={styles.habitItemLeft}>
-                <View
-                  style={[
-                    styles.habitIconBox,
-                    { backgroundColor: habit.color || '#7C5CFF' },
-                  ]}
-                >
-                  <IconRenderer name={habit.icon} size={18} color="#FFFFFF" />
+            />
+          </View>
+        )}
+      </View>
+
+      {/* Habits on that day */}
+      <View style={styles.habitsListContainer}>
+        {displayHabitsForDay.length > 0 ? (
+          displayHabitsForDay.map((habit) => {
+            const isHabitDone = completions.some(
+              (c) =>
+                c.habit_id === habit.id &&
+                (c.completion_date || '').split('T')[0] === selectedCalendarDay
+            );
+
+            return (
+              <View
+                key={habit.id}
+                style={[
+                  styles.habitItemCard,
+                  {
+                    backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+                  },
+                ]}
+              >
+                <View style={styles.habitItemLeft}>
+                  <View style={[styles.habitIconBox, { backgroundColor: habit.color || '#7C5CFF' }]}>
+                    <IconRenderer name={habit.icon} size={18} color="#FFFFFF" />
+                  </View>
+                  <View>
+                    <Text style={[styles.habitItemName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                      {habit.name}
+                    </Text>
+                    <Text style={[styles.habitItemFreq, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                      {habit.frequency_type === 'daily' ? 'Daily' : 'Custom Days'}
+                    </Text>
+                  </View>
                 </View>
-                <View>
-                  <Text
+
+                {isHabitDone ? (
+                  <View style={styles.doneStatusBadge}>
+                    <Check size={12} color="#10B981" strokeWidth={3} />
+                    <Text style={styles.doneStatusText}>Done</Text>
+                  </View>
+                ) : (
+                  <View
                     style={[
-                      styles.habitItemName,
-                      { color: isDark ? '#FFFFFF' : '#0F172A' },
+                      styles.pendingStatusBadge,
+                      { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },
                     ]}
                   >
-                    {habit.name}
-                  </Text>
-                  <Text style={[styles.habitItemFreq, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                    {habit.frequency_type === 'daily' ? 'Daily' : 'Scheduled'}
-                  </Text>
-                </View>
+                    <Text style={[styles.pendingStatusText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+                      Pending
+                    </Text>
+                  </View>
+                )}
               </View>
-
-              {/* Status Badge reflecting Home completions */}
-              {isDone ? (
-                <View style={styles.doneStatusBadge}>
-                  <Check size={12} color="#10B981" strokeWidth={3} />
-                  <Text style={styles.doneStatusText}>Completed</Text>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.pendingStatusBadge,
-                    { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.pendingStatusText,
-                      { color: isDark ? '#94A3B8' : '#64748B' },
-                    ]}
-                  >
-                    Pending
-                  </Text>
-                </View>
-              )}
-            </View>
-          );
-        })}
-
-        {displayHabitsForDay.length === 0 && (
+            );
+          })
+        ) : (
           <View style={styles.emptyDayBox}>
-            <Text style={[styles.emptyDayText, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-              No habits scheduled for this day.
+            <Text style={[styles.emptyDayText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
+              No habits due on this date.
             </Text>
           </View>
         )}
@@ -448,30 +436,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 10,
   },
   backButton: {
-    padding: 6,
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '900',
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   monthNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 12,
+    marginVertical: 10,
   },
   monthNavBtn: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -483,6 +476,7 @@ const styles = StyleSheet.create({
   monthTitleText: {
     fontSize: 16,
     fontWeight: '800',
+    letterSpacing: -0.2,
   },
   dayLabelsRow: {
     flexDirection: 'row',
@@ -511,14 +505,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   calNodeWrapper: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   todayRing: {
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: '#7C5CFF',
   },
   selectedRing: {
@@ -526,21 +520,26 @@ const styles = StyleSheet.create({
     borderColor: '#38BDF8',
   },
   calNode: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   nodeCompleted: {
-    backgroundColor: '#22D3A8',
+    backgroundColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 3,
   },
   nodeMissed: {
-    backgroundColor: '#FF4D6D',
-    shadowColor: '#FF4D6D',
+    backgroundColor: '#EF4444',
+    shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -552,7 +551,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   nodeInactiveMonth: {
-    opacity: 0.2,
+    opacity: 0.25,
   },
   calNodeText: {
     fontSize: 13,
@@ -592,6 +591,7 @@ const styles = StyleSheet.create({
   selectedDayTitle: {
     fontSize: 18,
     fontWeight: '900',
+    letterSpacing: -0.3,
   },
   todayBadge: {
     backgroundColor: '#7C5CFF',
@@ -606,13 +606,14 @@ const styles = StyleSheet.create({
   },
   selectedDaySub: {
     fontSize: 12,
+    fontWeight: '500',
     marginTop: 4,
   },
   progressBarBg: {
-    height: 3,
+    height: 4,
     borderRadius: 2,
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 14,
     overflow: 'hidden',
   },
   progressBarFill: {
@@ -628,8 +629,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 14,
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   habitItemLeft: {
     flexDirection: 'row',
@@ -637,8 +643,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   habitIconBox: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
@@ -649,13 +655,14 @@ const styles = StyleSheet.create({
   },
   habitItemFreq: {
     fontSize: 11,
+    fontWeight: '500',
     marginTop: 2,
   },
   doneStatusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(34, 211, 168, 0.15)',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,

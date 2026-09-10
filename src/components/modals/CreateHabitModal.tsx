@@ -143,16 +143,19 @@ export const CreateHabitModal: React.FC = () => {
         <View
           style={[
             styles.modalContent,
-            { backgroundColor: isDark ? '#111827' : '#FFFFFF' },
+            {
+              backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
+            },
           ]}
         >
           {/* Header */}
-          <View style={[styles.header, { borderBottomColor: isDark ? '#1F2937' : '#F1F5F9' }]}>
+          <View style={[styles.header, { borderBottomColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#F1F5F9' }]}>
             <TouchableOpacity
               onPress={() => setIsCreateModalOpen(false)}
               style={[
                 styles.closeBtn,
-                { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)' },
+                { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' },
               ]}
               activeOpacity={0.7}
             >
@@ -165,18 +168,29 @@ export const CreateHabitModal: React.FC = () => {
           </View>
 
           {/* Sub Tabs: Custom vs Templates */}
-          <View style={[styles.tabBar, { backgroundColor: isDark ? '#1E293B' : '#E2E8F0' }]}>
+          <View style={[styles.tabBar, { backgroundColor: isDark ? '#0C1322' : '#F1F5F9' }]}>
             <TouchableOpacity
               style={[
                 styles.tabBtn,
-                activeTab === 'custom' && { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' },
+                activeTab === 'custom' && {
+                  backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
               ]}
               onPress={() => setActiveTab('custom')}
+              activeOpacity={0.7}
             >
               <Text
                 style={[
                   styles.tabBtnText,
-                  { color: activeTab === 'custom' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                  {
+                    color: activeTab === 'custom' ? (isDark ? '#FFFFFF' : '#7C5CFF') : isDark ? '#94A3B8' : '#64748B',
+                    fontWeight: activeTab === 'custom' ? '800' : '600',
+                  },
                 ]}
               >
                 Custom Habit
@@ -185,14 +199,25 @@ export const CreateHabitModal: React.FC = () => {
             <TouchableOpacity
               style={[
                 styles.tabBtn,
-                activeTab === 'templates' && { backgroundColor: isDark ? '#0F172A' : '#FFFFFF' },
+                activeTab === 'templates' && {
+                  backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
               ]}
               onPress={() => setActiveTab('templates')}
+              activeOpacity={0.7}
             >
               <Text
                 style={[
                   styles.tabBtnText,
-                  { color: activeTab === 'templates' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B' },
+                  {
+                    color: activeTab === 'templates' ? '#7C5CFF' : isDark ? '#94A3B8' : '#64748B',
+                    fontWeight: activeTab === 'templates' ? '800' : '600',
+                  },
                 ]}
               >
                 ⚡ Quick Templates
@@ -661,17 +686,19 @@ export const CreateHabitModal: React.FC = () => {
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.72)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    height: '88%',
-    maxHeight: '92%',
+    height: '90%',
+    maxHeight: '94%',
     width: '100%',
     maxWidth: 520,
     alignSelf: 'center',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderWidth: 1,
+    borderBottomWidth: 0,
     overflow: 'hidden',
   },
   header: {
@@ -683,7 +710,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 17,
-    fontWeight: '800',
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   closeBtn: {
     width: 32,
@@ -696,14 +724,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginHorizontal: 16,
     marginTop: 12,
-    borderRadius: 12,
-    padding: 3,
+    borderRadius: 14,
+    padding: 4,
   },
   tabBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 10,
+    borderRadius: 11,
   },
   tabBtnText: {
     fontSize: 12,
@@ -727,7 +755,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     fontSize: 14,
     ...(Platform.OS === 'web'
       ? {
@@ -743,15 +771,20 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   colorCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   colorSelected: {
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   iconGrid: {
     flexDirection: 'row',
@@ -759,9 +792,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   iconCell: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -772,7 +805,7 @@ const styles = StyleSheet.create({
   freqBtn: {
     flex: 1,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: 'center',
   },
   freqBtnText: {
@@ -803,8 +836,8 @@ const styles = StyleSheet.create({
   },
   timeSection: {
     marginTop: 10,
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 10,
   },
@@ -911,15 +944,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   saveBtn: {
-    height: 50,
+    height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 6,
   },
   saveBtnText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
+    letterSpacing: 0.3,
   },
   templateList: {
     gap: 10,
@@ -927,15 +966,15 @@ const styles = StyleSheet.create({
   templateCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 16,
+    padding: 14,
+    borderRadius: 18,
     borderWidth: 1,
     gap: 12,
   },
   tplIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },

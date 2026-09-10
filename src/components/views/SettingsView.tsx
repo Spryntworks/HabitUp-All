@@ -225,7 +225,7 @@ export const SettingsView: React.FC = () => {
 
   return (
     <ScrollView
-      style={[styles.container, { backgroundColor: isDark ? '#080E1A' : '#F8FAFC' }]}
+      style={[styles.container, { backgroundColor: isDark ? '#0B1120' : '#F8FAFC' }]}
       contentContainerStyle={styles.contentContainer}
     >
       {/* Top Header: Settings / Preferences & Data / < Back */}
@@ -243,11 +243,12 @@ export const SettingsView: React.FC = () => {
           style={[
             styles.backPill,
             {
-              backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-              borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
             },
           ]}
           onPress={() => setActiveTab('home')}
+          activeOpacity={0.7}
         >
           <ChevronLeft size={16} color={isDark ? '#E2E8F0' : '#0F172A'} />
           <Text style={[styles.backPillText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
@@ -256,13 +257,13 @@ export const SettingsView: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* User Profile Card matching Image 1 */}
+      {/* User Profile Card */}
       <View
         style={[
           styles.profileCard,
           {
-            backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
           },
         ]}
       >
@@ -317,8 +318,8 @@ export const SettingsView: React.FC = () => {
         style={[
           styles.sectionCard,
           {
-            backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
           },
         ]}
       >
@@ -329,7 +330,9 @@ export const SettingsView: React.FC = () => {
         {/* 1. Habit Reminders */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
-            <Bell size={18} color="#C084FC" />
+            <View style={[styles.prefIconBadge, { backgroundColor: 'rgba(124, 92, 255, 0.15)' }]}>
+              <Bell size={16} color="#7C5CFF" />
+            </View>
             <View>
               <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Habit Reminders
@@ -348,12 +351,14 @@ export const SettingsView: React.FC = () => {
         </View>
 
         {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
+        <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9' }]} />
 
         {/* 2. Notification Sound */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
-            <Volume2 size={18} color="#10B981" />
+            <View style={[styles.prefIconBadge, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+              <Volume2 size={16} color="#10B981" />
+            </View>
             <View>
               <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Notification Sound
@@ -381,12 +386,14 @@ export const SettingsView: React.FC = () => {
         </View>
 
         {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
+        <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9' }]} />
 
         {/* 3. Theme Mode */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
-            {isDark ? <Moon size={18} color="#818CF8" /> : <Sun size={18} color="#F59E0B" />}
+            <View style={[styles.prefIconBadge, { backgroundColor: isDark ? 'rgba(129, 140, 248, 0.15)' : 'rgba(245, 158, 11, 0.15)' }]}>
+              {isDark ? <Moon size={16} color="#818CF8" /> : <Sun size={16} color="#F59E0B" />}
+            </View>
             <View>
               <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Theme Mode
@@ -400,11 +407,12 @@ export const SettingsView: React.FC = () => {
             style={[
               styles.themeTogglePill,
               {
-                backgroundColor: isDark ? '#080E1A' : '#F1F5F9',
-                borderColor: isDark ? '#1E293B' : '#CBD5E1',
+                backgroundColor: isDark ? '#0C1322' : '#F1F5F9',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#CBD5E1',
               },
             ]}
             onPress={toggleTheme}
+            activeOpacity={0.7}
           >
             <Text style={[styles.themeToggleText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
               {isDark ? 'Dark' : 'Light'}
@@ -413,12 +421,14 @@ export const SettingsView: React.FC = () => {
         </View>
 
         {/* Divider */}
-        <View style={[styles.divider, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]} />
+        <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9' }]} />
 
         {/* 4. Vibration Feedback */}
         <View style={styles.preferenceRow}>
           <View style={styles.prefLeft}>
-            <Smartphone size={18} color="#F43F5E" />
+            <View style={[styles.prefIconBadge, { backgroundColor: 'rgba(244, 63, 94, 0.15)' }]}>
+              <Smartphone size={16} color="#F43F5E" />
+            </View>
             <View>
               <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 Vibration Feedback
@@ -443,11 +453,12 @@ export const SettingsView: React.FC = () => {
         style={[
           styles.exportCsvBtn,
           {
-            backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
           },
         ]}
         onPress={handleExportCSV}
+        activeOpacity={0.75}
       >
         <FileSpreadsheet size={18} color="#10B981" />
         <Text style={[styles.exportCsvBtnText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
@@ -779,6 +790,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     flex: 1,
+  },
+  prefIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   prefName: {
     fontSize: 14,

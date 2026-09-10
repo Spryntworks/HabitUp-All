@@ -332,8 +332,8 @@ export const StatsView: React.FC = () => {
           style={[
             styles.backButton,
             {
-              backgroundColor: isDark ? '#162032' : '#FFFFFF',
-              borderColor: isDark ? '#1E293B' : '#E2E8F0',
+              backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
             },
           ]}
           activeOpacity={0.7}
@@ -349,19 +349,30 @@ export const StatsView: React.FC = () => {
       </View>
 
       {/* Time Range Tabs */}
-      <View style={[styles.tabs, { backgroundColor: isDark ? '#162032' : '#E2E8F0' }]}>
+      <View style={[styles.tabs, { backgroundColor: isDark ? '#141D2E' : '#E2E8F0', borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#CBD5E1' }]}>
         {(['week', 'month', 'year'] as const).map((r) => {
           const isActive = timeRange === r;
           return (
             <TouchableOpacity
               key={r}
-              style={[styles.tabBtn, isActive && { backgroundColor: '#7C5CFF' }]}
+              style={[
+                styles.tabBtn,
+                isActive && {
+                  backgroundColor: '#7C5CFF',
+                  shadowColor: '#7C5CFF',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 4,
+                  elevation: 2,
+                },
+              ]}
               onPress={() => setTimeRange(r)}
+              activeOpacity={0.75}
             >
               <Text
                 style={[
                   styles.tabText,
-                  { color: isActive ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B' },
+                  { color: isActive ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B', fontWeight: isActive ? '800' : '600' },
                 ]}
               >
                 {r.charAt(0).toUpperCase() + r.slice(1)}
@@ -376,8 +387,8 @@ export const StatsView: React.FC = () => {
         style={[
           styles.card,
           {
-            backgroundColor: isDark ? '#162032' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
           },
         ]}
       >
@@ -447,7 +458,7 @@ export const StatsView: React.FC = () => {
                   style={[styles.metricValue, { color: isDark ? '#FFFFFF' : '#0F172A' }]}
                 >
                   {analytics.periodBestStreak}{' '}
-                  <Text style={{ fontSize: 13 }}>days</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: isDark ? '#94A3B8' : '#64748B' }}>days</Text>
                 </Text>
               </View>
             </View>
@@ -460,8 +471,8 @@ export const StatsView: React.FC = () => {
         style={[
           styles.card,
           {
-            backgroundColor: isDark ? '#162032' : '#FFFFFF',
-            borderColor: isDark ? '#1E293B' : '#E2E8F0',
+            backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
           },
         ]}
       >
@@ -479,8 +490,8 @@ export const StatsView: React.FC = () => {
                   style={[
                     styles.barTrack,
                     {
-                      width: timeRange === 'year' ? 12 : 16,
-                      backgroundColor: isDark ? '#0F172A' : '#E2E8F0',
+                      width: timeRange === 'year' ? 12 : 18,
+                      backgroundColor: isDark ? '#0C1322' : '#F1F5F9',
                     },
                   ]}
                 >
@@ -531,11 +542,12 @@ export const StatsView: React.FC = () => {
             style={[
               styles.habitRowCard,
               {
-                backgroundColor: isDark ? '#162032' : '#FFFFFF',
-                borderColor: isDark ? '#1E293B' : '#E2E8F0',
+                backgroundColor: isDark ? '#141D2E' : '#FFFFFF',
+                borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
               },
             ]}
             onPress={() => setSelectedHabitForDetail(item.habit)}
+            activeOpacity={0.75}
           >
             <View style={[styles.habitIconCircle, { backgroundColor: item.color }]}>
               <IconRenderer name={item.icon} size={18} color="#FFFFFF" />
@@ -545,7 +557,7 @@ export const StatsView: React.FC = () => {
               <Text style={[styles.habitName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
                 {item.name}
               </Text>
-              <View style={styles.progressTrack}>
+              <View style={[styles.progressTrack, { backgroundColor: isDark ? '#0C1322' : '#F1F5F9' }]}>
                 <View
                   style={[
                     styles.progressFill,
@@ -575,7 +587,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',
@@ -604,6 +616,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     marginBottom: 12,
+    borderWidth: 1,
   },
   tabBtn: {
     flex: 1,
@@ -613,14 +626,18 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 12,
-    fontWeight: '700',
   },
   card: {
     marginHorizontal: 20,
     marginVertical: 6,
     padding: 18,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   overviewRow: {
     flexDirection: 'row',
@@ -640,13 +657,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   donutPercent: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   donutLabel: {
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   metricsCol: {
     gap: 14,
@@ -656,11 +675,14 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   metricValue: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
+    letterSpacing: -0.5,
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -671,6 +693,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 15,
     fontWeight: '800',
+    letterSpacing: -0.2,
   },
   barChartRow: {
     flexDirection: 'row',
@@ -685,15 +708,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   barTrack: {
-    width: 14,
     height: 75,
-    borderRadius: 7,
+    borderRadius: 9,
     justifyContent: 'flex-end',
     overflow: 'hidden',
   },
   barFill: {
     width: '100%',
-    borderRadius: 7,
+    borderRadius: 9,
   },
   barDayText: {
     fontSize: 10,
@@ -701,36 +723,41 @@ const styles = StyleSheet.create({
   },
   habitsSection: {
     paddingHorizontal: 20,
-    marginTop: 12,
+    marginTop: 14,
     gap: 8,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
     marginBottom: 4,
+    letterSpacing: -0.2,
   },
   habitRowCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 14,
     borderRadius: 18,
     borderWidth: 1,
     gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
   habitIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   habitName: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
   },
   progressTrack: {
-    height: 5,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    height: 6,
     borderRadius: 3,
     marginTop: 6,
     overflow: 'hidden',
@@ -743,7 +770,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   rateText: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '900',
   },
 });

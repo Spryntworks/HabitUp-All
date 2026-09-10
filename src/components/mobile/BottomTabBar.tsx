@@ -12,8 +12,8 @@ export const BottomTabBar: React.FC = () => {
       style={[
         styles.nav,
         {
-          backgroundColor: isDark ? '#0A0F1D' : '#FFFFFF',
-          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+          backgroundColor: isDark ? '#0C1322' : '#FFFFFF',
+          borderTopColor: isDark ? 'rgba(255, 255, 255, 0.08)' : '#E2E8F0',
         },
       ]}
     >
@@ -37,6 +37,7 @@ export const BottomTabBar: React.FC = () => {
         >
           Home
         </Text>
+        {activeTab === 'home' && <View style={styles.activeDot} />}
       </TouchableOpacity>
 
       {/* 2. Friends Tab (Variant B) or Streaks Tab (Variant A) */}
@@ -60,6 +61,7 @@ export const BottomTabBar: React.FC = () => {
           >
             Friends
           </Text>
+          {activeTab === 'friends' && <View style={styles.activeDot} />}
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
@@ -81,6 +83,7 @@ export const BottomTabBar: React.FC = () => {
           >
             Streaks
           </Text>
+          {activeTab === 'streaks' && <View style={[styles.activeDot, { backgroundColor: '#F59E0B' }]} />}
         </TouchableOpacity>
       )}
 
@@ -88,7 +91,10 @@ export const BottomTabBar: React.FC = () => {
       <View style={styles.floatingCenterWrapper}>
         <TouchableOpacity
           onPress={() => setIsCreateModalOpen(true)}
-          style={styles.floatingButton}
+          style={[
+            styles.floatingButton,
+            { borderColor: isDark ? '#0C1322' : '#FFFFFF' },
+          ]}
           activeOpacity={0.85}
         >
           <Plus size={26} color="#FFFFFF" strokeWidth={2.8} />
@@ -115,6 +121,7 @@ export const BottomTabBar: React.FC = () => {
         >
           Stats
         </Text>
+        {activeTab === 'stats' && <View style={styles.activeDot} />}
       </TouchableOpacity>
 
       {/* 5. Calendar Tab */}
@@ -137,6 +144,7 @@ export const BottomTabBar: React.FC = () => {
         >
           Calendar
         </Text>
+        {activeTab === 'calendar' && <View style={styles.activeDot} />}
       </TouchableOpacity>
     </View>
   );
@@ -147,25 +155,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 70 : 64,
+    height: Platform.OS === 'ios' ? 72 : 66,
     zIndex: 40,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 8,
   },
   tabButton: {
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 2,
     flex: 1,
+    position: 'relative',
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     marginTop: 3,
     fontWeight: '600',
+    letterSpacing: 0.1,
   },
   activeTabLabel: {
     fontWeight: '800',
+  },
+  activeDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#7C5CFF',
+    marginTop: 2,
   },
   floatingCenterWrapper: {
     top: -16,
@@ -180,9 +202,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#7C5CFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
     shadowColor: '#7C5CFF',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.45,
     shadowRadius: 10,
     elevation: 8,
   },
