@@ -256,7 +256,7 @@ export const AuthView: React.FC = () => {
       borderColor: 'rgba(245, 158, 11, 0.4)',
       iconColor: '#F59E0B',
       title: 'Build Unbreakable Streaks',
-      subtitle: 'Turn daily actions into permanent power habits. Track consistency, gain momentum, and never break the chain.',
+      subtitle: 'Track daily consistency and never break the chain.',
     },
     {
       id: 'social',
@@ -268,7 +268,7 @@ export const AuthView: React.FC = () => {
       borderColor: 'rgba(124, 92, 255, 0.4)',
       iconColor: '#818CF8',
       title: 'Accountability with Friends',
-      subtitle: 'Connect via unique @usernames. Follow shared routines, compare streaks in real-time, and stay motivated together.',
+      subtitle: 'Share routines, compare streaks, and stay motivated together.',
     },
     {
       id: 'garden',
@@ -280,7 +280,7 @@ export const AuthView: React.FC = () => {
       borderColor: 'rgba(16, 185, 129, 0.4)',
       iconColor: '#10B981',
       title: 'Level Up Your Habit Garden',
-      subtitle: 'Every habit you complete waters your garden. Watch your seedling blossom into a magnificent oak tree with daily consistency.',
+      subtitle: 'Complete daily habits to grow your seedling into a thriving tree.',
     },
   ];
 
