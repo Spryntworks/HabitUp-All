@@ -17,6 +17,11 @@ export const getUserIdFromEmail = (email: string): string => {
   return `usr_${normalized.replace(/[^a-z0-9]/g, '_')}`;
 };
 
+export const isUuid = (str?: string): boolean => {
+  if (typeof str !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+};
+
 export const createDefaultUserProfile = (name?: string, email?: string, timezone?: string, username?: string): UserProfile => {
   const cleanEmail = (email || '').trim();
   const cleanName = (name || '').trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'User');
@@ -1113,6 +1118,9 @@ class ApiClient {
   }
 
   async acceptFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string; friendship_id?: string }> {
+    if (!isUuid(requestId)) {
+      return { success: false, error: 'Invalid request UUID' };
+    }
     try {
       const res = await this.request<{ friendship_id?: string }>(`/friends/requests/${requestId}/accept`, { method: 'POST' });
       return { success: res.ok, error: res.error, friendship_id: res.data?.friendship_id };
@@ -1122,6 +1130,9 @@ class ApiClient {
   }
 
   async rejectFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string }> {
+    if (!isUuid(requestId)) {
+      return { success: false, error: 'Invalid request UUID' };
+    }
     try {
       const res = await this.request(`/friends/requests/${requestId}`, { method: 'DELETE' });
       return { success: res.ok, error: res.error };

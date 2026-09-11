@@ -28,7 +28,7 @@ import {
 } from '../types';
 import { INITIAL_FRIENDS, INITIAL_FEED } from '../constants/socialData';
 import { getDetectedTimezone } from '../constants/timezones';
-import { localApi, getUserIdFromEmail, createDefaultUserProfile } from '../services/apiService';
+import { localApi, getUserIdFromEmail, createDefaultUserProfile, isUuid } from '../services/apiService';
 import {
   notificationService,
   InAppNotification,
@@ -1747,6 +1747,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const combined: FollowRequestItem[] = [...stored];
         for (const sr of serverRequests) {
           const sReqId = sr.request_id || sr.id;
+          if (!sReqId) continue;
           const sFromUserId = sr.from_user_id || sr.fromUserId || sr.senderId || sr.user_id;
           const sFromUsername = sr.from_username || sr.fromUsername || sr.senderUsername || (sr.username ? `@${sr.username}` : '@friend');
           const sCleanFromUser = sFromUsername.replace(/^@/, '');
@@ -1762,7 +1763,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           );
 
           const reqItem: FollowRequestItem = {
-            id: sReqId || `req-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            id: sReqId,
             fromUserId: sFromUserId || `friend-${sCleanFromUser}`,
             fromName: sFromName,
             fromUsername: sFromUsername.startsWith('@') ? sFromUsername : `@${sFromUsername}`,
@@ -3534,20 +3535,23 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // 6. Record in stored follow requests
       const stored = await getStoredFollowRequests();
-      const newReq: FollowRequestItem = {
-        id: serverResult?.request_id || `req-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-        fromUserId: user?.id || 'usr_default',
-        fromName: user?.name || 'You',
-        fromUsername:
-          user?.username ||
-          (user?.name ? `@${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}` : '@user'),
-        fromAvatar: user?.avatar || '🌟',
-        toUserId: targetFriendId,
-        toUsername: `@${cleanHandle}`,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      await saveStoredFollowRequests([newReq, ...stored]);
+      const validReqId = serverResult?.request_id && isUuid(serverResult.request_id) ? serverResult.request_id : '';
+      if (validReqId) {
+        const newReq: FollowRequestItem = {
+          id: validReqId,
+          fromUserId: user?.id || 'usr_default',
+          fromName: user?.name || 'You',
+          fromUsername:
+            user?.username ||
+            (user?.name ? `@${user.name.toLowerCase().replace(/[^a-z0-9]/g, '')}` : '@user'),
+          fromAvatar: user?.avatar || '🌟',
+          toUserId: targetFriendId,
+          toUsername: `@${cleanHandle}`,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+        await saveStoredFollowRequests([newReq, ...stored.filter((r) => r.id !== validReqId)]);
+      }
 
       if (user) {
         syncFollowRequests(user);
