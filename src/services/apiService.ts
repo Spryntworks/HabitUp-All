@@ -187,8 +187,12 @@ class ApiClient {
     this.setStorage('habitup_current_user_id', userId);
     
     // Automatically load this user's specific access and refresh tokens
-    const userAccess = this.getStorage<string | null>(`habitup_access_token_${userId}`, null);
-    const userRefresh = this.getStorage<string | null>(`habitup_refresh_token_${userId}`, null);
+    let userAccess = this.getStorage<string | null>(`habitup_access_token_${userId}`, null);
+    let userRefresh = this.getStorage<string | null>(`habitup_refresh_token_${userId}`, null);
+    if (!userAccess && userId !== 'usr_default') {
+      userAccess = this.getStorage<string | null>('habitup_access_token', null);
+      userRefresh = this.getStorage<string | null>('habitup_refresh_token', null);
+    }
     if (userAccess) {
       this.accessToken = userAccess;
       this.refreshToken = userRefresh;
@@ -322,7 +326,7 @@ class ApiClient {
     }
 
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
 
     try {
       let res = await fetch(url, {
@@ -467,10 +471,12 @@ class ApiClient {
         ...res.data.user,
         username: res.data.user.username || cleanUsername,
       };
+      const token = (res.data as any).access_token || (res.data as any).accessToken || null;
+      const refToken = (res.data as any).refresh_token || (res.data as any).refreshToken || null;
       this.setCurrentUserId(user.id);
-      this.setTokens(res.data.accessToken, res.data.refreshToken, user.id);
+      this.setTokens(token, refToken, user.id);
       this.saveUser(user, user.id);
-      return { success: true, user, accessToken: res.data.accessToken };
+      return { success: true, user, accessToken: token };
     }
 
     // Check for duplicate account or bad request
@@ -546,10 +552,12 @@ class ApiClient {
 
       if (res.ok && res.data?.user) {
         const user = res.data.user;
+        const token = (res.data as any).access_token || (res.data as any).accessToken || null;
+        const refToken = (res.data as any).refresh_token || (res.data as any).refreshToken || null;
         this.setCurrentUserId(user.id);
-        this.setTokens(res.data.accessToken, res.data.refreshToken, user.id);
+        this.setTokens(token, refToken, user.id);
         this.saveUser(user, user.id);
-        return { success: true, user, accessToken: res.data.accessToken };
+        return { success: true, user, accessToken: token };
       }
 
       // Explicit authentication failure (Wrong password or email/username not found)
