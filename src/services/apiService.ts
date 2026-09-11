@@ -306,6 +306,9 @@ class ApiClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'x-variant': 'B',
+      'x-experiment-variant': 'B',
+      'x-feature-friends': 'true',
       ...((options.headers as Record<string, string>) || {}),
     };
 
@@ -372,7 +375,12 @@ class ApiClient {
     try {
       const res = await fetch(`${this.baseUrl}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-variant': 'B',
+          'x-experiment-variant': 'B',
+          'x-feature-friends': 'true',
+        },
         body: JSON.stringify({ refreshToken: this.refreshToken }),
       });
       if (res.ok) {
@@ -401,7 +409,15 @@ class ApiClient {
 
     try {
       const url = `${this.baseUrl}/users/@${encodeURIComponent(clean)}`;
-      const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-variant': 'B',
+          'x-experiment-variant': 'B',
+          'x-feature-friends': 'true',
+        },
+      });
       if (res.status === 404) {
         // User not found -> username is available!
         return { available: true };
