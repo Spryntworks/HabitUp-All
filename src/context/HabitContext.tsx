@@ -3491,7 +3491,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      if (!effectiveReqId && !isOffline && isAuthenticated && localApi.hasAuthToken()) {
+      if (!effectiveReqId && !isOffline && (isAuthenticated || localApi.hasAuthToken())) {
         try {
           const serverRequests = await localApi.fetchPendingFriendRequests();
           const sReq = serverRequests.find(
@@ -3507,12 +3507,17 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       // 2. Send accept to server if online
-      if (!isOffline && isAuthenticated && localApi.hasAuthToken() && effectiveReqId) {
+      if (!isOffline && (isAuthenticated || localApi.hasAuthToken()) && effectiveReqId) {
         try {
           await localApi.acceptFriendRequestOnServer(effectiveReqId);
         } catch (e) {
           console.warn('Backend acceptFriendRequestOnServer error:', e);
         }
+      } else if (!isOffline && (isAuthenticated || localApi.hasAuthToken()) && cleanTarget && !effectiveReqId) {
+        // Mutual connect fallback: Attempt sending request on backend (which triggers mutual accept on 409)
+        try {
+          await localApi.sendFriendRequestByUsername(cleanTarget);
+        } catch {}
       }
 
       // 3. Update stored requests
@@ -3550,13 +3555,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // 6. Fetch partner habits from server if available
       let partnerHabits: FriendPublicHabit[] = [];
-      if (!isOffline && isAuthenticated && localApi.hasAuthToken() && req?.fromUserId) {
+      const targetBackendUserId = req?.fromUserId || (cleanTarget ? (await localApi.fetchUserProfileByUsername(cleanTarget))?.id : null);
+      if (!isOffline && (isAuthenticated || localApi.hasAuthToken()) && targetBackendUserId) {
         try {
           const [backendHabits, friendStats, catalogHabits] = await Promise.all([
-            localApi.fetchFriendHabitsFromServer(req.fromUserId),
-            localApi.fetchFriendStatsFromServer(req.fromUserId, 'week'),
+            localApi.fetchFriendHabitsFromServer(targetBackendUserId),
+            localApi.fetchFriendStatsFromServer(targetBackendUserId, 'week'),
             getFriendPublicHabits(
-              req.fromUserId,
+              targetBackendUserId,
               `${targetClean}@gmail.com`,
               targetName,
               undefined,

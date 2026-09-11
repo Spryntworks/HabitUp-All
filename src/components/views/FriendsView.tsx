@@ -857,7 +857,7 @@ export const FriendsView: React.FC = () => {
               </View>
 
               <View style={styles.friendHeaderRight}>
-                {isPendingReceived && (
+                {(isPendingReceived || isPendingSent) && (
                   <TouchableOpacity
                     style={styles.cardAcceptBtn}
                     onPress={() => {
@@ -961,7 +961,7 @@ export const FriendsView: React.FC = () => {
                 ]}
               >
                 <View style={styles.lockedIconWrapper}>
-                  <Lock size={16} color="#F59E0B" />
+                  <Clock size={16} color="#F59E0B" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text
@@ -970,7 +970,7 @@ export const FriendsView: React.FC = () => {
                       { color: isDark ? '#FDE68A' : '#92400E' },
                     ]}
                   >
-                    Follow Request Pending
+                    Follow Request Sent ⏳
                   </Text>
                   <Text
                     style={[
@@ -978,7 +978,7 @@ export const FriendsView: React.FC = () => {
                       { color: isDark ? '#D6D3D1' : '#B45309' },
                     ]}
                   >
-                    Habits and routines will unlock once {friendDisplayName} accepts your request.
+                    Waiting for {friendDisplayName} to accept. Tap Accept above to connect and unlock habits immediately!
                   </Text>
                 </View>
               </View>
