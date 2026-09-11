@@ -63,8 +63,8 @@ export const POPULAR_TIMEZONES: TimezoneOption[] = [
 export const getDetectedTimezone = (): string => {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return tz || 'Asia/Kolkata';
+    return tz || 'UTC';
   } catch {
-    return 'Asia/Kolkata';
+    return 'UTC';
   }
 };

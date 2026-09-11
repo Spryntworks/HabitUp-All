@@ -1220,7 +1220,7 @@ class ApiClient {
       return { success: false, error: 'Device token is required' };
     }
 
-    const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+    const tz = timezone || getDetectedTimezone() || 'UTC';
     const plat = platform === 'ios' ? 'ios' : 'android';
 
     console.log('[FCM] device-token API called: YES');
