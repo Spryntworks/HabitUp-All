@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useHabit } from '../../context/HabitContext';
 import { getWeekDays, formatDateKey } from '../../utils/streakCalculator';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
@@ -145,7 +146,17 @@ export const DateStrip: React.FC = () => {
                 {isAllDone ? (
                   <View style={[styles.dot, { backgroundColor: isSelected ? '#FFFFFF' : '#10B981' }]} />
                 ) : hasCompletions ? (
-                  <View style={[styles.dot, { backgroundColor: isSelected ? '#FFFFFF' : '#F59E0B' }]} />
+                  isSelected ? (
+                    <View style={[styles.dot, { backgroundColor: '#FFFFFF' }]} />
+                  ) : (
+                    <LinearGradient
+                      colors={['#10B981', '#10B981', '#EF4444', '#EF4444']}
+                      locations={[0, 0.5, 0.5, 1]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={[styles.dot, { overflow: 'hidden' }]}
+                    />
+                  )
                 ) : null}
               </View>
             </TouchableOpacity>
