@@ -35,6 +35,7 @@ import {
   Zap,
 } from 'lucide-react-native';
 import { HabitUpLogo } from '../common/HabitUpLogo';
+import { PlantIllustration } from '../mobile/PlantIllustration';
 import { getDetectedTimezone } from '../../constants/timezones';
 import { PasswordStrengthIndicator, getPasswordStrength } from '../common/PasswordStrengthIndicator';
 
@@ -361,7 +362,7 @@ export const AuthView: React.FC = () => {
     return (
       <View style={styles.previewGardenCard}>
         <View style={styles.previewGardenRow}>
-          <Text style={styles.previewGardenIcon}>🌳</Text>
+          <PlantIllustration level={4} size="sm" isAnimated={false} />
           <View style={styles.previewGardenInfo}>
             <View style={styles.previewGardenTitleRow}>
               <Text style={[styles.previewGardenLevel, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
@@ -456,7 +457,9 @@ export const AuthView: React.FC = () => {
                 >
                   {currentSlide === 0 && <Flame size={44} color={activeSlide.iconColor} />}
                   {currentSlide === 1 && <Users size={44} color={activeSlide.iconColor} />}
-                  {currentSlide === 2 && <Sprout size={44} color={activeSlide.iconColor} />}
+                  {currentSlide === 2 && (
+                    <PlantIllustration level={3} size="sm" isAnimated={true} />
+                  )}
                 </View>
               </View>
 
