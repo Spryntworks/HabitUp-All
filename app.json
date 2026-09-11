@@ -23,12 +23,22 @@
         "backgroundColor": "#0A0F1D"
       },
       "package": "com.habitup.tracker",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "POST_NOTIFICATIONS",
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM"
       ]
     },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#7C5CFF"
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro",
       "favicon": "./assets/favicon.png"

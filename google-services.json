@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "897671296701",
+    "project_id": "habitup-a6b57",
+    "storage_bucket": "habitup-a6b57.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:897671296701:android:5439744ed6c6585abea9d4",
+        "android_client_info": {
+          "package_name": "com.habitup.tracker"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD3R9rj569_pwVHVo0IFCudM7qPYLDeD4o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

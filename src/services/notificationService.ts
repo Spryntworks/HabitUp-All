@@ -5,6 +5,15 @@
  */
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+export interface PushTokenRegistration {
+  token: string;
+  type: 'fcm' | 'expo' | 'web';
+  platform: string;
+  timezone: string;
+  registeredAt: string;
+}
 
 export interface InAppNotification {
   id: string;
@@ -341,9 +350,134 @@ export async function triggerNudgeNotification(params: {
   });
 }
 
+/**
+ * Retrieves the native FCM device push token (or Expo token fallback)
+ * and formats the registration payload for backend integration.
+ */
+export async function registerForPushNotificationsAsync(): Promise<PushTokenRegistration | null> {
+  try {
+    const hasPermission = await requestNotificationPermission();
+    if (!hasPermission) {
+      console.warn('[FCM] Notification permission not granted by user.');
+      return null;
+    }
+
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    let tokenStr = '';
+    let tokenType: 'fcm' | 'expo' | 'web' = 'fcm';
+
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      try {
+        // 1. Fetch native FCM token using getDevicePushTokenAsync()
+        const deviceTokenRes = await Notifications.getDevicePushTokenAsync();
+        tokenStr = typeof deviceTokenRes?.data === 'string' ? deviceTokenRes.data : JSON.stringify(deviceTokenRes?.data || '');
+        tokenType = 'fcm';
+        console.log('[FCM] Native Device Push Token retrieved successfully:', {
+          type: deviceTokenRes.type,
+          token: tokenStr,
+        });
+      } catch (nativeErr) {
+        console.warn('[FCM] getDevicePushTokenAsync error, trying getExpoPushTokenAsync fallback:', nativeErr);
+        try {
+          const expoTokenRes = await Notifications.getExpoPushTokenAsync();
+          tokenStr = expoTokenRes.data;
+          tokenType = 'expo';
+        } catch (expoErr) {
+          console.error('[FCM] Failed to retrieve any push token:', expoErr);
+        }
+      }
+    } else {
+      tokenType = 'web';
+      tokenStr = 'web_push_local_token';
+    }
+
+    if (!tokenStr) {
+      return null;
+    }
+
+    const registration: PushTokenRegistration = {
+      token: tokenStr,
+      type: tokenType,
+      platform: Platform.OS,
+      timezone,
+      registeredAt: new Date().toISOString(),
+    };
+
+    // Store token locally
+    await AsyncStorage.setItem('habitup_fcm_token_registration', JSON.stringify(registration));
+    await AsyncStorage.setItem('habitup_fcm_token', tokenStr);
+
+    console.log('====================================================');
+    console.log('[FCM PUSH REGISTRATION READY FOR BACKEND]');
+    console.log('FCM Token:', tokenStr);
+    console.log('Platform:', Platform.OS);
+    console.log('Timezone:', timezone);
+    console.log('Type:', tokenType);
+    console.log('====================================================');
+
+    return registration;
+  } catch (error) {
+    console.error('[FCM] Error in registerForPushNotificationsAsync:', error);
+    return null;
+  }
+}
+
+/**
+ * Returns cached FCM token if previously saved.
+ */
+export async function getCachedPushToken(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem('habitup_fcm_token');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sets up background and foreground push notification listeners.
+ */
+export function setupNotificationListeners(onNotificationClick?: (data: any) => void): () => void {
+  if (Platform.OS === 'web') return () => {};
+
+  // 1. Foreground notification listener
+  const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+    const { title, body, data } = notification.request.content;
+    console.log('[FCM] Notification received in foreground:', { title, body, data });
+    
+    notifyInAppListeners({
+      id: `remote-${Date.now()}`,
+      habitId: (data as any)?.habitId,
+      title: title || 'HabitUp Notification 🔔',
+      body: body || '',
+      icon: (data as any)?.icon || 'Bell',
+      color: (data as any)?.color || '#7C5CFF',
+      reminderTime: new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date()),
+      timestamp: new Date().toISOString(),
+      type: (data as any)?.type || 'reminder',
+    });
+  });
+
+  // 2. Response listener (when user clicks/taps notification from background/closed state)
+  const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const data = response.notification.request.content.data;
+    console.log('[FCM] User tapped notification from background/closed app:', data);
+    if (onNotificationClick) {
+      onNotificationClick(data);
+    }
+  });
+
+  return () => {
+    receivedSub.remove();
+    responseSub.remove();
+  };
+}
+
 export const notificationService = {
   checkPermission: checkNotificationPermission,
   requestPermission: requestNotificationPermission,
+  registerForPushNotifications: registerForPushNotificationsAsync,
+  getCachedPushToken,
+  setupListeners: setupNotificationListeners,
   scheduleReminder: scheduleHabitReminder,
   cancelReminder: cancelHabitReminder,
   cancelAll: cancelAllReminders,

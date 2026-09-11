@@ -33,6 +33,9 @@ import {
   notificationService,
   InAppNotification,
   requestNotificationPermission,
+  registerForPushNotificationsAsync,
+  getCachedPushToken,
+  setupNotificationListeners,
 } from '../services/notificationService';
 import { soundService } from '../services/soundService';
 import {
@@ -96,6 +99,8 @@ interface HabitContextType {
   setIsNotificationModalOpen: (open: boolean) => void;
   notificationsEnabled: boolean;
   setNotificationsEnabled: (enabled: boolean) => void;
+  fcmPushToken: string | null;
+  registerPushToken: () => Promise<string | null>;
   triggerTestNotification: (title?: string, body?: string) => void;
   sendHabitReminder: (habit: Habit) => void;
 
@@ -1030,6 +1035,20 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isAuthSessionModalOpen, setIsAuthSessionModalOpen] = useState<boolean>(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(true);
+  const [fcmPushToken, setFcmPushToken] = useState<string | null>(null);
+
+  const registerPushToken = useCallback(async (): Promise<string | null> => {
+    try {
+      const reg = await registerForPushNotificationsAsync();
+      if (reg?.token) {
+        setFcmPushToken(reg.token);
+        return reg.token;
+      }
+    } catch (err) {
+      console.warn('[FCM] Token registration error:', err);
+    }
+    return null;
+  }, []);
 
   // Social & Community State
   const [friends, setFriends] = useState<FriendUser[]>(INITIAL_FRIENDS);
@@ -1382,7 +1401,26 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     AsyncStorage.getItem('habitup_notifications_enabled_v1').then((val) => {
       if (val !== null) setNotificationsEnabled(JSON.parse(val));
     });
-  }, [syncExperimentState]);
+    getCachedPushToken().then((token) => {
+      if (token) setFcmPushToken(token);
+    });
+    registerPushToken().catch(() => {});
+  }, [syncExperimentState, registerPushToken]);
+
+  // Handle incoming push notification interaction (tap from background/lockscreen)
+  useEffect(() => {
+    const unsubscribe = setupNotificationListeners((data) => {
+      console.log('[HabitContext] Push notification tapped with payload:', data);
+      if (data?.habitId) {
+        const found = habits.find((h) => h.id === data.habitId);
+        if (found) {
+          setSelectedHabitForDetail(found);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [habits]);
 
   // Safety: If friends feature is disabled by A/B experiment (Variant A), redirect friends tab to streaks
   useEffect(() => {
@@ -3944,6 +3982,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setIsNotificationModalOpen,
         notificationsEnabled,
         setNotificationsEnabled,
+        fcmPushToken,
+        registerPushToken,
         triggerTestNotification,
         sendHabitReminder,
         searchQuery,

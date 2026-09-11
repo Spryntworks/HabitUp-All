@@ -52,6 +52,8 @@ export const SettingsView: React.FC = () => {
     setSoundEnabled,
     notificationsEnabled,
     setNotificationsEnabled,
+    fcmPushToken,
+    registerPushToken,
     triggerTestNotification,
     habits,
     completions,
@@ -349,6 +351,34 @@ export const SettingsView: React.FC = () => {
             thumbColor="#FFFFFF"
           />
         </View>
+
+        {/* Divider */}
+        <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9' }]} />
+
+        {/* Test Push Notification */}
+        <TouchableOpacity
+          style={styles.preferenceRow}
+          onPress={() => {
+            triggerTestNotification('HabitUp Push Alert 🔔', 'Test push reminder and chime delivered successfully.');
+            showToast('Test push alert triggered! 🔔', undefined, 'success');
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.prefLeft}>
+            <View style={[styles.prefIconBadge, { backgroundColor: 'rgba(124, 92, 255, 0.15)' }]}>
+              <Sparkles size={16} color="#7C5CFF" />
+            </View>
+            <View>
+              <Text style={[styles.prefName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                Test Push Notification
+              </Text>
+              <Text style={[styles.prefDesc, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+                Send instant test alert & audio chime
+              </Text>
+            </View>
+          </View>
+          <ChevronRight size={18} color={isDark ? '#64748B' : '#94A3B8'} />
+        </TouchableOpacity>
 
         {/* Divider */}
         <View style={[styles.divider, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#F1F5F9' }]} />
