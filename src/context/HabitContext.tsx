@@ -1737,7 +1737,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // 2. Fetch server requests if online and authenticated
         let serverRequests: any[] = [];
-        if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
+        if (!isOffline && (isAuthenticated || localApi.hasAuthToken())) {
           try {
             serverRequests = await localApi.fetchPendingFriendRequests();
           } catch {}

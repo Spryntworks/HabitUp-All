@@ -212,7 +212,15 @@ class ApiClient {
   }
 
   hasAuthToken(): boolean {
-    return !!(this.accessToken || this.refreshToken);
+    if (this.accessToken || this.refreshToken) return true;
+    const stored =
+      this.getStorage<string | null>('habitup_access_token', null) ||
+      (this.currentUserId ? this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) : null);
+    if (stored) {
+      this.accessToken = stored;
+      return true;
+    }
+    return false;
   }
 
   setTokens(accessToken: string | null, refreshToken?: string | null, targetUserId?: string): void {
@@ -299,6 +307,13 @@ class ApiClient {
       endpoint.includes('/auth/reset-password') ||
       endpoint.includes('/auth/forgot-password') ||
       endpoint.includes('/users/');
+
+    if (!this.accessToken) {
+      const stored =
+        this.getStorage<string | null>('habitup_access_token', null) ||
+        (this.currentUserId ? this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) : null);
+      if (stored) this.accessToken = stored;
+    }
 
     // Guard: Prevent unauthenticated calls to protected endpoints
     if (!isPublicEndpoint && !this.accessToken && !this.refreshToken) {
