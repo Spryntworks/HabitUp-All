@@ -144,6 +144,7 @@ export interface FriendUser {
   totalCompletions: number;
   isFriend: boolean;
   requestStatus: 'none' | 'pending_sent' | 'pending_received' | 'accepted';
+  requestId?: string;
   habits: FriendPublicHabit[];
 }
 
