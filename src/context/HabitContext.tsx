@@ -159,6 +159,8 @@ interface HabitContextType {
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
   removeFriend: (friendId: string) => void;
+  syncFollowRequests: (currentUser: UserProfile | null) => Promise<void>;
+  syncFriendsWithBackend: (currentUser: UserProfile | null) => Promise<void>;
 
   // A/B Testing & Experiments
   friendsEnabled: boolean;
@@ -1523,7 +1525,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Sync backend friends and their live public habits
   const syncFriendsWithBackend = useCallback(
     async (currentUser: UserProfile | null) => {
-      if (!currentUser || isOffline || !isAuthenticated || !localApi.hasAuthToken()) return;
+      if (!currentUser || isOffline || (!isAuthenticated && !localApi.hasAuthToken())) return;
       try {
         const serverFriends = await localApi.fetchFriendsFromServer();
         if (!Array.isArray(serverFriends)) return;
@@ -4155,6 +4157,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         sendFriendRequest,
         acceptFriendRequest,
         removeFriend,
+        syncFollowRequests,
+        syncFriendsWithBackend,
         friendsEnabled,
         experimentVariant,
         recordFriendsExposure,

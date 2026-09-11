@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useHabit } from '../../context/HabitContext';
 import { HomeHero } from '../mobile/HomeHero';
 import { DateStrip } from '../mobile/DateStrip';
 import { TodayProgressCard } from '../mobile/TodayProgressCard';
 import { HabitCard } from '../mobile/HabitCard';
 import { isHabitScheduledOnDate } from '../../utils/streakCalculator';
-import { Plus, Sparkles, CheckCircle2 } from 'lucide-react-native';
+import { Plus, Sparkles, CheckCircle2, Check, Users } from 'lucide-react-native';
 
 export const HomeView: React.FC = () => {
   const {
@@ -17,10 +17,31 @@ export const HomeView: React.FC = () => {
     setIsCreateModalOpen,
     setIsOnboardingModalOpen,
     setIsPlantGardenModalOpen,
+    incomingRequests,
+    acceptFollowRequest,
+    setActiveTab,
+    user,
+    syncFollowRequests,
+    syncFriendsWithBackend,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const [filterMode, setFilterMode] = useState<'all' | 'pending' | 'completed'>('all');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (user) {
+        await Promise.all([
+          syncFollowRequests(user),
+          syncFriendsWithBackend(user),
+        ]);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const selectedDateTime = new Date(selectedDate + 'T12:00:00');
   const activeHabits = habits.filter(
@@ -44,10 +65,64 @@ export const HomeView: React.FC = () => {
     <ScrollView
       style={[styles.container, { backgroundColor: isDark ? '#0B1120' : '#F8FAFC' }]}
       contentContainerStyle={styles.contentContainer}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#7C5CFF"
+          colors={['#7C5CFF']}
+        />
+      }
     >
       <HomeHero onMascotClick={() => setIsPlantGardenModalOpen(true)} />
       <DateStrip />
       <TodayProgressCard />
+
+      {/* Incoming Friend Request Alert Banner */}
+      {incomingRequests && incomingRequests.length > 0 && (
+        <TouchableOpacity
+          style={[
+            styles.incomingBanner,
+            {
+              backgroundColor: isDark ? 'rgba(124, 92, 255, 0.14)' : '#F0FDF4',
+              borderColor: isDark ? 'rgba(124, 92, 255, 0.4)' : '#86EFAC',
+            },
+          ]}
+          onPress={() => setActiveTab('friends')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.incomingBannerLeft}>
+            <View style={[styles.incomingAvatarBadge, { backgroundColor: isDark ? '#2D1B69' : '#DCFCE7' }]}>
+              <Text style={{ fontSize: 18 }}>{incomingRequests[0].fromAvatar || '🤝'}</Text>
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.incomingBannerBadgeRow}>
+                <Text style={[styles.incomingBannerBadgeText, { color: isDark ? '#C4B5FD' : '#16A34A' }]}>
+                  NEW FRIEND REQUEST
+                </Text>
+              </View>
+              <Text style={[styles.incomingBannerTitle, { color: isDark ? '#FFFFFF' : '#0F172A' }]} numberOfLines={1}>
+                {incomingRequests[0].fromName} ({incomingRequests[0].fromUsername})
+              </Text>
+              <Text style={[styles.incomingBannerSub, { color: isDark ? '#94A3B8' : '#64748B' }]} numberOfLines={1}>
+                Wants to be your habit buddy! Tap to view.
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.incomingAcceptBtn}
+            onPress={(e) => {
+              e.stopPropagation?.();
+              acceptFollowRequest(incomingRequests[0].id, incomingRequests[0].fromUsername);
+            }}
+            activeOpacity={0.8}
+          >
+            <Check size={14} color="#FFFFFF" strokeWidth={3} />
+            <Text style={styles.incomingAcceptBtnText}>Accept</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      )}
 
       {/* Habits Section Header & Filter Tabs */}
       <View style={styles.sectionHeader}>
@@ -367,5 +442,71 @@ const styles = StyleSheet.create({
   templateBtnText: {
     fontSize: 13,
     fontWeight: '700',
+  },
+  incomingBanner: {
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 6,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    shadowColor: '#7C5CFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  incomingBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  incomingAvatarBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  incomingBannerBadgeRow: {
+    marginBottom: 2,
+  },
+  incomingBannerBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  incomingBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  incomingBannerSub: {
+    fontSize: 11.5,
+    marginTop: 1,
+  },
+  incomingAcceptBtn: {
+    backgroundColor: '#10B981',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 12,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  incomingAcceptBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

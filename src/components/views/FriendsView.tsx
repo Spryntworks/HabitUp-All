@@ -10,6 +10,7 @@ import {
   Share,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useHabit } from '../../context/HabitContext';
@@ -74,15 +75,40 @@ export const FriendsView: React.FC = () => {
     theme,
     showToast,
     recordFriendsExposure,
+    syncFollowRequests,
+    syncFriendsWithBackend,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   useEffect(() => {
     recordFriendsExposure().catch(() => {});
   }, [recordFriendsExposure]);
+
+  // Immediate sync on mount whenever FriendsView opens
+  useEffect(() => {
+    if (user) {
+      syncFollowRequests(user);
+      syncFriendsWithBackend(user);
+    }
+  }, [user, syncFollowRequests, syncFriendsWithBackend]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (user) {
+        await Promise.all([
+          syncFollowRequests(user),
+          syncFriendsWithBackend(user),
+        ]);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Search by username state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -389,6 +415,14 @@ export const FriendsView: React.FC = () => {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
+          tintColor="#7C5CFF"
+          colors={['#7C5CFF']}
+        />
+      }
     >
       {/* 1. Header */}
       <View style={styles.header}>

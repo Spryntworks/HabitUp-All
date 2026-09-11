@@ -220,6 +220,13 @@ class ApiClient {
       this.accessToken = stored;
       return true;
     }
+    const storedRefresh =
+      this.getStorage<string | null>('habitup_refresh_token', null) ||
+      (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
+    if (storedRefresh) {
+      this.refreshToken = storedRefresh;
+      return true;
+    }
     return false;
   }
 
@@ -315,6 +322,13 @@ class ApiClient {
       if (stored) this.accessToken = stored;
     }
 
+    if (!this.refreshToken) {
+      const storedRefresh =
+        this.getStorage<string | null>('habitup_refresh_token', null) ||
+        (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
+      if (storedRefresh) this.refreshToken = storedRefresh;
+    }
+
     // Guard: Prevent unauthenticated calls to protected endpoints
     if (!isPublicEndpoint && !this.accessToken && !this.refreshToken) {
       return {
@@ -353,19 +367,22 @@ class ApiClient {
 
       if (
         res.status === 401 &&
-        this.refreshToken &&
         !endpoint.includes('/auth/refresh') &&
-        !endpoint.includes('/auth/login')
+        !endpoint.includes('/auth/login') &&
+        !endpoint.includes('/auth/register')
       ) {
-        const refreshed = await this.refreshAuthTokens();
-        if (refreshed && this.accessToken) {
-          headers['Authorization'] = `Bearer ${this.accessToken}`;
-          res = await fetch(url, { ...options, headers });
-        } else {
-          this.clearTokens();
+        if (!this.refreshToken) {
+          this.refreshToken =
+            this.getStorage<string | null>('habitup_refresh_token', null) ||
+            (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
         }
-      } else if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
-        this.clearTokens();
+        if (this.refreshToken) {
+          const refreshed = await this.refreshAuthTokens();
+          if (refreshed && this.accessToken) {
+            headers['Authorization'] = `Bearer ${this.accessToken}`;
+            res = await fetch(url, { ...options, headers });
+          }
+        }
       }
 
       const contentType = res.headers.get('content-type');
@@ -395,6 +412,11 @@ class ApiClient {
   }
 
   async refreshAuthTokens(): Promise<boolean> {
+    if (!this.refreshToken) {
+      this.refreshToken =
+        this.getStorage<string | null>('habitup_refresh_token', null) ||
+        (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
+    }
     if (!this.refreshToken) return false;
     try {
       const res = await fetch(`${this.baseUrl}/auth/refresh`, {
