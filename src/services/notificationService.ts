@@ -374,7 +374,7 @@ export async function registerForPushNotificationsAsync(): Promise<PushTokenRegi
         tokenType = 'fcm';
         console.log('[FCM] Native Device Push Token retrieved successfully:', {
           type: deviceTokenRes.type,
-          token: tokenStr,
+          tokenLength: tokenStr ? tokenStr.length : 0,
         });
       } catch (nativeErr) {
         console.warn('[FCM] getDevicePushTokenAsync error, trying getExpoPushTokenAsync fallback:', nativeErr);
@@ -382,6 +382,9 @@ export async function registerForPushNotificationsAsync(): Promise<PushTokenRegi
           const expoTokenRes = await Notifications.getExpoPushTokenAsync();
           tokenStr = expoTokenRes.data;
           tokenType = 'expo';
+          console.log('[FCM] Expo Push Token fallback retrieved:', {
+            tokenLength: tokenStr ? tokenStr.length : 0,
+          });
         } catch (expoErr) {
           console.error('[FCM] Failed to retrieve any push token:', expoErr);
         }
@@ -409,7 +412,7 @@ export async function registerForPushNotificationsAsync(): Promise<PushTokenRegi
 
     console.log('====================================================');
     console.log('[FCM PUSH REGISTRATION READY FOR BACKEND]');
-    console.log('FCM Token:', tokenStr);
+    console.log('FCM Token Length:', tokenStr.length);
     console.log('Platform:', Platform.OS);
     console.log('Timezone:', timezone);
     console.log('Type:', tokenType);

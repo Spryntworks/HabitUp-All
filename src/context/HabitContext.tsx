@@ -1042,6 +1042,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const reg = await registerForPushNotificationsAsync();
       if (reg?.token) {
         setFcmPushToken(reg.token);
+        const tz = reg.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+        const plat = reg.platform === 'ios' ? 'ios' : 'android';
+        await localApi.registerDeviceToken(reg.token, plat, tz);
         return reg.token;
       }
     } catch (err) {
@@ -2191,7 +2194,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     syncFollowRequests(targetUser);
     syncFriendsWithBackend(targetUser);
     syncExperimentState().catch(() => {});
-  }, [checkAndDeliverPendingNudges, syncFollowRequests, syncFriendsWithBackend, syncExperimentState]);
+    registerPushToken().catch(() => {});
+  }, [checkAndDeliverPendingNudges, syncFollowRequests, syncFriendsWithBackend, syncExperimentState, registerPushToken]);
 
   const login = useCallback(
     async (identifier: string, password?: string): Promise<{ success: boolean; error?: string }> => {
@@ -2309,11 +2313,12 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       syncFollowRequests(newUser);
       syncFriendsWithBackend(newUser);
       syncExperimentState().catch(() => {});
+      registerPushToken().catch(() => {});
 
       showToast(`Welcome, @${newUser.username || cleanUsername}! Let's set up your habits.`, undefined, 'success');
       return { success: true };
     },
-    [showToast, setActiveTab, setIsOnboardingModalOpen, syncFollowRequests, syncFriendsWithBackend, syncExperimentState]
+    [showToast, setActiveTab, setIsOnboardingModalOpen, syncFollowRequests, syncFriendsWithBackend, syncExperimentState, registerPushToken]
   );
 
   const logout = useCallback(() => {

@@ -1174,6 +1174,56 @@ class ApiClient {
     }
   }
 
+  // --- NOTIFICATIONS & FCM DEVICE TOKEN ---
+
+  async registerDeviceToken(
+    token: string,
+    platform: string = Platform.OS,
+    timezone?: string
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (!token) {
+      console.log('[FCM] device-token API called: NO (token is empty)');
+      return { success: false, error: 'Device token is required' };
+    }
+
+    const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
+    const plat = platform === 'ios' ? 'ios' : 'android';
+
+    console.log('[FCM] device-token API called: YES');
+    console.log('[FCM] API URL/path: POST /notifications/device-token');
+    console.log('[FCM] FCM token generated: YES');
+    console.log('[FCM] FCM token length:', token.length);
+    console.log('[FCM] Authorization header exists:', !!this.accessToken);
+
+    try {
+      const res = await this.request<{ success?: boolean; message?: string }>('/notifications/device-token', {
+        method: 'POST',
+        body: JSON.stringify({
+          token,
+          platform: plat,
+          timezone: tz,
+        }),
+      });
+
+      console.log('[FCM] Device token API status:', res.status);
+      console.log('[FCM] Device token response:', JSON.stringify(res.data || res.error || ''));
+
+      if (res.ok) {
+        return {
+          success: true,
+          message: res.data?.message || 'Device token registered successfully',
+        };
+      }
+      return {
+        success: false,
+        error: res.error || 'Failed to register device token',
+      };
+    } catch (err: any) {
+      console.warn('[FCM] Device token API exception:', err?.message || err);
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  }
+
   // --- LOCAL STORAGE CACHE HELPERS ---
 
   getHabits(targetUserId?: string, email?: string): Habit[] {
