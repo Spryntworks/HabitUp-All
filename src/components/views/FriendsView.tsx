@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -71,31 +71,21 @@ export const FriendsView: React.FC = () => {
     createSharedHabit,
     nudgeFriend,
     removeFriend,
+    syncFriendsWithBackend,
+    syncFollowRequests,
     setActiveTab,
     theme,
     showToast,
     recordFriendsExposure,
-    refreshFriends,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    try {
-      await refreshFriends();
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   useEffect(() => {
     recordFriendsExposure().catch(() => {});
-    refreshFriends().catch(() => {});
-  }, [recordFriendsExposure, refreshFriends]);
+  }, [recordFriendsExposure]);
 
   // Search by username state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -105,25 +95,25 @@ export const FriendsView: React.FC = () => {
   const [followingMap, setFollowingMap] = useState<Record<string, 'loading' | 'requested' | 'following'>>({});
 
   // Remove friend confirmation state
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState<boolean>(false);
   const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
 
-  const handleCancelOrUnfollow = (targetFriend: FriendUser) => {
-    if (targetFriend.requestStatus === 'pending_sent') {
-      // Instant cancellation: 1-tap with zero modal flicker or glitch
-      const clean = (targetFriend.username || '').replace(/^@/, '').toLowerCase();
-      setFollowingMap((prev) => {
-        const copy = { ...prev };
-        delete copy[clean];
-        return copy;
-      });
-      removeFriend(targetFriend.id);
-    } else {
-      // Active habit buddy: Open smooth confirmation modal
-      setFriendToRemove(targetFriend);
-      setIsConfirmModalOpen(true);
+  // Pull-to-refresh state
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      if (user) {
+        await Promise.all([
+          syncFriendsWithBackend(user),
+          syncFollowRequests(user),
+        ]);
+      }
+    } catch {}
+    finally {
+      setIsRefreshing(false);
     }
-  };
+  }, [user, syncFriendsWithBackend, syncFollowRequests]);
 
   // Modal for Viewing Shared Habit Progress / Calendar
   const [selectedSharedHabitProgress, setSelectedSharedHabitProgress] = useState<{
@@ -257,7 +247,6 @@ export const FriendsView: React.FC = () => {
 
   const getFollowStatusForUser = (targetUsername: string) => {
     const clean = targetUsername.replace(/^@/, '').toLowerCase();
-    if (followingMap[clean]) return followingMap[clean];
     const existing = friends.find((f) => {
       const fUser = (f.username || '').replace(/^@/, '').toLowerCase();
       return fUser === clean;
@@ -267,6 +256,7 @@ export const FriendsView: React.FC = () => {
       if (existing.requestStatus === 'pending_sent') return 'requested';
       if (existing.requestStatus === 'pending_received') return 'requested';
     }
+    if (followingMap[clean]) return followingMap[clean];
     return 'none';
   };
 
@@ -399,7 +389,7 @@ export const FriendsView: React.FC = () => {
       keyboardShouldPersistTaps="handled"
       refreshControl={
         <RefreshControl
-          refreshing={refreshing}
+          refreshing={isRefreshing}
           onRefresh={handleRefresh}
           tintColor="#7C5CFF"
           colors={['#7C5CFF']}
@@ -830,7 +820,7 @@ export const FriendsView: React.FC = () => {
                       borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FECACA',
                     },
                   ]}
-                  onPress={() => handleCancelOrUnfollow(friend)}
+                  onPress={() => setFriendToRemove(friend)}
                   activeOpacity={0.7}
                   accessibilityLabel={isPendingSent ? `Cancel request to ${friendDisplayName}` : `Unfollow ${friendDisplayName}`}
                 >
@@ -1790,10 +1780,10 @@ export const FriendsView: React.FC = () => {
 
       {/* 7. REMOVE FRIEND CONFIRMATION MODAL */}
       <Modal
-        visible={isConfirmModalOpen && !!friendToRemove}
+        visible={!!friendToRemove}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsConfirmModalOpen(false)}
+        onRequestClose={() => setFriendToRemove(null)}
       >
         <View style={styles.confirmModalOverlay}>
           <View
@@ -1824,7 +1814,7 @@ export const FriendsView: React.FC = () => {
                   styles.confirmCancelBtn,
                   { backgroundColor: isDark ? '#334155' : '#E2E8F0' },
                 ]}
-                onPress={() => setIsConfirmModalOpen(false)}
+                onPress={() => setFriendToRemove(null)}
                 activeOpacity={0.8}
               >
                 <Text
@@ -1833,7 +1823,7 @@ export const FriendsView: React.FC = () => {
                     { color: isDark ? '#F1F5F9' : '#334155' },
                   ]}
                 >
-                  Cancel
+                  {friendToRemove?.requestStatus === 'pending_sent' ? 'Keep' : 'Cancel'}
                 </Text>
               </TouchableOpacity>
 
@@ -1841,15 +1831,14 @@ export const FriendsView: React.FC = () => {
                 style={styles.confirmDeleteBtn}
                 onPress={() => {
                   if (friendToRemove) {
-                    const target = friendToRemove;
-                    const clean = (target.username || '').replace(/^@/, '').toLowerCase();
+                    const clean = (friendToRemove.username || '').replace(/^@/, '').toLowerCase();
                     setFollowingMap((prev) => {
                       const copy = { ...prev };
                       delete copy[clean];
                       return copy;
                     });
-                    setIsConfirmModalOpen(false);
-                    removeFriend(target.id);
+                    removeFriend(friendToRemove.id);
+                    setFriendToRemove(null);
                   }
                 }}
                 activeOpacity={0.8}

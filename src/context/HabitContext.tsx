@@ -159,12 +159,13 @@ interface HabitContextType {
   sendFriendRequest: (friendId: string) => void;
   acceptFriendRequest: (friendId: string) => void;
   removeFriend: (friendId: string) => void;
+  syncFriendsWithBackend: (user?: UserProfile | null) => Promise<void>;
+  syncFollowRequests: (user?: UserProfile | null) => Promise<void>;
 
   // A/B Testing & Experiments
   friendsEnabled: boolean;
   experimentVariant: string | null;
   recordFriendsExposure: () => Promise<void>;
-  refreshFriends: () => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | null>(null);
@@ -677,16 +678,7 @@ export async function publishUserHabits(
     if (user.email && user.email.includes('@')) catalog[user.email.toLowerCase().trim()] = entry;
     if (user.username) {
       const cleanUsername = user.username.replace(/^@/, '').toLowerCase().trim();
-      if (cleanUsername) {
-        catalog[`username_${cleanUsername}`] = entry;
-        catalog[cleanUsername] = entry;
-      }
-    }
-    if (user.name) {
-      const cleanName = user.name.toLowerCase().replace(/[^a-z0-9_]/g, '_').trim();
-      if (cleanName) {
-        catalog[`username_${cleanName}`] = entry;
-      }
+      if (cleanUsername) catalog[`username_${cleanUsername}`] = entry;
     }
 
     await AsyncStorage.setItem('habitup_public_habits_catalog_v1', JSON.stringify(catalog));
@@ -712,10 +704,7 @@ export async function getFriendPublicHabits(
     const cleanFriendId = (friendId || '').trim().toLowerCase();
     const cleanFriendEmail = (friendEmail || '').trim().toLowerCase();
     const cleanFriendName = (friendName || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-    const cleanFriendUsername = (
-      friendUsername ||
-      (friendId && friendId.startsWith('friend-') ? friendId.replace(/^friend-/, '').split('-')[0] : '')
-    ).replace(/^@/, '').trim().toLowerCase();
+    const cleanFriendUsername = (friendUsername || '').replace(/^@/, '').trim().toLowerCase();
 
     const cleanExcludeId = (excludeUserId || '').trim().toLowerCase();
     const cleanExcludeEmail = (excludeEmail || '').trim().toLowerCase();
@@ -737,14 +726,14 @@ export async function getFriendPublicHabits(
       // STRICT ISOLATION: Never match the current/excluded user
       if (cleanExcludeId && (valUserId === cleanExcludeId || lowerKey === cleanExcludeId)) continue;
       if (cleanExcludeEmail && lowerKey === cleanExcludeEmail) continue;
-      if (cleanExcludeUsername && (lowerKey === `username_${cleanExcludeUsername}` || lowerKey === cleanExcludeUsername)) continue;
+      if (cleanExcludeUsername && lowerKey === `username_${cleanExcludeUsername}`) continue;
 
       // Exact matching for friend
       const isMatch =
-        (cleanFriendId && (lowerKey === cleanFriendId || valUserId === cleanFriendId || lowerKey === `friend-${cleanFriendId}`)) ||
+        (cleanFriendId && (lowerKey === cleanFriendId || valUserId === cleanFriendId)) ||
         (cleanFriendEmail && lowerKey === cleanFriendEmail) ||
-        (cleanFriendName && (lowerKey === `username_${cleanFriendName}` || lowerKey === cleanFriendName)) ||
-        (cleanFriendUsername && (lowerKey === `username_${cleanFriendUsername}` || lowerKey === cleanFriendUsername || valUserId.includes(cleanFriendUsername)));
+        (cleanFriendName && lowerKey === `username_${cleanFriendName}`) ||
+        (cleanFriendUsername && (lowerKey === `username_${cleanFriendUsername}` || lowerKey === cleanFriendUsername));
 
       if (isMatch) {
         if (Array.isArray(val.habits) && val.habits.length > 0) {
@@ -755,25 +744,17 @@ export async function getFriendPublicHabits(
       }
     }
 
-    // 2. If not found in catalog, check localApi storage and AsyncStorage per-user habit keys
-    if (matchedUserHabits.length === 0 && cleanFriendId && cleanFriendId !== 'usr_default' && cleanFriendId !== cleanExcludeId) {
+    // 2. If not found in catalog, check localApi storage ONLY if friendId/friendEmail is provided and not current user
+    if (
+      matchedUserHabits.length === 0 &&
+      cleanFriendId &&
+      cleanFriendId !== 'usr_default' &&
+      cleanFriendId !== cleanExcludeId
+    ) {
       const storageHabits = localApi.getHabits(friendId, friendEmail);
       if (storageHabits && storageHabits.length > 0) {
         matchedUserHabits = storageHabits;
         matchedUserCompletions = localApi.getCompletions(friendId, friendEmail);
-      } else {
-        // Fallback: Check AsyncStorage habits for this user/email
-        const userHabitsRaw = await AsyncStorage.getItem(`habitup_habits_${cleanFriendId}`);
-        if (userHabitsRaw) {
-          try {
-            const parsed = JSON.parse(userHabitsRaw);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              matchedUserHabits = parsed;
-              const userCompsRaw = await AsyncStorage.getItem(`habitup_completions_${cleanFriendId}`);
-              if (userCompsRaw) matchedUserCompletions = JSON.parse(userCompsRaw) || [];
-            }
-          } catch {}
-        }
       }
     }
 
@@ -844,47 +825,17 @@ async function syncMutualDataForUser(
   const myId = (currentUser.id || '').toLowerCase();
   const myEmail = (currentUser.email || '').toLowerCase();
   const myName = (currentUser.name || '').toLowerCase();
-  const myUsername = (currentUser.username || '').replace(/^@/, '').toLowerCase();
-
-  // Load unfollowed blocklist for currentUser
-  let unfollowedBlocklist = new Set<string>();
-  try {
-    const blocklistRaw = await AsyncStorage.getItem(`habitup_unfollowed_friends_${currentUser.id}`);
-    if (blocklistRaw) {
-      const parsed: string[] = JSON.parse(blocklistRaw);
-      unfollowedBlocklist = new Set(parsed.map((s) => s.toLowerCase()));
-    }
-  } catch {}
-
-  const isBlocked = (identifier?: string) => {
-    if (!identifier) return false;
-    const clean = identifier.replace(/^@/, '').toLowerCase().trim();
-    if (unfollowedBlocklist.has(clean)) return true;
-    for (const b of unfollowedBlocklist) {
-      if (b && (clean === b || clean.includes(b) || b.includes(clean))) return true;
-    }
-    return false;
-  };
 
   const isMe = (u: MutualUserRef) => {
     if (!u) return false;
     const uId = (u.id || '').toLowerCase();
     const uEmail = (u.email || '').toLowerCase();
     const uName = (u.name || '').toLowerCase();
-    const uUsername = (u.username || '').replace(/^@/, '').toLowerCase();
-    return (
-      (myId && uId === myId) ||
-      (myEmail && uEmail === myEmail) ||
-      (myName && uName === myName) ||
-      (myUsername && uUsername === myUsername) ||
-      (myUsername && uId.includes(myUsername)) ||
-      (myUsername && uName.replace(/[^a-z0-9]/g, '') === myUsername)
-    );
+    return uId === myId || (myEmail && uEmail === myEmail) || (myName && uName === myName);
   };
 
   const connections = await getMutualConnections();
   const mutualHabits = await getMutualSharedHabits();
-  const storedRequests = await getStoredFollowRequests();
 
   let updatedFriends = [...existingFriends];
   let updatedHabits = [...existingHabits];
@@ -903,24 +854,14 @@ async function syncMutualDataForUser(
       const pEmail = (partner.email || '').toLowerCase();
       const pName = partner.name;
       const pUsername = partner.username.startsWith('@') ? partner.username : `@${partner.username}`;
-      const pCleanUser = pUsername.replace(/^@/, '').toLowerCase();
 
-      if (isBlocked(pId) || isBlocked(pUsername) || isBlocked(pEmail) || isBlocked(pCleanUser) || isBlocked(pName)) {
-        continue;
-      }
-
-      const alreadyFriendIdx = updatedFriends.findIndex((f) => {
-        const fUsername = (f.username || '').replace(/^@/, '').toLowerCase();
-        const fEmail = (f.email || '').toLowerCase();
-        const fName = (f.name || '').toLowerCase();
-        const fId = (f.id || '').toLowerCase();
-        return (
-          (pId && fId === pId.toLowerCase()) ||
-          (pCleanUser && fUsername === pCleanUser) ||
-          (pEmail && fEmail === pEmail) ||
-          (pName && fName === pName.toLowerCase())
-        );
-      });
+      const alreadyFriendIdx = updatedFriends.findIndex(
+        (f) =>
+          f.id === pId ||
+          (pEmail && f.email && f.email.toLowerCase() === pEmail) ||
+          (f.name && f.name.toLowerCase() === pName.toLowerCase()) ||
+          (f.username && f.username.toLowerCase() === pUsername.toLowerCase())
+      );
 
       const partnerPublicHabits = await getFriendPublicHabits(
         pId,
@@ -929,24 +870,22 @@ async function syncMutualDataForUser(
         alreadyFriendIdx >= 0 ? updatedFriends[alreadyFriendIdx].habits : undefined,
         myId,
         myEmail,
-        currentUser.username,
-        pCleanUser
+        currentUser.username
       );
 
       if (alreadyFriendIdx >= 0) {
         updatedFriends[alreadyFriendIdx] = {
           ...updatedFriends[alreadyFriendIdx],
-          id: pId || updatedFriends[alreadyFriendIdx].id,
           isFriend: true,
           requestStatus: 'accepted',
-          habits: partnerPublicHabits.length > 0 ? partnerPublicHabits : updatedFriends[alreadyFriendIdx].habits,
+          habits: partnerPublicHabits,
         };
       } else {
         const newFriendObj: FriendUser = {
           id: pId || `friend-${pName.toLowerCase()}-${Date.now()}`,
           name: pName,
           username: pUsername,
-          email: partner.email || `${pCleanUser || pName.toLowerCase()}@gmail.com`,
+          email: partner.email || `${pName.toLowerCase()}@gmail.com`,
           avatar: partner.avatar || '🤝',
           bio: 'Habit buddy on HabitUp! Building streaks together.',
           plantStage: '🌱 Fresh Seedling (Lvl 1)',
@@ -961,77 +900,11 @@ async function syncMutualDataForUser(
     }
   }
 
-  // 1b. Sync accepted follow requests from habitup_friend_requests_v1 for both sides
-  for (const req of storedRequests) {
-    if (req.status === 'accepted') {
-      const fromHandle = (req.fromUsername || '').replace(/^@/, '').toLowerCase();
-      const toHandle = (req.toUsername || '').replace(/^@/, '').toLowerCase();
-      const fromId = (req.fromUserId || '').toLowerCase();
-      const toId = (req.toUserId || '').toLowerCase();
-
-      const amIFrom = (myId && fromId === myId) || (myUsername && fromHandle === myUsername) || (myEmail && fromHandle === myEmail);
-      const amITo = (myId && toId === myId) || (myUsername && toHandle === myUsername) || (myEmail && toHandle === myEmail);
-
-      if (amIFrom || amITo) {
-        const partnerHandle = amIFrom ? toHandle : fromHandle;
-        const partnerId = amIFrom ? req.toUserId : req.fromUserId;
-        const partnerName = amIFrom ? (req.toUsername || 'Friend').replace(/^@/, '') : req.fromName;
-        const partnerAvatar = amIFrom ? '🤝' : (req.fromAvatar || '🤝');
-
-        if (partnerHandle && partnerHandle !== myUsername && !isBlocked(partnerHandle) && !isBlocked(partnerId) && !isBlocked(partnerName)) {
-          const matchIdx = updatedFriends.findIndex((f) => {
-            const fU = (f.username || '').replace(/^@/, '').toLowerCase();
-            const fId = (f.id || '').toLowerCase();
-            return (partnerId && fId === partnerId.toLowerCase()) || fU === partnerHandle;
-          });
-
-          const partnerPublicHabits = await getFriendPublicHabits(
-            partnerId || `friend-${partnerHandle}`,
-            `${partnerHandle}@gmail.com`,
-            partnerName,
-            matchIdx >= 0 ? updatedFriends[matchIdx].habits : undefined,
-            myId,
-            myEmail,
-            currentUser.username,
-            partnerHandle
-          );
-
-          if (matchIdx >= 0) {
-            updatedFriends[matchIdx] = {
-              ...updatedFriends[matchIdx],
-              id: partnerId || updatedFriends[matchIdx].id,
-              isFriend: true,
-              requestStatus: 'accepted',
-              habits: partnerPublicHabits.length > 0 ? partnerPublicHabits : updatedFriends[matchIdx].habits,
-            };
-          } else {
-            const displayName = partnerName || (partnerHandle.charAt(0).toUpperCase() + partnerHandle.slice(1));
-            updatedFriends.push({
-              id: partnerId || `friend-${partnerHandle}-${Date.now()}`,
-              name: displayName,
-              username: `@${partnerHandle}`,
-              email: `${partnerHandle}@gmail.com`,
-              avatar: partnerAvatar,
-              bio: 'Habit buddy on HabitUp! Building streaks together.',
-              plantStage: '🌱 Fresh Seedling (Lvl 1)',
-              currentStreak: req.bestStreak || 0,
-              totalCompletions: req.totalHabits || 0,
-              isFriend: true,
-              requestStatus: 'accepted',
-              habits: partnerPublicHabits,
-            });
-          }
-        }
-      }
-    }
-  }
-
   // Also refresh public habits for all other friends in updatedFriends if empty
   for (let i = 0; i < updatedFriends.length; i++) {
     const f = updatedFriends[i];
-    if (f.isFriend && f.requestStatus === 'accepted' && (!f.habits || f.habits.length === 0)) {
-      const fClean = (f.username || '').replace(/^@/, '').toLowerCase();
-      f.habits = await getFriendPublicHabits(f.id, f.email, f.name, f.habits, myId, myEmail, currentUser.username, fClean);
+    if (!f.habits || f.habits.length === 0) {
+      f.habits = await getFriendPublicHabits(f.id, f.email, f.name, f.habits, myId, myEmail, currentUser.username);
     }
   }
 
@@ -1636,20 +1509,19 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Live mutual sync whenever user enters or views the Friends tab
   useEffect(() => {
     if (activeTab === 'friends' && isInitialDataLoaded.current && user && user.id) {
-      syncFriendsWithBackend(user);
-      syncFollowRequests(user);
       syncMutualDataForUser(user, habits, friends)
         .then((synced) => {
-          if (synced.friends.length > 0) {
-            setFriends(synced.friends);
-          }
           if (synced.habits.length > 0) {
             setHabits(synced.habits);
           }
         })
         .catch(() => {});
+      if (isAuthenticated && !isOffline) {
+        syncFriendsWithBackend(user);
+        syncFollowRequests(user);
+      }
     }
-  }, [activeTab]);
+  }, [activeTab, user?.id, isAuthenticated, isOffline]);
 
   // Sync backend friends and their live public habits
   const syncFriendsWithBackend = useCallback(
@@ -1664,57 +1536,127 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const todayStr = formatDateKey(new Date());
         const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
-        // Load unfollowed blocklist for currentUser
-        let unfollowedBlocklist = new Set<string>();
-        try {
-          const blocklistRaw = await AsyncStorage.getItem(`habitup_unfollowed_friends_${currentUser.id}`);
-          if (blocklistRaw) {
-            const parsed: string[] = JSON.parse(blocklistRaw);
-            unfollowedBlocklist = new Set(parsed.map((s) => s.toLowerCase()));
-          }
-        } catch {}
+        // 1. Concurrently fetch habits & stats for each server friend
+        const friendDataMap = new Map<string, { habits: FriendPublicHabit[]; bestStreak: number; totalCompletions: number }>();
 
-        const isBlocked = (identifier?: string) => {
-          if (!identifier) return false;
-          const clean = identifier.replace(/^@/, '').toLowerCase().trim();
-          if (unfollowedBlocklist.has(clean)) return true;
-          for (const b of unfollowedBlocklist) {
-            if (b && (clean === b || clean.includes(b) || b.includes(clean))) return true;
-          }
-          return false;
-        };
+        await Promise.all(
+          serverFriends.map(async (sf) => {
+            const fId = sf.friend_id || sf.id;
+            const fUsername = (sf.username || '').replace(/^@/, '').toLowerCase();
+            if (!fId || (fId && fId.toLowerCase() === myId) || fUsername === myUsername) return;
 
-        // 1. Update any local stored follow requests matching server friends
-        try {
-          const stored = await getStoredFollowRequests();
-          let modified = false;
-          const updatedStored = stored.map((r) => {
-            const toClean = (r.toUsername || '').replace(/^@/, '').toLowerCase();
-            const matchingSf = serverFriends.find((sf) => {
-              const sfUser = (sf.username || '').replace(/^@/, '').toLowerCase();
-              const sfId = (sf.friend_id || sf.id || '').toLowerCase();
-              return (toClean && toClean === sfUser) || (r.toUserId && r.toUserId.toLowerCase() === sfId);
-            });
-            if (matchingSf && r.status !== 'accepted' && !isBlocked(toClean) && !isBlocked(r.toUserId)) {
-              modified = true;
-              return { ...r, status: 'accepted' as const };
-            }
-            return r;
-          });
-          if (modified) {
-            await saveStoredFollowRequests(updatedStored);
-          }
-        } catch {}
+            try {
+              const [backendHabits, friendStats, catalogHabits] = await Promise.all([
+                localApi.fetchFriendHabitsFromServer(fId),
+                localApi.fetchFriendStatsFromServer(fId, 'week'),
+                getFriendPublicHabits(fId, sf.email, sf.name, undefined, myId, currentUser.email, myUsername, sf.username),
+              ]);
 
+              let mappedHabits: FriendPublicHabit[] = [];
+
+              if (Array.isArray(backendHabits) && backendHabits.length > 0) {
+                mappedHabits = backendHabits
+                  .filter((bh) => !bh.deleted_at && !bh.archived_at)
+                  .map((bh) => {
+                    const freq = bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days';
+                    const scheduled_days = Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6];
+
+                    const catMatch = catalogHabits.find(
+                      (ch) =>
+                        ch.id === bh.id ||
+                        ch.id === `fh-${bh.id}` ||
+                        ch.name.trim().toLowerCase() === bh.name.trim().toLowerCase()
+                    );
+
+                    const statMatch = friendStats?.habits?.find(
+                      (sh: any) =>
+                        sh.id === bh.id ||
+                        (sh.name && sh.name.trim().toLowerCase() === bh.name.trim().toLowerCase())
+                    );
+
+                    const streak = Math.max(
+                      bh.streak || 0,
+                      statMatch?.current_streak || 0,
+                      catMatch?.currentStreak || 0
+                    );
+
+                    let isCompletedToday = false;
+                    if (catMatch && typeof catMatch.isCompletedToday === 'boolean') {
+                      isCompletedToday = catMatch.isCompletedToday;
+                    } else if (statMatch && (statMatch.is_completed_today !== undefined || statMatch.completed_today !== undefined)) {
+                      isCompletedToday = !!(statMatch.is_completed_today ?? statMatch.completed_today);
+                    } else if ((bh as any).is_completed_today !== undefined || (bh as any).completed_today !== undefined) {
+                      isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
+                    } else if ((bh as any).last_completed_at) {
+                      isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
+                    } else if (streak > 0) {
+                      isCompletedToday = true;
+                    }
+
+                    let weeklyHistory = [false, false, false, false, false, false, false];
+                    if (catMatch && Array.isArray(catMatch.weeklyHistory) && catMatch.weeklyHistory.some(Boolean)) {
+                      weeklyHistory = catMatch.weeklyHistory;
+                    } else {
+                      if (isCompletedToday) {
+                        weeklyHistory[todayIndex] = true;
+                        for (let i = 1; i < streak && todayIndex - i >= 0; i++) {
+                          weeklyHistory[todayIndex - i] = true;
+                        }
+                      } else if (streak > 0) {
+                        for (let i = 1; i <= streak && todayIndex - i >= 0; i++) {
+                          weeklyHistory[todayIndex - i] = true;
+                        }
+                      }
+                    }
+
+                    return {
+                      id: bh.id,
+                      name: bh.name,
+                      description: bh.description || undefined,
+                      icon: bh.icon || 'Target',
+                      color: bh.color || '#7C5CFF',
+                      frequency_type: freq,
+                      scheduled_days,
+                      reminder_time: '08:00',
+                      currentStreak: streak,
+                      isCompletedToday,
+                      adoptersCount: 1,
+                      weeklyHistory,
+                    };
+                  });
+              } else if (catalogHabits.length > 0) {
+                mappedHabits = catalogHabits;
+              }
+
+              mappedHabits = deduplicateFriendHabits(mappedHabits);
+
+              const bestStreak = Math.max(
+                sf.best_streak || 0,
+                ...mappedHabits.map((h) => h.currentStreak || 0)
+              );
+              const totalCompletions = Math.max(
+                sf.total_habits || 0,
+                friendStats?.total_completions || 0,
+                mappedHabits.length
+              );
+
+              const info = { habits: mappedHabits, bestStreak, totalCompletions };
+              friendDataMap.set(fId.toLowerCase(), info);
+              if (fUsername) {
+                friendDataMap.set(fUsername, info);
+              }
+            } catch {}
+          })
+        );
+
+        // 2. Atomically update friends in state and AsyncStorage
         setFriends((prevFriends) => {
           const updatedList = [...prevFriends];
 
-          // Add or update friends from server
           for (const sf of serverFriends) {
             const fId = sf.friend_id || sf.id;
             const fUsername = (sf.username || '').replace(/^@/, '').toLowerCase();
             if (!fUsername || (fId && fId.toLowerCase() === myId) || fUsername === myUsername) continue;
-            if (isBlocked(fId) || isBlocked(fUsername) || isBlocked(sf.name) || isBlocked(sf.email)) continue;
 
             const fDisplayName = sf.name || (fUsername.charAt(0).toUpperCase() + fUsername.slice(1));
             const usernameTag = `@${fUsername}`;
@@ -1725,16 +1667,24 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 (f.username && f.username.replace(/^@/, '').toLowerCase() === fUsername)
             );
 
+            const extra = friendDataMap.get(fId?.toLowerCase() || '') || friendDataMap.get(fUsername) || {
+              habits: [],
+              bestStreak: sf.best_streak || 0,
+              totalCompletions: sf.total_habits || 0,
+            };
+
             if (existingIdx >= 0) {
+              const prev = updatedList[existingIdx];
               updatedList[existingIdx] = {
-                ...updatedList[existingIdx],
-                id: fId || updatedList[existingIdx].id,
-                name: updatedList[existingIdx].name || fDisplayName,
+                ...prev,
+                id: fId || prev.id,
+                name: prev.name || fDisplayName,
                 username: usernameTag,
                 isFriend: true,
                 requestStatus: 'accepted',
-                currentStreak: sf.best_streak !== undefined ? sf.best_streak : updatedList[existingIdx].currentStreak,
-                totalCompletions: sf.total_habits !== undefined ? sf.total_habits : updatedList[existingIdx].totalCompletions,
+                currentStreak: extra.bestStreak !== undefined ? extra.bestStreak : (sf.best_streak !== undefined ? sf.best_streak : prev.currentStreak),
+                totalCompletions: extra.totalCompletions !== undefined ? extra.totalCompletions : (sf.total_habits !== undefined ? sf.total_habits : prev.totalCompletions),
+                habits: extra.habits.length > 0 ? extra.habits : (prev.habits?.length ? prev.habits : []),
               };
             } else {
               updatedList.push({
@@ -1745,138 +1695,46 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 avatar: '🤝',
                 bio: 'Habit buddy on HabitUp! Building streaks together.',
                 plantStage: '🌱 Fresh Seedling (Lvl 1)',
-                currentStreak: sf.best_streak || 0,
-                totalCompletions: sf.total_habits || 0,
+                currentStreak: extra.bestStreak || sf.best_streak || 0,
+                totalCompletions: extra.totalCompletions || sf.total_habits || 0,
                 isFriend: true,
                 requestStatus: 'accepted',
-                habits: [],
+                habits: extra.habits,
               });
             }
           }
 
+          if (currentUser?.id) {
+            AsyncStorage.setItem(`habitup_social_friends_${currentUser.id}`, JSON.stringify(updatedList)).catch(() => {});
+          }
+          AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(updatedList)).catch(() => {});
+
           return updatedList;
         });
 
-        // 3. Fetch each accepted friend's habits & live stats from Railway backend
-        for (const sf of serverFriends) {
-          const fId = sf.friend_id || sf.id;
-          if (!fId || fId === myId) continue;
-          try {
-            const [backendHabits, friendStats, catalogHabits] = await Promise.all([
-              localApi.fetchFriendHabitsFromServer(fId),
-              localApi.fetchFriendStatsFromServer(fId, 'week'),
-              getFriendPublicHabits(fId, sf.email, sf.name, undefined, myId, currentUser.email, myUsername, sf.username),
-            ]);
-
-            let mappedHabits: FriendPublicHabit[] = [];
-
-            if (Array.isArray(backendHabits) && backendHabits.length > 0) {
-              mappedHabits = backendHabits
-                .filter((bh) => !bh.deleted_at && !bh.archived_at)
-                .map((bh) => {
-                  const freq = bh.frequency_type === 'daily' || !bh.frequency_type ? 'daily' : 'custom_days';
-                  const scheduled_days = Array.isArray(bh.schedule) && bh.schedule.length > 0 ? bh.schedule : [0, 1, 2, 3, 4, 5, 6];
-
-                  const catMatch = catalogHabits.find(
-                    (ch) =>
-                      ch.id === bh.id ||
-                      ch.id === `fh-${bh.id}` ||
-                      ch.name.trim().toLowerCase() === bh.name.trim().toLowerCase()
-                  );
-
-                  const statMatch = friendStats?.habits?.find(
-                    (sh: any) =>
-                      sh.id === bh.id ||
-                      (sh.name && sh.name.trim().toLowerCase() === bh.name.trim().toLowerCase())
-                  );
-
-                  const streak = Math.max(
-                    bh.streak || 0,
-                    statMatch?.current_streak || 0,
-                    catMatch?.currentStreak || 0
-                  );
-
-                  let isCompletedToday = false;
-                  if (catMatch && typeof catMatch.isCompletedToday === 'boolean') {
-                    isCompletedToday = catMatch.isCompletedToday;
-                  } else if (statMatch && (statMatch.is_completed_today !== undefined || statMatch.completed_today !== undefined)) {
-                    isCompletedToday = !!(statMatch.is_completed_today ?? statMatch.completed_today);
-                  } else if ((bh as any).is_completed_today !== undefined || (bh as any).completed_today !== undefined) {
-                    isCompletedToday = !!((bh as any).is_completed_today ?? (bh as any).completed_today);
-                  } else if ((bh as any).last_completed_at) {
-                    isCompletedToday = String((bh as any).last_completed_at).split('T')[0] === todayStr;
-                  } else if (streak > 0) {
-                    isCompletedToday = true;
-                  }
-
-                  let weeklyHistory = [false, false, false, false, false, false, false];
-                  if (catMatch && Array.isArray(catMatch.weeklyHistory) && catMatch.weeklyHistory.some(Boolean)) {
-                    weeklyHistory = catMatch.weeklyHistory;
-                  } else {
-                    if (isCompletedToday) {
-                      weeklyHistory[todayIndex] = true;
-                      for (let i = 1; i < streak && todayIndex - i >= 0; i++) {
-                        weeklyHistory[todayIndex - i] = true;
-                      }
-                    } else if (streak > 0) {
-                      for (let i = 1; i <= streak && todayIndex - i >= 0; i++) {
-                        weeklyHistory[todayIndex - i] = true;
-                      }
-                    }
-                  }
-
-                  return {
-                    id: bh.id,
-                    name: bh.name,
-                    description: bh.description || undefined,
-                    icon: bh.icon || 'Target',
-                    color: bh.color || '#7C5CFF',
-                    frequency_type: freq,
-                    scheduled_days,
-                    reminder_time: '08:00',
-                    currentStreak: streak,
-                    isCompletedToday,
-                    adoptersCount: 1,
-                    weeklyHistory,
-                  };
-                });
-            } else if (catalogHabits.length > 0) {
-              mappedHabits = catalogHabits;
+        // 3. Mark matching stored follow requests as accepted
+        try {
+          const stored = await getStoredFollowRequests();
+          const serverFriendUsernames = new Set(serverFriends.map((sf) => (sf.username || '').replace(/^@/, '').toLowerCase()));
+          const serverFriendIds = new Set(serverFriends.map((sf) => (sf.friend_id || sf.id || '').toLowerCase()));
+          const cleanedStored = stored.map((r) => {
+            const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
+            const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
+            const toId = (r.toUserId || '').toLowerCase();
+            const fromId = (r.fromUserId || '').toLowerCase();
+            if (
+              serverFriendUsernames.has(toU) ||
+              serverFriendUsernames.has(fromU) ||
+              serverFriendIds.has(toId) ||
+              serverFriendIds.has(fromId)
+            ) {
+              return { ...r, status: 'accepted' as const };
             }
+            return r;
+          });
+          await saveStoredFollowRequests(cleanedStored);
+        } catch {}
 
-            mappedHabits = deduplicateFriendHabits(mappedHabits);
-
-            const bestStreak = Math.max(
-              sf.best_streak || 0,
-              ...mappedHabits.map((h) => h.currentStreak || 0)
-            );
-            const totalCompletions = Math.max(
-              sf.total_habits || 0,
-              friendStats?.total_completions || 0,
-              mappedHabits.length
-            );
-
-            setFriends((prevFriends) =>
-              prevFriends.map((f) => {
-                if (
-                  f.id === fId ||
-                  (f.username && f.username.replace(/^@/, '').toLowerCase() === (sf.username || '').replace(/^@/, '').toLowerCase())
-                ) {
-                  return {
-                    ...f,
-                    id: fId || f.id,
-                    isFriend: true,
-                    requestStatus: 'accepted',
-                    currentStreak: bestStreak,
-                    totalCompletions,
-                    habits: mappedHabits.length > 0 ? mappedHabits : (catalogHabits.length > 0 ? catalogHabits : f.habits),
-                  };
-                }
-                return f;
-              })
-            );
-          } catch {}
-        }
       } catch (err) {
         console.warn('syncFriendsWithBackend error:', err);
       }
@@ -3697,20 +3555,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         existingFriend?.id ||
         `friend-${cleanHandle}-${Date.now()}`;
 
-      // 4. Clear from unfollowed blocklist if present
-      if (user?.id) {
-        try {
-          const blocklistRaw = await AsyncStorage.getItem(`habitup_unfollowed_friends_${user.id}`);
-          if (blocklistRaw) {
-            const blocklist: string[] = JSON.parse(blocklistRaw);
-            const filtered = blocklist.filter(
-              (k) => k !== cleanHandle && !k.includes(cleanHandle) && (!targetFriendId || k !== targetFriendId.toLowerCase())
-            );
-            await AsyncStorage.setItem(`habitup_unfollowed_friends_${user.id}`, JSON.stringify(filtered));
-          }
-        } catch {}
-      }
-
       // 5. Create friend entry with requestStatus: 'pending_sent' (Habits are LOCKED until accepted)
       const pendingBuddy: FriendUser = {
         id: targetFriendId,
@@ -3727,20 +3571,14 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         habits: [], // Locked until accepted!
       };
 
-      const updatedFriendsList = [
+      setFriends((prev) => [
         pendingBuddy,
-        ...friends.filter(
+        ...prev.filter(
           (f) =>
             f.id !== pendingBuddy.id &&
             f.username.toLowerCase() !== `@${cleanHandle}`.toLowerCase()
         ),
-      ];
-
-      setFriends(updatedFriendsList);
-      if (user?.id) {
-        AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(updatedFriendsList)).catch(() => {});
-      }
-      AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(updatedFriendsList)).catch(() => {});
+      ]);
 
       // 6. Record in stored follow requests
       const stored = await getStoredFollowRequests();
@@ -3788,27 +3626,20 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       }
 
-      // 2. Update stored requests for both requestId and usernames
+      // 2. Update stored requests
       const stored = await getStoredFollowRequests();
       const req = stored.find((r) => r.id === requestId);
-      const targetUsername = (friendUsername || req?.fromUsername || '').toLowerCase();
-      const targetClean = targetUsername.replace(/^@/, '');
-      const myClean = (user?.username || (user?.name ? user.name.replace(/[^a-z0-9]/g, '') : '')).replace(/^@/, '').toLowerCase();
-
-      const updatedStored = stored.map((r) => {
-        const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
-        const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
-        const match =
-          r.id === requestId ||
-          (targetClean && myClean && ((fromU === targetClean && toU === myClean) || (fromU === myClean && toU === targetClean)));
-        return match ? { ...r, status: 'accepted' as const } : r;
-      });
+      const updatedStored = stored.map((r) =>
+        r.id === requestId ? { ...r, status: 'accepted' as const } : r
+      );
       await saveStoredFollowRequests(updatedStored);
 
       // 3. Update incomingRequests list in state
-      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId && (r.fromUsername || '').replace(/^@/, '').toLowerCase() !== targetClean));
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
 
       // 4. Find friend and update requestStatus to 'accepted' + load habits
+      const targetUsername = (friendUsername || req?.fromUsername || '').toLowerCase();
+      const targetClean = targetUsername.replace(/^@/, '');
       const targetName =
         req?.fromName ||
         (targetClean ? targetClean.charAt(0).toUpperCase() + targetClean.slice(1) : 'Friend');
@@ -3829,8 +3660,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               undefined,
               user?.id,
               user?.email,
-              user?.username,
-              targetClean
+              user?.username
             ),
           ]);
 
@@ -3910,23 +3740,22 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           undefined,
           user?.id,
           user?.email,
-          user?.username,
-          targetClean
+          user?.username
         );
       }
 
       partnerHabits = deduplicateFriendHabits(partnerHabits);
 
-      let updatedList: FriendUser[] = [];
       setFriends((prev) => {
+        let updated: FriendUser[];
         const existing = prev.find(
           (f) =>
             (targetId && (f.id || '').toLowerCase() === targetId.toLowerCase()) ||
-            (f.username && f.username.toLowerCase() === targetUsername) ||
-            (f.username && f.username.toLowerCase() === `@${targetClean}`)
+            f.username.toLowerCase() === targetUsername ||
+            f.username.toLowerCase() === `@${targetClean}`
         );
         if (existing) {
-          updatedList = prev.map((f) =>
+          updated = prev.map((f) =>
             f.id === existing.id
               ? {
                   ...f,
@@ -3952,14 +3781,13 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             requestStatus: 'accepted',
             habits: partnerHabits,
           };
-          updatedList = [newFriend, ...prev];
+          updated = [newFriend, ...prev];
         }
 
         if (user?.id) {
-          AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(updatedList)).catch(() => {});
+          AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(updated)).catch(() => {});
         }
-        AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(updatedList)).catch(() => {});
-        return updatedList;
+        return updated;
       });
 
       // 6. Save cross-account mutual connection
@@ -3979,11 +3807,9 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         email: `${targetClean}@gmail.com`,
         avatar: targetAvatar,
       };
-      await saveMutualConnection(currentUserRef, buddyUserRef);
+      saveMutualConnection(currentUserRef, buddyUserRef);
 
-      // Publish currentUser's habits so the partner account immediately gets our habits upon sync
       if (user) {
-        publishUserHabits(user, habits, completions);
         syncFriendsWithBackend(user);
         syncFollowRequests(user);
       }
@@ -3995,7 +3821,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         'success'
       );
     },
-    [isOffline, isAuthenticated, user, habits, completions, soundEnabled, showToast, syncFriendsWithBackend, syncFollowRequests]
+    [isOffline, isAuthenticated, user, soundEnabled, showToast, syncFriendsWithBackend, syncFollowRequests]
   );
 
   const declineFollowRequest = useCallback(
@@ -4045,186 +3871,118 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const removeFriend = useCallback(
     async (friendId: string) => {
-      const cleanFriendId = (friendId || '').trim();
-      const target = friends.find(
-        (f) =>
-          f.id === cleanFriendId ||
-          (f.username && f.username.toLowerCase() === cleanFriendId.toLowerCase()) ||
-          (f.username && f.username.replace(/^@/, '').toLowerCase() === cleanFriendId.replace(/^@/, '').toLowerCase()) ||
-          (cleanFriendId.startsWith('friend-') && f.id.toLowerCase().includes(cleanFriendId.replace(/^friend-/, '').split('-')[0].toLowerCase()))
-      );
+      const target = friends.find((f) => f.id === friendId);
       const name = target ? formatFriendDisplayName(target).displayName : 'Friend';
-      const targetUsername = (target?.username || cleanFriendId || '').replace(/^@/, '').trim().toLowerCase();
-      const extractedFromId = cleanFriendId.startsWith('friend-')
-        ? cleanFriendId.replace(/^friend-/, '').replace(/-\d+$/, '').toLowerCase()
-        : '';
-      const targetEmail = (target?.email || '').trim().toLowerCase();
-      const targetName = (target?.name || '').trim().toLowerCase();
+      const targetUsername = target?.username ? target.username.replace(/^@/, '') : '';
+      const targetEmail = target?.email || '';
+      const isPending = target?.requestStatus === 'pending_sent';
 
-      const allUsernames = new Set(
-        [targetUsername, extractedFromId, targetName, targetName.replace(/[^a-z0-9_]/g, '_')]
-          .map((s) => s.replace(/^@/, '').trim().toLowerCase())
-          .filter(Boolean)
-      );
-
-      const allIds = new Set(
-        [cleanFriendId.toLowerCase(), (target?.id || '').toLowerCase(), targetEmail].filter(Boolean)
-      );
-
-      // Add to unfollowed blocklist for current user so background syncs never restore them
-      if (user?.id) {
-        try {
-          const blocklistRaw = await AsyncStorage.getItem(`habitup_unfollowed_friends_${user.id}`);
-          const blocklist: string[] = blocklistRaw ? JSON.parse(blocklistRaw) : [];
-          allUsernames.forEach((u) => {
-            if (!blocklist.includes(u)) blocklist.push(u);
-          });
-          allIds.forEach((id) => {
-            if (!blocklist.includes(id)) blocklist.push(id);
-          });
-          await AsyncStorage.setItem(`habitup_unfollowed_friends_${user.id}`, JSON.stringify(blocklist));
-        } catch {}
-      }
-
-      // 1. Remove from active friends state IMMEDIATELY and write to AsyncStorage
-      const remainingFriends = friends.filter((f) => {
-        const fId = (f.id || '').toLowerCase();
-        const fUsername = (f.username || '').replace(/^@/, '').toLowerCase();
-        const fEmail = (f.email || '').toLowerCase();
-        const fName = (f.name || '').toLowerCase();
-
-        if (allIds.has(fId)) return false;
-        if (allUsernames.has(fUsername)) return false;
-        if (allUsernames.has(fName)) return false;
-        if (targetEmail && fEmail === targetEmail) return false;
-        for (const u of allUsernames) {
-          if (u && (fId.includes(u) || fUsername.includes(u))) return false;
-        }
-        return true;
-      });
-
-      setFriends(remainingFriends);
-
-      if (user?.id) {
-        await AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(remainingFriends)).catch(() => {});
-        if (user.email) {
-          const emailUid = getUserIdFromEmail(user.email);
-          if (emailUid !== user.id) {
-            await AsyncStorage.setItem(`habitup_social_friends_${emailUid}`, JSON.stringify(remainingFriends)).catch(() => {});
-          }
-        }
-      }
-      await AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(remainingFriends)).catch(() => {});
-
-      // 2. Clean up stored follow requests completely (both pending and accepted)
-      try {
-        const stored = await getStoredFollowRequests();
-        const serverRequestsToDelete: string[] = [];
-        const remainingReqs = stored.filter((r) => {
-          const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
-          const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
-          const toId = (r.toUserId || '').toLowerCase();
-          const fromId = (r.fromUserId || '').toLowerCase();
-
-          const match =
-            allUsernames.has(toU) ||
-            allUsernames.has(fromU) ||
-            allIds.has(toId) ||
-            allIds.has(fromId) ||
-            Array.from(allUsernames).some((u) => toU.includes(u) || fromU.includes(u) || toId.includes(u) || fromId.includes(u));
-
-          if (match && r.id) {
-            serverRequestsToDelete.push(r.id);
-          }
-          return !match;
-        });
-
-        await saveStoredFollowRequests(remainingReqs);
-
-        if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
-          serverRequestsToDelete.forEach((reqId) => {
-            localApi.rejectFriendRequestOnServer(reqId).catch(() => {});
-          });
-        }
-      } catch {}
-
-      // 3. Clean up incoming requests in state
-      setIncomingRequests((prev) =>
-        prev.filter((r) => {
-          const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
-          const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
-          const fromId = (r.fromUserId || '').toLowerCase();
-          const toId = (r.toUserId || '').toLowerCase();
-          return !allUsernames.has(fromU) && !allUsernames.has(toU) && !allIds.has(fromId) && !allIds.has(toId);
-        })
-      );
-
-      // 4. Remove friend on server if online and authenticated
+      // 1. Remove friend on server if online and authenticated
       if (!isOffline && isAuthenticated && localApi.hasAuthToken()) {
         try {
-          let serverIdToRemove = cleanFriendId;
-          if (!serverIdToRemove || serverIdToRemove.startsWith('friend-') || serverIdToRemove.startsWith('usr_')) {
+          let serverIdToRemove = friendId;
+          if (!serverIdToRemove || serverIdToRemove.startsWith('friend-')) {
             if (targetUsername) {
               const profile = await localApi.fetchUserProfileByUsername(targetUsername);
               if (profile?.id) serverIdToRemove = profile.id;
             }
           }
-          if (serverIdToRemove && !serverIdToRemove.startsWith('friend-') && !serverIdToRemove.startsWith('usr_')) {
-            await localApi.removeFriendOnServer(serverIdToRemove).catch(() => {});
+          if (serverIdToRemove && !serverIdToRemove.startsWith('friend-') && !isPending) {
+            await localApi.removeFriendOnServer(serverIdToRemove);
           }
         } catch (e) {
           console.warn('removeFriendOnServer error:', e);
         }
       }
 
-      // 5. Remove mutual cross-account records from AsyncStorage
+      // 2. Clean up stored follow requests if any pending
+      try {
+        const stored = await getStoredFollowRequests();
+        const pendingForThis = stored.filter((r) => {
+          const toU = (r.toUsername || '').replace(/^@/, '').toLowerCase();
+          const fromU = (r.fromUsername || '').replace(/^@/, '').toLowerCase();
+          const toId = (r.toUserId || '').toLowerCase();
+          const fromId = (r.fromUserId || '').toLowerCase();
+          const fIdLow = (friendId || '').toLowerCase();
+          const match =
+            (targetUsername && toU === targetUsername.toLowerCase()) ||
+            (targetUsername && fromU === targetUsername.toLowerCase()) ||
+            toId === fIdLow ||
+            fromId === fIdLow;
+          return match;
+        });
+
+        if (pendingForThis.length > 0) {
+          const remainingReqs = stored.filter((r) => !pendingForThis.some((pr) => pr.id === r.id));
+          await saveStoredFollowRequests(remainingReqs);
+        }
+      } catch {}
+
+      // 3. Remove friend completely from active friends state & persist immediately
+      setFriends((prev) => {
+        const newFriendsList = prev.filter((f) => {
+          if (f.id === friendId) return false;
+          if (targetUsername && f.username && f.username.replace(/^@/, '').toLowerCase() === targetUsername.toLowerCase()) {
+            return false;
+          }
+          return true;
+        });
+        if (user?.id) {
+          AsyncStorage.setItem(`habitup_social_friends_${user.id}`, JSON.stringify(newFriendsList)).catch(() => {});
+        }
+        AsyncStorage.setItem('habitup_social_friends_v1', JSON.stringify(newFriendsList)).catch(() => {});
+        return newFriendsList;
+      });
+
+      // 4. Remove mutual cross-account records from AsyncStorage
       if (user) {
-        await removeMutualRecords(user.id, cleanFriendId, targetUsername, target?.name);
+        await removeMutualRecords(user.id, friendId, targetUsername, target?.name);
         if (user.email) {
-          await removeMutualRecords(user.email, targetEmail || cleanFriendId, targetUsername, target?.name);
+          await removeMutualRecords(user.email, targetEmail || friendId, targetUsername, target?.name);
         }
       }
 
-      // 6. Remove all habits created with or adopted from this friend
+      // 5. Remove all habits created with or adopted from this friend (only for accepted friendships)
       const removedHabitIds: string[] = [];
-      setHabits((prev) => {
-        const remaining: Habit[] = [];
-        for (const h of prev) {
-          const bId = (h.buddy_id || '').toLowerCase();
-          const bName = (h.buddy_name || '').toLowerCase();
-          const isBuddyMatch =
-            allIds.has(bId) ||
-            allUsernames.has(bName) ||
-            Array.from(allUsernames).some((u) => bId.includes(u) || bName.includes(u));
-          if (isBuddyMatch) {
-            removedHabitIds.push(h.id);
-          } else {
-            remaining.push(h);
+      if (!isPending) {
+        setHabits((prev) => {
+          const remaining: Habit[] = [];
+          for (const h of prev) {
+            if (
+              h.buddy_id === friendId ||
+              (targetUsername && h.buddy_name && h.buddy_name.toLowerCase() === targetUsername.toLowerCase()) ||
+              (target?.name && h.buddy_name && h.buddy_name.toLowerCase() === target.name.toLowerCase())
+            ) {
+              removedHabitIds.push(h.id);
+            } else {
+              remaining.push(h);
+            }
           }
-        }
-        return remaining;
-      });
-
-      // 7. Remove completions for those removed habits
-      if (removedHabitIds.length > 0) {
-        const removedSet = new Set(removedHabitIds);
-        setCompletions((prev) => prev.filter((c) => !removedSet.has(c.habit_id)));
-
-        removedHabitIds.forEach((hId) => {
-          if (isOffline) {
-            addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
-          } else {
-            localApi.deleteHabitOnServer(hId).catch(() => {
-              addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
-            });
-          }
+          return remaining;
         });
+
+        // 6. Remove completions for those removed habits
+        if (removedHabitIds.length > 0) {
+          const removedSet = new Set(removedHabitIds);
+          setCompletions((prev) => prev.filter((c) => !removedSet.has(c.habit_id)));
+
+          // Sync deletions to backend if needed
+          removedHabitIds.forEach((hId) => {
+            if (isOffline) {
+              addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
+            } else {
+              localApi.deleteHabitOnServer(hId).catch(() => {
+                addMutationToQueue(`/habits/${hId}`, 'DELETE', null);
+              });
+            }
+          });
+        }
       }
 
       if (soundEnabled) soundService.playClickSound();
       showToast(
-        target?.requestStatus === 'pending_sent'
-          ? `Cancelled follow request to ${name}.`
+        isPending
+          ? `Follow request to @${targetUsername || name} cancelled.`
           : removedHabitIds.length > 0
           ? `Unfollowed ${name} and removed ${removedHabitIds.length} shared habit${removedHabitIds.length === 1 ? '' : 's'}.`
           : `Unfollowed ${name}.`,
@@ -4234,22 +3992,6 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     },
     [friends, soundEnabled, isOffline, isAuthenticated, addMutationToQueue, showToast, user]
   );
-
-  const refreshFriends = useCallback(async () => {
-    if (!user) return;
-    try {
-      await Promise.all([
-        syncFriendsWithBackend(user),
-        syncFollowRequests(user),
-        syncMutualDataForUser(user, habits, friends).then((synced) => {
-          if (synced.friends.length > 0) setFriends(synced.friends);
-          if (synced.habits.length > 0) setHabits(synced.habits);
-        }),
-      ]);
-    } catch (e) {
-      console.warn('refreshFriends error:', e);
-    }
-  }, [user, habits, friends, syncFriendsWithBackend, syncFollowRequests]);
 
   return (
     <HabitContext.Provider
@@ -4345,10 +4087,11 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         sendFriendRequest,
         acceptFriendRequest,
         removeFriend,
+        syncFriendsWithBackend: async (u) => syncFriendsWithBackend(u || user),
+        syncFollowRequests: async (u) => syncFollowRequests(u || user),
         friendsEnabled,
         experimentVariant,
         recordFriendsExposure,
-        refreshFriends,
       }}
     >
       {children}
