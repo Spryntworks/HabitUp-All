@@ -752,8 +752,8 @@ export const FriendsView: React.FC = () => {
                 backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
                 borderColor: isPendingSent
                   ? isDark
-                    ? '#F59E0B'
-                    : '#FCD34D'
+                    ? 'rgba(245, 158, 11, 0.35)'
+                    : 'rgba(245, 158, 11, 0.35)'
                   : isDark
                   ? '#1E293B'
                   : '#E2E8F0',
@@ -832,19 +832,26 @@ export const FriendsView: React.FC = () => {
               </View>
             </View>
 
-            {/* PENDING REQUEST LOCK NOTICE */}
+            {/* PENDING REQUEST LOCK NOTICE (Frosted Ambient Style) */}
             {isPendingSent ? (
               <View
                 style={[
                   styles.lockedNoticeBox,
                   {
-                    backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
-                    borderColor: isDark ? '#78350F' : '#FDE68A',
+                    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.05)' : '#FFFBEB',
+                    borderColor: isDark ? 'rgba(245, 158, 11, 0.18)' : '#FDE68A',
                   },
                 ]}
               >
-                <View style={styles.lockedIconWrapper}>
-                  <Lock size={16} color="#F59E0B" />
+                <View
+                  style={[
+                    styles.lockedIconWrapper,
+                    {
+                      backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : 'rgba(245, 158, 11, 0.18)',
+                    },
+                  ]}
+                >
+                  <Lock size={15} color="#F59E0B" strokeWidth={2.2} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text
@@ -853,15 +860,15 @@ export const FriendsView: React.FC = () => {
                       { color: isDark ? '#FDE68A' : '#92400E' },
                     ]}
                   >
-                    Follow Request Pending
+                    Waiting for {friendDisplayName} to accept
                   </Text>
                   <Text
                     style={[
                       styles.lockedNoticeText,
-                      { color: isDark ? '#D6D3D1' : '#B45309' },
+                      { color: isDark ? '#94A3B8' : '#78716C' },
                     ]}
                   >
-                    Habits and routines will unlock once {friendDisplayName} accepts your request.
+                    Habits and streak tracking will unlock automatically.
                   </Text>
                 </View>
               </View>
@@ -2405,26 +2412,29 @@ const styles = StyleSheet.create({
   lockedNoticeBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 13,
-    borderRadius: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
     borderWidth: 1,
     gap: 12,
+    marginTop: 4,
   },
   lockedIconWrapper: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(245, 158, 11, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   lockedNoticeTitle: {
-    fontSize: 12.5,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   lockedNoticeText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 11.5,
+    fontWeight: '500',
     marginTop: 2,
     lineHeight: 16,
   },
