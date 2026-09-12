@@ -10,6 +10,7 @@ import {
   Share,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useHabit } from '../../context/HabitContext';
@@ -74,15 +75,27 @@ export const FriendsView: React.FC = () => {
     theme,
     showToast,
     recordFriendsExposure,
+    refreshFriends,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshFriends();
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     recordFriendsExposure().catch(() => {});
-  }, [recordFriendsExposure]);
+    refreshFriends().catch(() => {});
+  }, [recordFriendsExposure, refreshFriends]);
 
   // Search by username state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -366,6 +379,14 @@ export const FriendsView: React.FC = () => {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          tintColor="#7C5CFF"
+          colors={['#7C5CFF']}
+        />
+      }
     >
       {/* 1. Header */}
       <View style={styles.header}>

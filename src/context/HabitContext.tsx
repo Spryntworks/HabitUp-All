@@ -164,6 +164,7 @@ interface HabitContextType {
   friendsEnabled: boolean;
   experimentVariant: string | null;
   recordFriendsExposure: () => Promise<void>;
+  refreshFriends: () => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | null>(null);
@@ -1507,6 +1508,8 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Live mutual sync whenever user enters or views the Friends tab
   useEffect(() => {
     if (activeTab === 'friends' && isInitialDataLoaded.current && user && user.id) {
+      syncFriendsWithBackend(user);
+      syncFollowRequests(user);
       syncMutualDataForUser(user, habits, friends)
         .then((synced) => {
           if (synced.friends.length > 0) {
@@ -1533,13 +1536,27 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const todayStr = formatDateKey(new Date());
         const todayIndex = (new Date().getDay() + 6) % 7; // Monday = 0, Sunday = 6
 
-        // Server friend IDs and usernames currently active on Railway
-        const serverFriendIds = new Set(
-          serverFriends.map((sf) => (sf.friend_id || sf.id || '').toLowerCase()).filter(Boolean)
-        );
-        const serverFriendUsernames = new Set(
-          serverFriends.map((sf) => (sf.username || '').replace(/^@/, '').toLowerCase()).filter(Boolean)
-        );
+        // 1. Update any local stored follow requests matching server friends
+        try {
+          const stored = await getStoredFollowRequests();
+          let modified = false;
+          const updatedStored = stored.map((r) => {
+            const toClean = (r.toUsername || '').replace(/^@/, '').toLowerCase();
+            const matchingSf = serverFriends.find((sf) => {
+              const sfUser = (sf.username || '').replace(/^@/, '').toLowerCase();
+              const sfId = (sf.friend_id || sf.id || '').toLowerCase();
+              return (toClean && toClean === sfUser) || (r.toUserId && r.toUserId.toLowerCase() === sfId);
+            });
+            if (matchingSf && r.status !== 'accepted') {
+              modified = true;
+              return { ...r, status: 'accepted' as const };
+            }
+            return r;
+          });
+          if (modified) {
+            await saveStoredFollowRequests(updatedStored);
+          }
+        } catch {}
 
         setFriends((prevFriends) => {
           const updatedList = [...prevFriends];
@@ -1599,7 +1616,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const [backendHabits, friendStats, catalogHabits] = await Promise.all([
               localApi.fetchFriendHabitsFromServer(fId),
               localApi.fetchFriendStatsFromServer(fId, 'week'),
-              getFriendPublicHabits(fId, sf.email, sf.name, undefined, myId, currentUser.email, myUsername),
+              getFriendPublicHabits(fId, sf.email, sf.name, undefined, myId, currentUser.email, myUsername, sf.username),
             ]);
 
             let mappedHabits: FriendPublicHabit[] = [];
@@ -1680,34 +1697,35 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
             mappedHabits = deduplicateFriendHabits(mappedHabits);
 
-            if (mappedHabits.length > 0) {
-              const bestStreak = Math.max(
-                sf.best_streak || 0,
-                ...mappedHabits.map((h) => h.currentStreak || 0)
-              );
-              const totalCompletions = Math.max(
-                sf.total_habits || 0,
-                friendStats?.total_completions || 0,
-                mappedHabits.length
-              );
+            const bestStreak = Math.max(
+              sf.best_streak || 0,
+              ...mappedHabits.map((h) => h.currentStreak || 0)
+            );
+            const totalCompletions = Math.max(
+              sf.total_habits || 0,
+              friendStats?.total_completions || 0,
+              mappedHabits.length
+            );
 
-              setFriends((prevFriends) =>
-                prevFriends.map((f) => {
-                  if (
-                    f.id === fId ||
-                    (f.username && f.username.replace(/^@/, '').toLowerCase() === (sf.username || '').replace(/^@/, '').toLowerCase())
-                  ) {
-                    return {
-                      ...f,
-                      currentStreak: bestStreak,
-                      totalCompletions,
-                      habits: mappedHabits,
-                    };
-                  }
-                  return f;
-                })
-              );
-            }
+            setFriends((prevFriends) =>
+              prevFriends.map((f) => {
+                if (
+                  f.id === fId ||
+                  (f.username && f.username.replace(/^@/, '').toLowerCase() === (sf.username || '').replace(/^@/, '').toLowerCase())
+                ) {
+                  return {
+                    ...f,
+                    id: fId || f.id,
+                    isFriend: true,
+                    requestStatus: 'accepted',
+                    currentStreak: bestStreak,
+                    totalCompletions,
+                    habits: mappedHabits.length > 0 ? mappedHabits : (catalogHabits.length > 0 ? catalogHabits : f.habits),
+                  };
+                }
+                return f;
+              })
+            );
           } catch {}
         }
       } catch (err) {
@@ -3966,6 +3984,22 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     [friends, soundEnabled, isOffline, isAuthenticated, addMutationToQueue, showToast, user, syncFriendsWithBackend, syncFollowRequests]
   );
 
+  const refreshFriends = useCallback(async () => {
+    if (!user) return;
+    try {
+      await Promise.all([
+        syncFriendsWithBackend(user),
+        syncFollowRequests(user),
+        syncMutualDataForUser(user, habits, friends).then((synced) => {
+          if (synced.friends.length > 0) setFriends(synced.friends);
+          if (synced.habits.length > 0) setHabits(synced.habits);
+        }),
+      ]);
+    } catch (e) {
+      console.warn('refreshFriends error:', e);
+    }
+  }, [user, habits, friends, syncFriendsWithBackend, syncFollowRequests]);
+
   return (
     <HabitContext.Provider
       value={{
@@ -4063,6 +4097,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         friendsEnabled,
         experimentVariant,
         recordFriendsExposure,
+        refreshFriends,
       }}
     >
       {children}
