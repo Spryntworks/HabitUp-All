@@ -111,13 +111,6 @@ export const AuthView: React.FC = () => {
 
   const handleNameChange = (val: string) => {
     setName(val);
-    if (!isUsernameCustomized.current) {
-      const suggested = val.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 20);
-      if (suggested) {
-        setUsername(suggested);
-        validateAndCheckUsername(suggested);
-      }
-    }
   };
 
   const handleUsernameChange = (val: string) => {
@@ -668,7 +661,10 @@ export const AuthView: React.FC = () => {
                       value={email}
                       onChangeText={setEmail}
                       autoCapitalize="none"
+                      autoCorrect={false}
                       keyboardType="email-address"
+                      autoComplete="username"
+                      textContentType="username"
                     />
                   </View>
                 </View>
@@ -700,6 +696,10 @@ export const AuthView: React.FC = () => {
                       secureTextEntry={!showPassword}
                       value={password}
                       onChangeText={setPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="password"
+                      textContentType="password"
                     />
                     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                       {showPassword ? <EyeOff size={18} color="#94A3B8" /> : <Eye size={18} color="#94A3B8" />}
@@ -747,6 +747,10 @@ export const AuthView: React.FC = () => {
                       placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
                       value={name}
                       onChangeText={handleNameChange}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      autoComplete="name"
+                      textContentType="name"
                     />
                   </View>
                 </View>
@@ -812,6 +816,8 @@ export const AuthView: React.FC = () => {
                       onChangeText={handleUsernameChange}
                       autoCapitalize="none"
                       autoCorrect={false}
+                      autoComplete="username-new"
+                      textContentType="username"
                     />
                   </View>
                   <Text style={[styles.helperText, { color: isDark ? '#64748B' : '#94A3B8' }]}>
@@ -840,7 +846,10 @@ export const AuthView: React.FC = () => {
                       value={email}
                       onChangeText={setEmail}
                       autoCapitalize="none"
+                      autoCorrect={false}
                       keyboardType="email-address"
+                      autoComplete="email"
+                      textContentType="emailAddress"
                     />
                   </View>
                 </View>
@@ -870,6 +879,10 @@ export const AuthView: React.FC = () => {
                       secureTextEntry={!showPassword}
                       value={password}
                       onChangeText={setPassword}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="password-new"
+                      textContentType="newPassword"
                     />
                     <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
                       {showPassword ? <EyeOff size={18} color="#94A3B8" /> : <Eye size={18} color="#94A3B8" />}
