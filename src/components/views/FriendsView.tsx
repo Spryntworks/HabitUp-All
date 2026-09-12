@@ -792,7 +792,7 @@ export const FriendsView: React.FC = () => {
                     numberOfLines={1}
                     ellipsizeMode="tail"
                   >
-                    {usernameTag} {friend.plantStage ? `• ${friend.plantStage}` : ''}
+                    {friend.plantStage || '🌱 Fresh Seedling (Lvl 1)'}
                   </Text>
                 </View>
               </View>
