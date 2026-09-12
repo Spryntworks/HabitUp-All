@@ -491,6 +491,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 2,
   },
   dayLabelText: {
     fontSize: 12,
@@ -499,38 +500,42 @@ const styles = StyleSheet.create({
   },
   calGridContainer: {
     paddingHorizontal: 16,
-    gap: 6,
+    gap: 4,
   },
   weekRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginVertical: 2,
   },
   calNodeWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   todayRing: {
     borderWidth: 2,
     borderColor: '#7C5CFF',
+    borderRadius: 21,
   },
   selectedRing: {
     borderWidth: 2,
     borderColor: '#38BDF8',
+    borderRadius: 21,
   },
   calNode: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   nodeCompleted: {
     backgroundColor: '#10B981',
+    borderRadius: 18,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
@@ -539,6 +544,7 @@ const styles = StyleSheet.create({
   },
   nodeMissed: {
     backgroundColor: '#EF4444',
+    borderRadius: 18,
     shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
@@ -546,6 +552,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   nodePartial: {
+    borderRadius: 18,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.35,
@@ -557,6 +564,8 @@ const styles = StyleSheet.create({
   },
   calNodeText: {
     fontSize: 13,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
   legendRow: {
     flexDirection: 'row',
@@ -572,9 +581,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     overflow: 'hidden',
   },
   legendText: {
