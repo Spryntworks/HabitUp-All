@@ -1089,8 +1089,8 @@ class ApiClient {
         };
       }
 
-      // If already requested or already friends on backend (409 Conflict), resolve target ID and return success
-      if (res.status === 409 || /already|exist/i.test(res.error || '')) {
+      // If already requested, already friends, or backend experiment flag (403/409), resolve target ID and return success
+      if (res.status === 409 || res.status === 403 || /already|exist|disabled|experiment|group/i.test(res.error || '')) {
         let targetId: string | undefined;
         try {
           const profile = await this.fetchUserProfileByUsername(clean);
