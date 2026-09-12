@@ -17,11 +17,6 @@ export const getUserIdFromEmail = (email: string): string => {
   return `usr_${normalized.replace(/[^a-z0-9]/g, '_')}`;
 };
 
-export const isUuid = (str?: string): boolean => {
-  if (typeof str !== 'string') return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
-};
-
 export const createDefaultUserProfile = (name?: string, email?: string, timezone?: string, username?: string): UserProfile => {
   const cleanEmail = (email || '').trim();
   const cleanName = (name || '').trim() || (cleanEmail ? cleanEmail.split('@')[0] : 'User');
@@ -187,12 +182,8 @@ class ApiClient {
     this.setStorage('habitup_current_user_id', userId);
     
     // Automatically load this user's specific access and refresh tokens
-    let userAccess = this.getStorage<string | null>(`habitup_access_token_${userId}`, null);
-    let userRefresh = this.getStorage<string | null>(`habitup_refresh_token_${userId}`, null);
-    if (!userAccess && userId !== 'usr_default') {
-      userAccess = this.getStorage<string | null>('habitup_access_token', null);
-      userRefresh = this.getStorage<string | null>('habitup_refresh_token', null);
-    }
+    const userAccess = this.getStorage<string | null>(`habitup_access_token_${userId}`, null);
+    const userRefresh = this.getStorage<string | null>(`habitup_refresh_token_${userId}`, null);
     if (userAccess) {
       this.accessToken = userAccess;
       this.refreshToken = userRefresh;
@@ -212,22 +203,7 @@ class ApiClient {
   }
 
   hasAuthToken(): boolean {
-    if (this.accessToken || this.refreshToken) return true;
-    const stored =
-      this.getStorage<string | null>('habitup_access_token', null) ||
-      (this.currentUserId ? this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) : null);
-    if (stored) {
-      this.accessToken = stored;
-      return true;
-    }
-    const storedRefresh =
-      this.getStorage<string | null>('habitup_refresh_token', null) ||
-      (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
-    if (storedRefresh) {
-      this.refreshToken = storedRefresh;
-      return true;
-    }
-    return false;
+    return !!(this.accessToken || this.refreshToken);
   }
 
   setTokens(accessToken: string | null, refreshToken?: string | null, targetUserId?: string): void {
@@ -315,20 +291,6 @@ class ApiClient {
       endpoint.includes('/auth/forgot-password') ||
       endpoint.includes('/users/');
 
-    if (!this.accessToken) {
-      const stored =
-        this.getStorage<string | null>('habitup_access_token', null) ||
-        (this.currentUserId ? this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) : null);
-      if (stored) this.accessToken = stored;
-    }
-
-    if (!this.refreshToken) {
-      const storedRefresh =
-        this.getStorage<string | null>('habitup_refresh_token', null) ||
-        (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
-      if (storedRefresh) this.refreshToken = storedRefresh;
-    }
-
     // Guard: Prevent unauthenticated calls to protected endpoints
     if (!isPublicEndpoint && !this.accessToken && !this.refreshToken) {
       return {
@@ -355,7 +317,7 @@ class ApiClient {
     }
 
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timeoutId = controller ? setTimeout(() => controller.abort(), 15000) : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 6000) : null;
 
     try {
       let res = await fetch(url, {
@@ -367,22 +329,19 @@ class ApiClient {
 
       if (
         res.status === 401 &&
+        this.refreshToken &&
         !endpoint.includes('/auth/refresh') &&
-        !endpoint.includes('/auth/login') &&
-        !endpoint.includes('/auth/register')
+        !endpoint.includes('/auth/login')
       ) {
-        if (!this.refreshToken) {
-          this.refreshToken =
-            this.getStorage<string | null>('habitup_refresh_token', null) ||
-            (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
+        const refreshed = await this.refreshAuthTokens();
+        if (refreshed && this.accessToken) {
+          headers['Authorization'] = `Bearer ${this.accessToken}`;
+          res = await fetch(url, { ...options, headers });
+        } else {
+          this.clearTokens();
         }
-        if (this.refreshToken) {
-          const refreshed = await this.refreshAuthTokens();
-          if (refreshed && this.accessToken) {
-            headers['Authorization'] = `Bearer ${this.accessToken}`;
-            res = await fetch(url, { ...options, headers });
-          }
-        }
+      } else if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/register')) {
+        this.clearTokens();
       }
 
       const contentType = res.headers.get('content-type');
@@ -412,11 +371,6 @@ class ApiClient {
   }
 
   async refreshAuthTokens(): Promise<boolean> {
-    if (!this.refreshToken) {
-      this.refreshToken =
-        this.getStorage<string | null>('habitup_refresh_token', null) ||
-        (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
-    }
     if (!this.refreshToken) return false;
     try {
       const res = await fetch(`${this.baseUrl}/auth/refresh`, {
@@ -508,8 +462,8 @@ class ApiClient {
         ...res.data.user,
         username: res.data.user.username || cleanUsername,
       };
-      const token = (res.data as any).access_token || (res.data as any).accessToken || null;
-      const refToken = (res.data as any).refresh_token || (res.data as any).refreshToken || null;
+      const token = (res.data as any).accessToken || (res.data as any).access_token || null;
+      const refToken = (res.data as any).refreshToken || (res.data as any).refresh_token || null;
       this.setCurrentUserId(user.id);
       this.setTokens(token, refToken, user.id);
       this.saveUser(user, user.id);
@@ -589,8 +543,8 @@ class ApiClient {
 
       if (res.ok && res.data?.user) {
         const user = res.data.user;
-        const token = (res.data as any).access_token || (res.data as any).accessToken || null;
-        const refToken = (res.data as any).refresh_token || (res.data as any).refreshToken || null;
+        const token = (res.data as any).accessToken || (res.data as any).access_token || null;
+        const refToken = (res.data as any).refreshToken || (res.data as any).refresh_token || null;
         this.setCurrentUserId(user.id);
         this.setTokens(token, refToken, user.id);
         this.saveUser(user, user.id);
@@ -1163,9 +1117,6 @@ class ApiClient {
   }
 
   async acceptFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string; friendship_id?: string }> {
-    if (!isUuid(requestId)) {
-      return { success: false, error: 'Invalid request UUID' };
-    }
     try {
       const res = await this.request<{ friendship_id?: string }>(`/friends/requests/${requestId}/accept`, { method: 'POST' });
       return { success: res.ok, error: res.error, friendship_id: res.data?.friendship_id };
@@ -1175,9 +1126,6 @@ class ApiClient {
   }
 
   async rejectFriendRequestOnServer(requestId: string): Promise<{ success: boolean; error?: string }> {
-    if (!isUuid(requestId)) {
-      return { success: false, error: 'Invalid request UUID' };
-    }
     try {
       const res = await this.request(`/friends/requests/${requestId}`, { method: 'DELETE' });
       return { success: res.ok, error: res.error };
@@ -1230,7 +1178,55 @@ class ApiClient {
     }
   }
 
+  async nudgeFriendOnServer(
+    friendId: string,
+    habitName?: string
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    if (!friendId) return { success: false, error: 'Friend ID is required' };
+    try {
+      const res = await this.request<{ success?: boolean; message?: string }>(
+        `/friends/${encodeURIComponent(friendId)}/nudge`,
+        {
+          method: 'POST',
+          body: JSON.stringify(habitName ? { habitName } : {}),
+        }
+      );
+      if (res.ok) {
+        return {
+          success: true,
+          message: res.data?.message || 'Nudge notification sent successfully',
+        };
+      }
+      return {
+        success: false,
+        error: res.error || 'Failed to send nudge notification',
+      };
+    } catch (err: any) {
+      console.warn('nudgeFriendOnServer error:', err);
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  }
+
   // --- NOTIFICATIONS & FCM DEVICE TOKEN ---
+
+  async sendTestPushNotification(title?: string, body?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    try {
+      const res = await this.request<{ success?: boolean; message?: string }>('/notifications/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: title || 'HabitUp Test Notification',
+          body: body || 'Your HabitUp push notifications are connected and working!',
+        }),
+      });
+      return {
+        success: res.ok,
+        message: res.data?.message || (res.ok ? 'Test notification sent' : res.error),
+        error: res.error,
+      };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error' };
+    }
+  }
 
   async registerDeviceToken(
     token: string,
@@ -1242,7 +1238,7 @@ class ApiClient {
       return { success: false, error: 'Device token is required' };
     }
 
-    const tz = timezone || getDetectedTimezone() || 'UTC';
+    const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Kolkata';
     const plat = platform === 'ios' ? 'ios' : 'android';
 
     console.log('[FCM] device-token API called: YES');

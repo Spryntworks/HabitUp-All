@@ -4,7 +4,7 @@ import { useHabit } from '../../context/HabitContext';
 import { Home, Users, BarChart2, Calendar, Plus, Flame } from 'lucide-react-native';
 
 export const BottomTabBar: React.FC = () => {
-  const { activeTab, setActiveTab, setIsCreateModalOpen, theme, friendsEnabled, incomingRequests } = useHabit();
+  const { activeTab, setActiveTab, setIsCreateModalOpen, theme, friendsEnabled } = useHabit();
   const isDark = theme === 'dark';
 
   return (
@@ -47,20 +47,11 @@ export const BottomTabBar: React.FC = () => {
           style={styles.tabButton}
           activeOpacity={0.7}
         >
-          <View style={styles.iconWrapper}>
-            <Users
-              size={22}
-              color={activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
-              strokeWidth={activeTab === 'friends' ? 2.5 : 1.8}
-            />
-            {incomingRequests && incomingRequests.length > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>
-                  {incomingRequests.length > 9 ? '9+' : incomingRequests.length}
-                </Text>
-              </View>
-            )}
-          </View>
+          <Users
+            size={22}
+            color={activeTab === 'friends' ? '#7C5CFF' : isDark ? '#64748B' : '#94A3B8'}
+            strokeWidth={activeTab === 'friends' ? 2.5 : 1.8}
+          />
           <Text
             style={[
               styles.tabLabel,
@@ -181,33 +172,6 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     flex: 1,
     position: 'relative',
-  },
-  iconWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -10,
-    backgroundColor: '#EF4444',
-    borderRadius: 9,
-    minWidth: 17,
-    height: 17,
-    paddingHorizontal: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-    zIndex: 10,
-  },
-  tabBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9.5,
-    fontWeight: '800',
-    textAlign: 'center',
-    lineHeight: 12,
   },
   tabLabel: {
     fontSize: 10.5,

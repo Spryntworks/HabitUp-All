@@ -10,7 +10,6 @@ import {
   Share,
   Platform,
   ActivityIndicator,
-  RefreshControl,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useHabit } from '../../context/HabitContext';
@@ -75,47 +74,22 @@ export const FriendsView: React.FC = () => {
     theme,
     showToast,
     recordFriendsExposure,
-    syncFollowRequests,
-    syncFriendsWithBackend,
   } = useHabit();
 
   const isDark = theme === 'dark';
   const todayStr = useMemo(() => formatDateKey(new Date()), []);
   const currentWeekDays = useMemo(() => getWeekDays(new Date()), []);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   useEffect(() => {
     recordFriendsExposure().catch(() => {});
   }, [recordFriendsExposure]);
-
-  // Immediate sync on mount whenever FriendsView opens
-  useEffect(() => {
-    if (user) {
-      syncFollowRequests(user);
-      syncFriendsWithBackend(user);
-    }
-  }, [user, syncFollowRequests, syncFriendsWithBackend]);
-
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    try {
-      if (user) {
-        await Promise.all([
-          syncFollowRequests(user),
-          syncFriendsWithBackend(user),
-        ]);
-      }
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
 
   // Search by username state
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<Array<{ id: string; username: string; name?: string }>>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
-  const [followingMap, setFollowingMap] = useState<Record<string, 'loading' | 'requested' | 'following' | 'incoming'>>({});
+  const [followingMap, setFollowingMap] = useState<Record<string, 'loading' | 'requested' | 'following'>>({});
 
   // Remove friend confirmation state
   const [friendToRemove, setFriendToRemove] = useState<FriendUser | null>(null);
@@ -152,7 +126,7 @@ export const FriendsView: React.FC = () => {
 
     return friends.filter((f) => {
       if (!f || !f.id) return false;
-      if (!f.isFriend && f.requestStatus !== 'pending_sent' && f.requestStatus !== 'pending_received') return false;
+      if (!f.isFriend && f.requestStatus !== 'pending_sent') return false;
       if (f.requestStatus === 'none') return false;
 
       const fId = (f.id || '').toLowerCase();
@@ -227,28 +201,13 @@ export const FriendsView: React.FC = () => {
   };
 
   const handleFollowUserFromSearch = async (targetUsername: string, targetId?: string) => {
-    const clean = targetUsername.trim().replace(/^@/, '').toLowerCase();
+    const clean = targetUsername.trim().replace(/^@/, '');
     if (!clean) return;
     setFollowingMap((prev) => ({ ...prev, [clean]: 'loading' }));
     try {
-      // Check if there is an incoming request from this user
-      const incomingReq = incomingRequests.find(
-        (r) =>
-          r.status === 'pending' &&
-          (r.fromUsername || '').replace(/^@/, '').toLowerCase() === clean
-      );
-      if (incomingReq) {
-        await acceptFollowRequest(incomingReq.id, clean);
-        setFollowingMap((prev) => ({ ...prev, [clean]: 'following' }));
-        return;
-      }
-
       const res = await sendFriendRequestByUsername(clean);
       if (res.success) {
-        setFollowingMap((prev) => ({
-          ...prev,
-          [clean]: res.message?.includes('friend') || res.message?.includes('now') || res.message?.includes('Mutual') ? 'following' : 'requested',
-        }));
+        setFollowingMap((prev) => ({ ...prev, [clean]: 'requested' }));
       } else {
         setFollowingMap((prev) => {
           const copy = { ...prev };
@@ -265,17 +224,9 @@ export const FriendsView: React.FC = () => {
     }
   };
 
-  const getFollowStatusForUser = (targetUsername: string): 'loading' | 'following' | 'incoming' | 'requested' | 'none' => {
+  const getFollowStatusForUser = (targetUsername: string) => {
     const clean = targetUsername.replace(/^@/, '').toLowerCase();
     if (followingMap[clean]) return followingMap[clean];
-
-    // 1. Check if user sent ME an incoming request
-    const hasIncoming = incomingRequests.some(
-      (r) => r.status === 'pending' && (r.fromUsername || '').replace(/^@/, '').toLowerCase() === clean
-    );
-    if (hasIncoming) return 'incoming';
-
-    // 2. Check existing friend status
     const existing = friends.find((f) => {
       const fUser = (f.username || '').replace(/^@/, '').toLowerCase();
       return fUser === clean;
@@ -283,7 +234,7 @@ export const FriendsView: React.FC = () => {
     if (existing) {
       if (existing.isFriend && existing.requestStatus === 'accepted') return 'following';
       if (existing.requestStatus === 'pending_sent') return 'requested';
-      if (existing.requestStatus === 'pending_received') return 'incoming';
+      if (existing.requestStatus === 'pending_received') return 'requested';
     }
     return 'none';
   };
@@ -415,14 +366,6 @@ export const FriendsView: React.FC = () => {
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
-      refreshControl={
-        <RefreshControl
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          tintColor="#7C5CFF"
-          colors={['#7C5CFF']}
-        />
-      }
     >
       {/* 1. Header */}
       <View style={styles.header}>
@@ -572,20 +515,6 @@ export const FriendsView: React.FC = () => {
                       <UserCheck size={13} color="#10B981" />
                       <Text style={styles.followingPillText}>Following</Text>
                     </View>
-                  ) : status === 'incoming' ? (
-                    <TouchableOpacity
-                      style={styles.acceptResultBtn}
-                      onPress={() => {
-                        const inc = incomingRequests.find(
-                          (r) => (r.fromUsername || '').replace(/^@/, '').toLowerCase() === cleanHandle.toLowerCase()
-                        );
-                        acceptFollowRequest(inc?.id || '', cleanHandle);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <Check size={13} color="#FFFFFF" strokeWidth={3} />
-                      <Text style={styles.acceptResultBtnText}>Accept</Text>
-                    </TouchableOpacity>
                   ) : status === 'requested' ? (
                     <View style={styles.requestedPill}>
                       <Clock size={13} color="#F59E0B" />
@@ -745,21 +674,13 @@ export const FriendsView: React.FC = () => {
         const { displayName: friendDisplayName, usernameTag } = formatFriendDisplayName(friend);
         const myDisplayName = user?.name ? user.name.split(' ')[0] : 'You';
         const isPendingSent = friend.requestStatus === 'pending_sent';
-        const cleanFriendUser = (friend.username || '').replace(/^@/, '').toLowerCase();
-        const incomingReqForThis = incomingRequests.find(
-          (r) =>
-            r.status === 'pending' &&
-            ((r.fromUsername || '').replace(/^@/, '').toLowerCase() === cleanFriendUser ||
-              (r.fromUserId && friend.id && r.fromUserId.toLowerCase() === friend.id.toLowerCase()))
-        );
-        const isPendingReceived = friend.requestStatus === 'pending_received' || !!incomingReqForThis;
 
         // Separate habits into Shared/Adopted vs Not Adopted (Strictly 1 habit per unique name)
         const sharedHabits: { friendHabit: FriendPublicHabit; myHabit: Habit }[] = [];
         const unadoptedHabits: FriendPublicHabit[] = [];
         const seenHabitNames = new Set<string>();
 
-        if (!isPendingSent && !isPendingReceived && Array.isArray(friend.habits)) {
+        if (!isPendingSent && Array.isArray(friend.habits)) {
           // Deduplicate friend habits first
           const uniqueFriendHabits: FriendPublicHabit[] = [];
           const nameMap = new Map<string, FriendPublicHabit>();
@@ -800,11 +721,7 @@ export const FriendsView: React.FC = () => {
               styles.friendCard,
               {
                 backgroundColor: isDark ? '#131C2E' : '#FFFFFF',
-                borderColor: isPendingReceived
-                  ? isDark
-                    ? '#10B981'
-                    : '#86EFAC'
-                  : isPendingSent
+                borderColor: isPendingSent
                   ? isDark
                     ? '#F59E0B'
                     : '#FCD34D'
@@ -829,12 +746,7 @@ export const FriendsView: React.FC = () => {
                     >
                       {friendDisplayName}
                     </Text>
-                    {isPendingReceived ? (
-                      <View style={styles.incomingBadgePill}>
-                        <UserCheck size={11} color="#10B981" />
-                        <Text style={styles.incomingBadgePillText}>Wants to follow you 📩</Text>
-                      </View>
-                    ) : isPendingSent ? (
+                    {isPendingSent ? (
                       <View style={styles.pendingBadge}>
                         <Clock size={11} color="#F59E0B" />
                         <Text style={styles.pendingBadgeText}>Requested ⏳</Text>
@@ -857,21 +769,7 @@ export const FriendsView: React.FC = () => {
               </View>
 
               <View style={styles.friendHeaderRight}>
-                {(isPendingReceived || isPendingSent) && (
-                  <TouchableOpacity
-                    style={styles.cardAcceptBtn}
-                    onPress={() => {
-                      const reqId = incomingReqForThis?.id || friend.requestId || friend.id;
-                      acceptFollowRequest(reqId, friend.username);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Check size={12} color="#FFFFFF" strokeWidth={3} />
-                    <Text style={styles.cardAcceptBtnText}>Accept</Text>
-                  </TouchableOpacity>
-                )}
-
-                {!isPendingSent && !isPendingReceived && (
+                {!isPendingSent && (
                   <TouchableOpacity
                     style={[
                       styles.buddyTogetherBtn,
@@ -893,64 +791,20 @@ export const FriendsView: React.FC = () => {
                       borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FECACA',
                     },
                   ]}
-                  onPress={() => {
-                    if (isPendingReceived && (incomingReqForThis?.id || friend.requestId)) {
-                      declineFollowRequest(incomingReqForThis?.id || friend.requestId || '');
-                    } else {
-                      setFriendToRemove(friend);
-                    }
-                  }}
+                  onPress={() => setFriendToRemove(friend)}
                   activeOpacity={0.7}
-                  accessibilityLabel={
-                    isPendingReceived
-                      ? `Decline request from ${friendDisplayName}`
-                      : isPendingSent
-                      ? `Cancel request to ${friendDisplayName}`
-                      : `Unfollow ${friendDisplayName}`
-                  }
+                  accessibilityLabel={isPendingSent ? `Cancel request to ${friendDisplayName}` : `Unfollow ${friendDisplayName}`}
                 >
                   <UserMinus size={11} color="#EF4444" strokeWidth={2.5} />
                   <Text style={styles.removeFriendBtnText}>
-                    {isPendingReceived ? 'Decline' : isPendingSent ? 'Cancel' : 'Unfollow'}
+                    {isPendingSent ? 'Cancel' : 'Unfollow'}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* PENDING / INCOMING STATUS BOX */}
-            {isPendingReceived ? (
-              <View
-                style={[
-                  styles.incomingNoticeBox,
-                  {
-                    backgroundColor: isDark ? 'rgba(16, 185, 129, 0.12)' : '#F0FDF4',
-                    borderColor: isDark ? 'rgba(16, 185, 129, 0.3)' : '#86EFAC',
-                  },
-                ]}
-              >
-                <View style={styles.incomingIconWrapper}>
-                  <UserCheck size={16} color="#10B981" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[
-                      styles.incomingNoticeTitle,
-                      { color: isDark ? '#6EE7B7' : '#047857' },
-                    ]}
-                  >
-                    Incoming Follow Request
-                  </Text>
-                  <Text
-                    style={[
-                      styles.incomingNoticeSubText,
-                      { color: isDark ? '#94A3B8' : '#334155' },
-                    ]}
-                  >
-                    {friendDisplayName} sent you a follow request. Tap Accept above to unlock routines and build streaks together!
-                  </Text>
-                </View>
-              </View>
-            ) : isPendingSent ? (
+            {/* PENDING REQUEST LOCK NOTICE */}
+            {isPendingSent ? (
               <View
                 style={[
                   styles.lockedNoticeBox,
@@ -961,7 +815,7 @@ export const FriendsView: React.FC = () => {
                 ]}
               >
                 <View style={styles.lockedIconWrapper}>
-                  <Clock size={16} color="#F59E0B" />
+                  <Lock size={16} color="#F59E0B" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text
@@ -970,7 +824,7 @@ export const FriendsView: React.FC = () => {
                       { color: isDark ? '#FDE68A' : '#92400E' },
                     ]}
                   >
-                    Follow Request Sent ⏳
+                    Follow Request Pending
                   </Text>
                   <Text
                     style={[
@@ -978,7 +832,7 @@ export const FriendsView: React.FC = () => {
                       { color: isDark ? '#D6D3D1' : '#B45309' },
                     ]}
                   >
-                    Waiting for {friendDisplayName} to accept. Tap Accept above to connect and unlock habits immediately!
+                    Habits and routines will unlock once {friendDisplayName} accepts your request.
                   </Text>
                 </View>
               </View>
@@ -2115,20 +1969,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
-  acceptResultBtn: {
-    backgroundColor: '#10B981',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    gap: 4,
-  },
-  acceptResultBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
   followingPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2502,61 +2342,6 @@ const styles = StyleSheet.create({
     color: '#F59E0B',
     fontSize: 10,
     fontWeight: '800',
-  },
-  incomingBadgePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    gap: 3,
-    flexShrink: 0,
-  },
-  incomingBadgePillText: {
-    color: '#10B981',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  cardAcceptBtn: {
-    backgroundColor: '#10B981',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    gap: 4,
-  },
-  cardAcceptBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  incomingNoticeBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 10,
-  },
-  incomingIconWrapper: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  incomingNoticeTitle: {
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  incomingNoticeSubText: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 2,
-    lineHeight: 15,
   },
   lockedNoticeBox: {
     flexDirection: 'row',

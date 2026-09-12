@@ -35,8 +35,7 @@
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
-          "color": "#7C5CFF",
-          "defaultChannel": "habit-reminders"
+          "color": "#7C5CFF"
         }
       ]
     ],
