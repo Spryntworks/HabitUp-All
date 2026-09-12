@@ -3504,13 +3504,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         to_user_id?: string;
       } | null = null;
 
-      if (!isOffline) {
-        if (!isAuthenticated || !localApi.hasAuthToken()) {
-          showToast(`Please sign in or register to send follow requests to @${cleanHandle} 🤝`, undefined, 'warning');
-          setIsAuthSessionModalOpen(true);
-          return { success: false, error: 'Authentication required' };
-        }
-
+      if (!isOffline && localApi.hasAuthToken()) {
         try {
           serverResult = await localApi.sendFriendRequestByUsername(cleanHandle);
           if (!serverResult.success) {
@@ -3593,7 +3587,7 @@ export const HabitProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       );
       return { success: true };
     },
-    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast, syncFollowRequests, syncFriendsWithBackend, setIsAuthSessionModalOpen]
+    [friends, user, isOffline, isAuthenticated, soundEnabled, showToast, syncFollowRequests, syncFriendsWithBackend]
   );
 
   const acceptFollowRequest = useCallback(

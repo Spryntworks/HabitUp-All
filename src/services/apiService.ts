@@ -203,7 +203,22 @@ class ApiClient {
   }
 
   hasAuthToken(): boolean {
-    return !!(this.accessToken || this.refreshToken);
+    if (this.accessToken || this.refreshToken) return true;
+    const storedAccess =
+      this.getStorage<string | null>('habitup_access_token', null) ||
+      (this.currentUserId ? this.getStorage<string | null>(`habitup_access_token_${this.currentUserId}`, null) : null);
+    if (storedAccess) {
+      this.accessToken = storedAccess;
+      return true;
+    }
+    const storedRefresh =
+      this.getStorage<string | null>('habitup_refresh_token', null) ||
+      (this.currentUserId ? this.getStorage<string | null>(`habitup_refresh_token_${this.currentUserId}`, null) : null);
+    if (storedRefresh) {
+      this.refreshToken = storedRefresh;
+      return true;
+    }
+    return false;
   }
 
   setTokens(accessToken: string | null, refreshToken?: string | null, targetUserId?: string): void {
